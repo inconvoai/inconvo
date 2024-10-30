@@ -16,6 +16,7 @@
     "@auth/prisma-adapter": "^2.7.2",
     "@langchain/core": "^0.3.15",
     "@langchain/langgraph": "^0.2.18",
+    "@langchain/langgraph-checkpoint-postgres": "^0.0.2",
     "@langchain/openai": "^0.3.11",
     "@mantine/charts": "^7.13.4",
     "@mantine/code-highlight": "^7.13.4",
@@ -41,6 +42,7 @@
     "server-only": "^0.0.1",
     "sharp": "^0.33.5",
     "superjson": "^2.2.1",
+    "uuid": "^11.0.2",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
   },

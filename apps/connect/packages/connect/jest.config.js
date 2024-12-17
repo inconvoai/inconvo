@@ -4,6 +4,8 @@ module.exports = {
     "^~/(.*)$": "<rootDir>/src/$1",
   },
   testEnvironment: "node",
-  preset: "ts-jest",
+  transform: {
+    "^.+.tsx?$": ["ts-jest", {}],
+  },
   globalSetup: "<rootDir>/jest.global-setup.ts",
 };

@@ -1,3 +1,5 @@
+import { ComputedColumn, WhereConditions } from "~/types/querySchema";
+
 export function getSelectColumns(
   cols: string[],
   computedCols?: { name: string }[]
@@ -43,25 +45,27 @@ export function filterResponseWithComputedConditions(
 }
 
 export function splitWhereConditions(
-  computedColumns: any[],
-  whereAndArray: any[]
-): [computedWhere: any[], dbWhere: any[]] {
-  const computedWhere: any[] = [];
-  const dbWhere: any[] = [];
+  computedColumns: ComputedColumn[],
+  whereAndArray: WhereConditions
+): [computedWhere: WhereConditions, dbWhere: WhereConditions] {
+  const computedWhere: WhereConditions = [];
+  const dbWhere: WhereConditions = [];
 
-  if (computedColumns.length > 0 && whereAndArray) {
-    whereAndArray.forEach((condition) => {
-      const whereColumnNames = Object.keys(condition);
-      const isComputed = whereColumnNames.some((columnName) =>
-        computedColumns.some((column) => column.name === columnName)
-      );
-      if (isComputed) {
-        computedWhere.push(condition);
-      } else {
-        dbWhere.push(condition);
-      }
-    });
+  if (whereAndArray?.length === 0) {
+    return [computedWhere, dbWhere];
   }
+
+  whereAndArray.forEach((condition) => {
+    const whereColumnNames = Object.keys(condition);
+    const isComputed = whereColumnNames.some((columnName) =>
+      computedColumns?.some((column) => column.name === columnName)
+    );
+    if (isComputed) {
+      computedWhere.push(condition);
+    } else {
+      dbWhere.push(condition);
+    }
+  });
 
   return [computedWhere, dbWhere];
 }

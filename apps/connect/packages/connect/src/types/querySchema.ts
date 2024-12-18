@@ -23,6 +23,7 @@ const QueryDateConditionSchema = z
 const QueryWhereAndArraySchema = z.array(
   z.union([QueryConditionSchema, QueryDateConditionSchema])
 );
+export type WhereConditions = z.infer<typeof QueryWhereAndArraySchema>;
 
 const ConstantNodeSchema = z.object({
   mathjs: z.literal("ConstantNode"),
@@ -59,6 +60,8 @@ const computedColumnSchema = z.object({
   ast: MathsjsAstSchema,
   type: z.string(),
 });
+
+export type ComputedColumn = z.infer<typeof computedColumnSchema>;
 
 const baseSchema = {
   table: z.string(),

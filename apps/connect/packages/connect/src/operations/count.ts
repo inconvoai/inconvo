@@ -22,6 +22,10 @@ export async function count(prisma: PrismaClient, query: Query) {
     whereAndArray
   );
 
+  const whereObject = {
+    AND: [...(dbWhere || [])],
+  };
+
   const selectObject = operationParameters.columns
     ? operationParameters?.columns.reduce(
         (acc: Record<string, boolean>, column) => {
@@ -33,10 +37,6 @@ export async function count(prisma: PrismaClient, query: Query) {
     : undefined;
 
   if (computedWhere.length > 0) {
-    const whereForComputed = {
-      AND: [...(dbWhere || [])],
-    };
-
     const xPrisma = generatePrismaClientWithComputedColumns(
       prisma,
       table,
@@ -55,7 +55,7 @@ export async function count(prisma: PrismaClient, query: Query) {
     const prismaQuery = xPrisma[table]["findMany"];
     const response = await prismaQuery({
       select: selectColumns,
-      where: whereForComputed,
+      where: whereObject,
     });
 
     const resWithWhereComputedCondition = filterResponseWithComputedConditions(
@@ -95,10 +95,6 @@ export async function count(prisma: PrismaClient, query: Query) {
 
     return count;
   }
-
-  const whereObject = {
-    AND: [...(whereAndArray || [])],
-  };
 
   assert(
     // @ts-ignore

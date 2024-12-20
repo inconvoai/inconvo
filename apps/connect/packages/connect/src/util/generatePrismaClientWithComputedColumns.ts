@@ -35,7 +35,7 @@ export function generatePrismaClientWithComputedColumns(
       needs: necessaryCols,
       compute: (scope: Record<string, any>) => {
         const expr = JSON.parse(JSON.stringify(column.ast), math.reviver);
-        return expr.evaluate(scope);
+        return Number(expr.evaluate(scope));
       },
     };
     return acc;

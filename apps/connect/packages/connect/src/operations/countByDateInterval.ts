@@ -79,11 +79,14 @@ export async function countByDateInterval(prisma: PrismaClient, query: Query) {
     ],
   };
 
-  const selectComputedCols = computedWhere.reduce((acc, obj) => {
-    const key = Object.keys(obj)[0];
-    acc[key] = true;
-    return acc;
-  }, {});
+  const selectComputedCols = computedWhere.reduce(
+    (acc: Record<string, boolean>, obj) => {
+      const key = Object.keys(obj)[0];
+      acc[key] = true;
+      return acc;
+    },
+    {}
+  );
 
   // @ts-ignore
   const prismaQuery: Function = prismaExtended[table]["findMany"];

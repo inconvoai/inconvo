@@ -3,6 +3,11 @@ generator client {
     previewFeatures = ["prismaSchemaFolder"]
 }
 
+generator drizzle {
+    provider = "drizzle-prisma-generator"
+    output   = "../../../drizzle"
+}
+
 datasource db {
     provider = "postgresql"
     url      = env("INCONVO_DATABASE_URL")

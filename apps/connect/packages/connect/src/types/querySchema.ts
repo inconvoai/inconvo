@@ -63,10 +63,21 @@ const computedColumnSchema = z.object({
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;
 
+const JsonColumnSchemaSchema = z.object({
+  nameOfJsonColumn: z.string(),
+  jsonSchema: z.array(
+    z.object({
+      key: z.string(),
+      type: z.string(),
+    })
+  ),
+});
+
 const baseSchema = {
   table: z.string(),
   computedColumns: z.array(computedColumnSchema).optional(),
   whereAndArray: QueryWhereAndArraySchema,
+  jsonColumnSchema: JsonColumnSchemaSchema.optional(),
 };
 
 const findManySchema = z

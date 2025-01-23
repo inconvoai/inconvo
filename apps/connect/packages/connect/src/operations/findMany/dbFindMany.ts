@@ -15,6 +15,7 @@ export async function dbFindMany(prisma: PrismaClient, query: Query) {
   // @ts-ignore
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
+    relationLoadStrategy: "join",
     select: buildRelationalSelect(table, operationParameters.columns),
     where: { AND: [...(whereAndArray || [])] },
     orderBy: operationParameters.orderBy

@@ -8,10 +8,17 @@ import {
   selectOnlyComputedFindMany,
 } from "./computedFindMany";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
+import { findManyJson } from "./json";
 
 export async function findMany(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, computedColumns } = query;
+  const {
+    table,
+    whereAndArray,
+    operationParameters,
+    computedColumns,
+    jsonColumnSchema,
+  } = query;
 
   const isComputedColumnInOpParams = (
     selectColumns: Record<string, string[] | null>,
@@ -73,6 +80,8 @@ export async function findMany(prisma: PrismaClient, query: Query) {
     } else {
       return computedFindMany(xPrisma, query);
     }
+  } else if (true) {
+    return findManyJson(prisma, query);
   } else {
     return dbFindMany(prisma, query);
   }

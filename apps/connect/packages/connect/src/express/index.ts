@@ -18,7 +18,7 @@ interface InconvoConfig {}
 
 export function inconvo(config: InconvoConfig) {
   const router = Router();
-  router.use(authenticated);
+  // router.use(authenticated);
 
   router.get("/", (req: Request, res: Response) => {
     try {

@@ -73,6 +73,6 @@
     "dts": true,
     "css": true,
     "outDir": "dist",
-    "onSuccess": "cp -r src/prisma dist/ && cp src/sync.js dist/sync.js"
+    "onSuccess": "cp src/sync.js dist/sync.js"
   }
 }

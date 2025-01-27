@@ -10,7 +10,7 @@ import { countByDateInterval } from "~/operations/countByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { buildSchema } from "~/util/buildSchema";
-import { aggregate } from "~/operations/aggregate";
+import { aggregate } from "~/operations/aggregate/index";
 import { countRelations } from "~/operations/countRelations";
 import { findDistinct } from "~/operations/findDistinct";
 

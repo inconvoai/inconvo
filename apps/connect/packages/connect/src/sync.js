@@ -23,7 +23,7 @@ function getPrismaPath() {
 function getPrismaSchemaPath() {
   try {
     const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../prisma/schema");
+    return path.resolve(inconvoPath, "../../../prisma/schema");
   } catch (e) {} // eslint-disable-line no-empty
   return null;
 }
@@ -47,7 +47,6 @@ function runPrismaCommand(command, prismaPath, schemaPath) {
   try {
     const prismaPath = getPrismaPath();
     const prismaSchemaPath = getPrismaSchemaPath();
-    console.log("Prisma path", prismaPath);
     console.log("Prisma schema path", prismaSchemaPath);
     if (!prismaPath || !prismaSchemaPath) {
       console.error("Inconvo not found in the project");

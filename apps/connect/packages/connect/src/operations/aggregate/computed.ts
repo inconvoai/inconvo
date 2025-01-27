@@ -7,7 +7,6 @@ import {
   splitWhereConditions,
 } from "../utils";
 import assert from "assert";
-import * as drizzleTables from "../../../drizzle/schema";
 
 export async function aggregateWithComputedColumn(
   prisma: PrismaClient,

@@ -21,7 +21,7 @@ function getPrismaPath(): string | null {
 function getPrismaSchemaPath(): string | null {
   try {
     const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../prisma/schema");
+    return path.resolve(inconvoPath, "../../../prisma/schema");
   } catch (e) {} // eslint-disable-line no-empty
   return null;
 }

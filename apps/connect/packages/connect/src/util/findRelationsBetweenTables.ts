@@ -3,7 +3,7 @@ import { getTableConfig, AnyPgTable } from "drizzle-orm/pg-core";
 export function findRelationsBetweenTables(
   tableA: AnyPgTable,
   tableB: AnyPgTable
-): [string, string, boolean] | null {
+): [string, string, boolean] {
   const configA = getTableConfig(tableA);
   const configB = getTableConfig(tableB);
 
@@ -29,6 +29,5 @@ export function findRelationsBetweenTables(
     }
   }
 
-  // 3) If neither references the other directly, return null
-  return null;
+  throw new Error(`Relation between tables not found ${tableA}, ${tableB}`);
 }

@@ -5,9 +5,8 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "../../../drizzle/schema";
-import { asc, eq, desc, sql, arrayContains, inArray } from "drizzle-orm";
-import { buildDrizzleRelationalSelect } from "~/util/buildDrizzleRelationalSelect";
-import { buildSchema } from "~/util/buildSchema";
+import { eq, sql, WithSubquery } from "drizzle-orm";
+import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 
 const tables: Record<string, any> = drizzleTables;
 
@@ -15,109 +14,156 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
   const { table, operation, whereAndArray, operationParameters } = query;
 
-  // const db = drizzle("postgresql://root:notroot@localhost:1122/example-db");
+  const db = drizzle("postgresql://root:notroot@localhost:1122/example-db");
   const drizzleWhere = parsePrismaWhere(tables[table], whereAndArray);
 
   const { columns, orderBy, limit } = operationParameters;
 
-  // const schema = buildSchema();
+  const selectColsPerTable: Record<string, string[] | null> = {};
+  Object.entries(query.operationParameters.columns).forEach(
+    ([tableRelations, value]) => {
+      const colName = tableRelations.split(".").at(-1);
+      selectColsPerTable[colName] = value;
+    }
+  );
 
-  // const longest = ["event", "lot", "bid"];
+  const needCtes =
+    Object.keys(query.operationParameters.columns).filter(
+      (table) => table !== query.table
+    ).length > 0;
 
-  // const ctes: any = [];
+  const tableLevels = ["bid", "event", "lot"].reverse();
 
-  // for (const [index, table] of longest.entries()) {
-  //   if (index === 0) {
-  //     ctes[index] = db.$with(`cte${index}`).as(
-  //       db
-  //         .select({
-  //           id: tables[table]["id"],
-  //           lot_id: tables[table]["lot_id"],
-  //           amount: sql<number>`cast((bidData->>'amount') as Numeric)`.as(
-  //             "amount"
-  //           ),
-  //         })
-  //         .from(tables[table])
-  //     );
-  //   } else {
-  //     ctes[index] = db.$with(`cte${index}`).as(
-  //       db
-  //         .select({
-  //           lot_id: ctes[index - 1]["lot_id"],
-  //           json_data: sql`json_build_object( 'id', ${
-  //             ctes[index - 1]["id"]
-  //           },'amount', ${ctes[index - 1]["amount"]})`.as("json_data"),
-  //         })
-  //         .from(ctes[index - 1])
-  //     );
-  //   }
-  // }
+  const tablesAlias = [];
 
-  // const ctet2 = db.$with("ctet2").as(
-  //   db
-  //     .select({
-  //       lot_id: ctet1.lot_id,
-  //       json_data:
-  //         sql`json_build_object( 'id', ${ctet1["id"]},'amount', ${ctet1["amount"]})`.as(
-  //           "json_data"
-  //         ),
-  //     })
-  //     .from(ctet1)
-  // );
+  const lotAlias = db.$with("lotAlias").as(
+    db
+      .select({
+        id: tables["lot"]["id"],
+        event_id: tables["lot"]["event_id"],
+        route: sql`cast((lotdata->>'route') as Text)`.as("route"),
+        volume: sql`cast((lotdata->>'volume') as Text)`.as("volume"),
+        service: sql`cast((lotdata->>'service') as Text)`.as("service"),
+      })
+      .from(tables["lot"])
+  );
 
-  // const ctet3 = db.$with("ctet3").as(
-  //   db
-  //     .select({
-  //       id: tables["lot"]["id"],
-  //       event_id: tables["lot"]["event_id"],
-  //       json_data:
-  //         sql`(json_build_object( 'id', ${tables["lot"]["id"]}, 'bid', ${ctet2["json_data"]}))`.as(
-  //           "json_data"
-  //         ),
-  //     })
-  //     .from(tables["lot"])
-  //     .leftJoin(ctet2, eq(tables["lot"]["id"], ctet2["lot_id"]))
-  // );
+  tablesAlias.push(lotAlias);
+  const tableAliasMapper: {
+    [key: string]: WithSubquery;
+  } = {
+    lot: lotAlias,
+  };
 
-  // const ctet4 = db.$with("ctet4").as(
-  //   db
-  //     .select({
-  //       id: tables["event"]["id"],
-  //       json_data: sql`COALESCE(json_agg( ${ctet3["json_data"]}))`.as(
-  //         "json_data"
-  //       ),
-  //     })
-  //     .from(tables["event"])
-  //     .leftJoin(ctet3, eq(tables["event"]["id"], ctet3["event_id"]))
-  //     .groupBy(tables["event"]["id"])
-  // );
+  const ctes: WithSubquery[] = [];
+  const tableLinks: string[][] = [];
+  if (needCtes) {
+    for (const [index, table] of tableLevels.entries()) {
+      if (table === query.table) {
+        continue;
+      }
 
-  // const response = await db
-  //   .with(ctet1, ctet2, ctet3, ctet4)
-  //   .select({
-  //     id: tables["event"]["id"],
-  //     lot: ctet4["json_data"],
-  //   })
-  //   .from(tables["event"])
-  //   .leftJoin(ctet4, eq(tables["event"]["id"], ctet4["id"]));
+      const tableSchema = tableAliasMapper[table] || tables[table];
 
-  const db = drizzle({ schema: tables });
+      const relatedTable = tableLevels[index + 1];
+      const [currentTableKey, relatedTableKey, groupBy] =
+        findRelationsBetweenTables(tables[table], tables[relatedTable]);
+      tableLinks.push([currentTableKey, relatedTableKey]);
 
-  const sqlS = db.query.rental
-    .findMany({
-      with: {
-        inventory: {
-          with: {
-            film: true,
-          },
-        },
-      },
+      if (index === 0) {
+        const jsonFields = selectColsPerTable[table].map(
+          (col) => sql`${col}::text, ${tableSchema[col]}`
+        );
+        const cte = db.$with(`cte${index}${groupBy ? "_" : ""}`).as(
+          db
+            .select({
+              [currentTableKey]: tableSchema[currentTableKey],
+              json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+            })
+            .from(tableSchema)
+        );
+        ctes.push(cte);
+        if (groupBy) {
+          const groupedCte = db.$with(`cte${index}`).as(
+            db
+              .select({
+                [currentTableKey]: cte[currentTableKey],
+                json_data:
+                  sql`COALESCE(json_agg( ${cte["json_data"]}), '[]')`.as(
+                    "json_data"
+                  ),
+              })
+              .from(cte)
+              .groupBy(cte[currentTableKey])
+          );
+          ctes.push(groupedCte);
+        }
+      } else {
+        const previousTableLinks = tableLinks[index - 1];
+        const previousTable = ctes[ctes.length - 1];
+        const previousTableName = tableLevels[index - 1];
+        const jsonFields = (
+          selectColsPerTable[table]?.map(
+            (col) => sql`${col}::text, ${tableSchema[col]}`
+          ) || []
+        ).concat(
+          sql`${previousTableName}::text, ${previousTable["json_data"]}`
+        );
+        const cte = db.$with(`cte${index}${groupBy ? "_" : ""}`).as(
+          db
+            .select({
+              [currentTableKey]: tableSchema[currentTableKey],
+              json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+            })
+            .from(tableSchema)
+            .leftJoin(
+              previousTable,
+              eq(
+                tableSchema[previousTableLinks[1]],
+                previousTable[previousTableLinks[0]]
+              )
+            )
+        );
+        ctes.push(cte);
+        if (groupBy) {
+          const groupedCte = db.$with(`cte${index}`).as(
+            db
+              .select({
+                [currentTableKey]: cte[currentTableKey],
+                json_data:
+                  sql`COALESCE(json_agg( ${cte["json_data"]}), '[]')`.as(
+                    "json_data"
+                  ),
+              })
+              .from(cte)
+              .groupBy(cte[currentTableKey])
+          );
+          ctes.push(groupedCte);
+        }
+      }
+    }
+  }
+
+  const rootSelect: { [key: string]: any } = (
+    query.operationParameters.columns[table] || []
+  ).reduce((acc: { [key: string]: any }, column: string) => {
+    acc[column] = tables[table][column];
+    return acc;
+  }, {});
+
+  const finalLink = tableLinks[tableLinks.length - 1];
+  const response = await db
+    .with(...tablesAlias, ...ctes)
+    .select({
+      ...rootSelect,
+      event: ctes[ctes.length - 1]["json_data"],
     })
-    .toSQL();
-
-  console.log(sqlS);
-
-  const response = true;
+    .from(tables[query.table])
+    .leftJoin(
+      ctes[ctes.length - 1],
+      eq(tables[query.table][finalLink[1]], ctes[ctes.length - 1][finalLink[0]])
+    )
+    .where(drizzleWhere);
 
   return response;
 }

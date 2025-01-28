@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/prisma/pg";
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "../../../drizzle/schema";
-import { eq, sql, WithSubquery } from "drizzle-orm";
+import { asc, desc, eq, sql, WithSubquery } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 
 const tables: Record<string, any> = drizzleTables;
@@ -18,18 +18,14 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   const drizzleWhere = parsePrismaWhere(tables[table], whereAndArray);
 
   const selectColsPerTable: Record<string, string[] | null> = {};
-  Object.entries(query.operationParameters.columns).forEach(
-    ([tableRelations, value]) => {
-      const colName = tableRelations.split(".").at(-1);
-      if (colName === undefined) return;
-      selectColsPerTable[colName] = value;
-    }
-  );
+  Object.entries(columns).forEach(([tableRelations, value]) => {
+    const colName = tableRelations.split(".").at(-1);
+    if (colName === undefined) return;
+    selectColsPerTable[colName] = value;
+  });
 
   const needCtes =
-    Object.keys(query.operationParameters.columns).filter(
-      (table) => table !== query.table
-    ).length > 0;
+    Object.keys(columns).filter((table) => table !== query.table).length > 0;
 
   function createInitialCte(
     index: number,
@@ -106,11 +102,8 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     }
   }
 
-  // TODO: calculate this dynamically
-  const tableLevels = ["bid", "event", "lot"].reverse();
-
+  // TODO: calculate all needed table aliases dynamically
   const tableAliases: WithSubquery[] = [];
-
   const lotAlias = db.$with("lotAlias").as(
     db
       .select({
@@ -122,12 +115,13 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       })
       .from(tables["lot"])
   );
-
   tableAliases.push(lotAlias);
-
   const tableAliasMapper: Record<string, WithSubquery> = {
     lot: lotAlias,
   };
+
+  // TODO: calculate this dynamically
+  const tableLevels = ["bid", "event", "lot"].reverse();
 
   const ctes: WithSubquery[] = [];
   const tableLinks: string[][] = [];
@@ -188,7 +182,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   const finalLink = tableLinks[tableLinks.length - 1];
   const previousTableName = tableLevels[0];
-  const response = await db
+  const dbQuery = db
     .with(...tableAliases, ...ctes)
     .select({
       ...rootSelect,
@@ -204,6 +198,14 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     )
     .where(drizzleWhere);
 
-  console.log(response);
+  if (limit) dbQuery.limit(limit);
+  if (orderBy)
+    dbQuery.orderBy(
+      orderBy.direction === "asc"
+        ? asc(tables[table][orderBy.column])
+        : desc(tables[table][orderBy.column])
+    );
+
+  const response = await dbQuery;
   return response;
 }

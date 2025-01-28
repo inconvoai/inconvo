@@ -152,11 +152,12 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   }, {});
 
   const finalLink = tableLinks[tableLinks.length - 1];
+  const previousTableName = tableLevels[0];
   const response = await db
     .with(...tablesAlias, ...ctes)
     .select({
       ...rootSelect,
-      event: ctes[ctes.length - 1]["json_data"],
+      [previousTableName]: ctes[ctes.length - 1]["json_data"],
     })
     .from(tables[query.table])
     .leftJoin(

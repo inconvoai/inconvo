@@ -223,6 +223,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
           const tableName = tablePath[1];
+          //@ts-ignore
           acc[tableName] = sql`${tableCte["json_data"]}`.as(tableName);
           return acc;
         },
@@ -240,7 +241,8 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       dbQuery.leftJoin(
         tableCte,
         eq(
-          tables[query.table][finalLink[1]], //@ts-ignore
+          tables[query.table][finalLink[1]],
+          // @ts-ignore
           tableCte[finalLink[0]]
         )
       );

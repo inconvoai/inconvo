@@ -121,7 +121,18 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   };
 
   // TODO: calculate this dynamically
-  const tableLevels = ["bid", "event", "lot"].reverse();
+  const tablePaths = Object.keys(operationParameters.columns)
+    .filter((table) => table !== query.table)
+    .map((table) => table.split("."));
+  const dedupedTablePaths = tablePaths.filter(
+    (arr, index, self) =>
+      !self.some(
+        (other) =>
+          other.length > arr.length &&
+          other.slice(0, arr.length).every((v, i) => v === arr[i])
+      )
+  );
+  const tableLevels = ["event", "lot", "bid"].reverse();
 
   const ctes: WithSubquery[] = [];
   const tableLinks: string[][] = [];
@@ -187,16 +198,22 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     .select({
       ...rootSelect,
       // Todo: name this the correct thing
-      //@ts-ignore
-      event: sql`${ctes[ctes.length - 1]["json_data"]}`.as("event"),
+      ...(needCtes
+        ? //@ts-ignore
+          { event: sql`${ctes[ctes.length - 1]["json_data"]}`.as("event") }
+        : {}),
     })
     .from(tables[query.table])
-    .leftJoin(
+
+    .where(drizzleWhere);
+
+  if (needCtes) {
+    dbQuery.leftJoin(
       ctes[ctes.length - 1],
       //@ts-ignore
       eq(tables[query.table][finalLink[1]], ctes[ctes.length - 1][finalLink[0]])
-    )
-    .where(drizzleWhere);
+    );
+  }
 
   if (limit) dbQuery.limit(limit);
   if (orderBy)

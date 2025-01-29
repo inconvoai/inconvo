@@ -6,6 +6,7 @@ import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "../../../drizzle/schema";
 import { asc, desc, eq, sql, WithSubquery } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
+import { AnyPgTable } from "drizzle-orm/pg-core";
 
 const tables: Record<string, any> = drizzleTables;
 
@@ -15,7 +16,6 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   const { columns, orderBy, limit } = operationParameters;
 
   const db = prisma.$extends(drizzle()).$drizzle;
-  const drizzleWhere = parsePrismaWhere(tables[table], whereAndArray);
 
   const selectColsPerTable: Record<string, string[] | null> = {};
   Object.entries(columns).forEach(([tableRelations, value]) => {
@@ -111,6 +111,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       .select({
         id: tables["lot"]["id"],
         event_id: tables["lot"]["event_id"],
+        lotdata: tables["lot"]["lotdata"],
         route: sql`cast((lotdata->>'route') as Text)`.as("route"),
         volume: sql`cast((lotdata->>'volume') as Text)`.as("volume"),
         service: sql`cast((lotdata->>'service') as Text)`.as("service"),
@@ -124,6 +125,11 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       .select({
         id: tables["bid"]["id"],
         lot_id: tables["bid"]["lot_id"],
+        event_id: tables["bid"]["event_id"],
+        biddata: tables["bid"]["biddata"],
+        amount: sql`cast((biddata->>'amount') as Text)`.as("amount"),
+        currency: sql`cast((biddata->>'currency') as Text)`.as("currency"),
+        supplier: sql`cast((biddata->>'supplier') as Text)`.as("supplier"),
       })
       .from(tables["bid"])
   );
@@ -207,10 +213,16 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     }
   }
 
+  const tableSchema: AnyPgTable | WithSubquery =
+    tableAliasMapper[query.table] || tables[query.table];
+
+  const drizzleWhere = parsePrismaWhere(tableSchema, whereAndArray);
+
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns[table] || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    acc[column] = tables[table][column];
+    //@ts-ignore
+    acc[column] = tableSchema[column];
     return acc;
   }, {});
 
@@ -230,7 +242,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
         {}
       ),
     })
-    .from(tables[query.table])
+    .from(tableSchema)
     .where(drizzleWhere);
 
   if (needCtes) {
@@ -241,7 +253,8 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       dbQuery.leftJoin(
         tableCte,
         eq(
-          tables[query.table][finalLink[1]],
+          // @ts-ignore
+          tableSchema[finalLink[1]],
           // @ts-ignore
           tableCte[finalLink[0]]
         )
@@ -250,12 +263,15 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   }
 
   if (limit) dbQuery.limit(limit);
-  if (orderBy)
+  if (orderBy) {
     dbQuery.orderBy(
       orderBy.direction === "asc"
-        ? asc(tables[table][orderBy.column])
-        : desc(tables[table][orderBy.column])
+        ? // @ts-ignore
+          asc(tableSchema[orderBy.column])
+        : // @ts-ignore
+          desc(tableSchema[orderBy.column])
     );
+  }
 
   const response = await dbQuery;
   return response;

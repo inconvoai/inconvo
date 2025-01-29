@@ -42,7 +42,6 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
         })
         .from(tableSchema)
     );
-    ctes.push(cte);
 
     if (groupBy) {
       const groupedCte = db.$with(`cte${index}`).as(
@@ -56,8 +55,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           .from(cte)
           .groupBy(cte[currentTableKey])
       );
-      ctes.push(groupedCte);
+      return [cte, groupedCte];
     }
+    return [cte];
   }
 
   function createSubsequentCte(
@@ -84,7 +84,6 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           )
         )
     );
-    ctes.push(cte);
 
     if (groupBy) {
       const groupedCte = db.$with(`cte${index}`).as(
@@ -98,8 +97,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           .from(cte)
           .groupBy(cte[currentTableKey])
       );
-      ctes.push(groupedCte);
+      return [cte, groupedCte];
     }
+    return [cte];
   }
 
   // TODO: calculate all needed table aliases dynamically
@@ -134,7 +134,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   );
   const tableLevels = ["event", "lot", "bid"].reverse();
 
-  const ctes: WithSubquery[] = [];
+  const nestedJsonCtes: WithSubquery[] = [];
   const tableLinks: string[][] = [];
 
   if (needCtes) {
@@ -156,22 +156,23 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
         ) || [];
 
       if (index === 0) {
-        createInitialCte(
+        const ctes = createInitialCte(
           index,
           tableSchema,
           currentTableKey,
           jsonFields,
           groupBy
         );
+        nestedJsonCtes.push(...ctes);
       } else {
         const previousTableLinks = tableLinks[index - 1];
-        const previousTable = ctes[ctes.length - 1];
+        const previousTable = nestedJsonCtes[nestedJsonCtes.length - 1];
         const previousTableName = tableLevels[index - 1];
         const extendedJsonFields = jsonFields.concat(
           //@ts-ignore
           sql`${previousTableName}::text, ${previousTable["json_data"]}`
         );
-        createSubsequentCte(
+        const ctes = createSubsequentCte(
           index,
           tableSchema,
           currentTableKey,
@@ -180,6 +181,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           previousTableLinks,
           groupBy
         );
+        nestedJsonCtes.push(...ctes);
       }
     }
   }
@@ -194,13 +196,17 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   const finalLink = tableLinks[tableLinks.length - 1];
   const previousTableName = tableLevels[0];
   const dbQuery = db
-    .with(...tableAliases, ...ctes)
+    .with(...tableAliases, ...nestedJsonCtes)
     .select({
       ...rootSelect,
       // Todo: name this the correct thing
       ...(needCtes
-        ? //@ts-ignore
-          { event: sql`${ctes[ctes.length - 1]["json_data"]}`.as("event") }
+        ? {
+            event: sql`${
+              //@ts-ignore
+              nestedJsonCtes[nestedJsonCtes.length - 1]["json_data"]
+            }`.as("event"),
+          }
         : {}),
     })
     .from(tables[query.table])
@@ -209,9 +215,11 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   if (needCtes) {
     dbQuery.leftJoin(
-      ctes[ctes.length - 1],
-      //@ts-ignore
-      eq(tables[query.table][finalLink[1]], ctes[ctes.length - 1][finalLink[0]])
+      nestedJsonCtes[nestedJsonCtes.length - 1],
+      eq(
+        tables[query.table][finalLink[1]], //@ts-ignore
+        nestedJsonCtes[nestedJsonCtes.length - 1][finalLink[0]]
+      )
     );
   }
 

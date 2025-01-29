@@ -29,12 +29,13 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   function createInitialCte(
     index: number,
+    table: string,
     tableSchema: any,
     currentTableKey: string,
     jsonFields: any[],
     groupBy: boolean
   ) {
-    const cte = db.$with(`cte${index}${groupBy ? "_" : ""}`).as(
+    const cte = db.$with(`cte${table}${index}${groupBy ? "_" : ""}`).as(
       db
         .select({
           [currentTableKey]: tableSchema[currentTableKey],
@@ -44,7 +45,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     );
 
     if (groupBy) {
-      const groupedCte = db.$with(`cte${index}`).as(
+      const groupedCte = db.$with(`cte${table}${index}`).as(
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
@@ -62,6 +63,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   function createSubsequentCte(
     index: number,
+    table: string,
     tableSchema: any,
     currentTableKey: string,
     jsonFields: any[],
@@ -69,7 +71,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     previousTableLinks: string[],
     groupBy: boolean
   ) {
-    const cte = db.$with(`cte${index}${groupBy ? "_" : ""}`).as(
+    const cte = db.$with(`cte${table}${index}${groupBy ? "_" : ""}`).as(
       db
         .select({
           [currentTableKey]: tableSchema[currentTableKey],
@@ -86,7 +88,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     );
 
     if (groupBy) {
-      const groupedCte = db.$with(`cte${index}`).as(
+      const groupedCte = db.$with(`cte${table}${index}`).as(
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
@@ -132,7 +134,6 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     bid: bidAlias,
   };
 
-  // TODO: calculate this dynamically
   const tablePaths = Object.keys(operationParameters.columns)
     .filter((table) => table !== query.table)
     .map((table) => table.split("."));
@@ -144,64 +145,67 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           other.slice(0, arr.length).every((v, i) => v === arr[i])
       )
   );
-  const tableLevels = ["event", "lot", "bid"].reverse();
 
   const nestedJsonCtes: WithSubquery[][] = [];
-  const tableLinks: string[][] = [];
+  const outerTableLinks: string[][][] = [];
 
   if (needCtes) {
     const jsonCtes: WithSubquery[] = [];
-    for (const [index, table] of tableLevels.entries()) {
-      if (table === query.table) {
-        continue;
+    const tableLinks: string[][] = [];
+    for (const tablePath of dedupedTablePaths) {
+      const reverseTablePath = tablePath.reverse();
+      for (const [index, table] of reverseTablePath.entries()) {
+        if (table === query.table) {
+          continue;
+        }
+
+        const tableSchema = tableAliasMapper[table] || tables[table];
+        const relatedTable = tablePath[index + 1];
+        const [currentTableKey, relatedTableKey, groupBy] =
+          findRelationsBetweenTables(tables[table], tables[relatedTable]);
+        tableLinks.push([currentTableKey, relatedTableKey]);
+
+        const jsonFields =
+          selectColsPerTable[table]?.map(
+            //@ts-ignore
+            (col) => sql`${col}::text, ${tableSchema[col]}`
+          ) || [];
+
+        if (index === 0) {
+          const ctes = createInitialCte(
+            index,
+            table,
+            tableSchema,
+            currentTableKey,
+            jsonFields,
+            groupBy
+          );
+          jsonCtes.push(...ctes);
+        } else {
+          const previousTableLinks = tableLinks[index - 1];
+          const previousTable = jsonCtes[jsonCtes.length - 1];
+          const previousTableName = tablePath[index - 1];
+          const extendedJsonFields = jsonFields.concat(
+            //@ts-ignore
+            sql`${previousTableName}::text, ${previousTable["json_data"]}`
+          );
+          const ctes = createSubsequentCte(
+            index,
+            table,
+            tableSchema,
+            currentTableKey,
+            extendedJsonFields,
+            previousTable,
+            previousTableLinks,
+            groupBy
+          );
+          jsonCtes.push(...ctes);
+        }
       }
-
-      const tableSchema = tableAliasMapper[table] || tables[table];
-      const relatedTable = tableLevels[index + 1];
-      const [currentTableKey, relatedTableKey, groupBy] =
-        findRelationsBetweenTables(tables[table], tables[relatedTable]);
-      tableLinks.push([currentTableKey, relatedTableKey]);
-
-      const jsonFields =
-        selectColsPerTable[table]?.map(
-          //@ts-ignore
-          (col) => sql`${col}::text, ${tableSchema[col]}`
-        ) || [];
-
-      if (index === 0) {
-        const ctes = createInitialCte(
-          index,
-          tableSchema,
-          currentTableKey,
-          jsonFields,
-          groupBy
-        );
-        jsonCtes.push(...ctes);
-        console.log(jsonCtes);
-      } else {
-        const previousTableLinks = tableLinks[index - 1];
-        const previousTable = jsonCtes[jsonCtes.length - 1];
-        const previousTableName = tableLevels[index - 1];
-        const extendedJsonFields = jsonFields.concat(
-          //@ts-ignore
-          sql`${previousTableName}::text, ${previousTable["json_data"]}`
-        );
-        const ctes = createSubsequentCte(
-          index,
-          tableSchema,
-          currentTableKey,
-          extendedJsonFields,
-          previousTable,
-          previousTableLinks,
-          groupBy
-        );
-        jsonCtes.push(...ctes);
-      }
+      nestedJsonCtes.push(jsonCtes);
+      outerTableLinks.push(tableLinks);
     }
-    nestedJsonCtes.push(jsonCtes);
   }
-
-  console.log(nestedJsonCtes);
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns[table] || []
@@ -226,19 +230,21 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       ),
     })
     .from(tables[query.table])
-
     .where(drizzleWhere);
 
-  const finalLink = tableLinks[tableLinks.length - 1];
-  const tableCte = nestedJsonCtes[0][nestedJsonCtes[0].length - 1];
   if (needCtes) {
-    dbQuery.leftJoin(
-      tableCte,
-      eq(
-        tables[query.table][finalLink[1]], //@ts-ignore
-        tableCte[finalLink[0]]
-      )
-    );
+    nestedJsonCtes.forEach((ctes, index) => {
+      const tableCte = ctes[ctes.length - 1];
+      const finalLink =
+        outerTableLinks[index][outerTableLinks[index].length - 1];
+      dbQuery.leftJoin(
+        tableCte,
+        eq(
+          tables[query.table][finalLink[1]], //@ts-ignore
+          tableCte[finalLink[0]]
+        )
+      );
+    });
   }
 
   if (limit) dbQuery.limit(limit);
@@ -250,6 +256,5 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     );
 
   const response = await dbQuery;
-  console.log(response);
   return response;
 }

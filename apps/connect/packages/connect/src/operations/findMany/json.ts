@@ -154,7 +154,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     .filter((table) => table !== query.table)
     .map((table) => table.split("."));
   const dedupedTablePaths = tablePaths.filter(
-    (arr, index, self) =>
+    (arr, _index, self) =>
       !self.some(
         (other) =>
           other.length > arr.length &&

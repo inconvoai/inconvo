@@ -63,15 +63,19 @@ const computedColumnSchema = z.object({
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;
 
-const JsonColumnSchemaSchema = z.object({
-  nameOfJsonColumn: z.string(),
-  jsonSchema: z.array(
-    z.object({
-      key: z.string(),
-      type: z.string(),
-    })
-  ),
-});
+const JsonColumnSchemaSchema = z.array(
+  z.object({
+    tableName: z.string(),
+    jsonColumnName: z.string(),
+    jsonSchema: z.array(
+      z.object({
+        name: z.string(),
+        relation: z.null(),
+        type: z.string(),
+      })
+    ),
+  })
+);
 
 const baseSchema = {
   table: z.string(),

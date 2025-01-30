@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/prisma/pg";
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "../../../drizzle/schema";
-import { asc, desc, eq, sql, WithSubquery } from "drizzle-orm";
+import { asc, desc, eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 
@@ -12,7 +12,13 @@ const tables: Record<string, any> = drizzleTables;
 
 export async function findManyJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
-  const { table, operation, whereAndArray, operationParameters } = query;
+  const {
+    table,
+    operation,
+    whereAndArray,
+    operationParameters,
+    jsonColumnSchema,
+  } = query;
   const { columns, orderBy, limit } = operationParameters;
 
   const db = prisma.$extends(drizzle()).$drizzle;
@@ -23,6 +29,45 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     if (colName === undefined) return;
     selectColsPerTable[colName] = value;
   });
+
+  const tableAliasMapper: Record<string, WithSubquery> = {};
+  const tableAliases: WithSubquery[] = [];
+  for (const [table, cols] of Object.entries(columns)) {
+    if (!cols) continue;
+    const jsonSchemaForTable = jsonColumnSchema?.find(
+      (jsonCol) => jsonCol.tableName === table
+    );
+    const jsonCols =
+      jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
+    if (jsonCols.length === 0) {
+      continue;
+    }
+    const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
+
+    const tableAlias = db.$with(`${table}Alias`).as(
+      db
+        .select({
+          ...getTableColumns(tables[table]),
+          ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
+            acc[col] = sql
+              .raw(
+                `cast((${jsonColumnName}->>'${col}') as ${
+                  jsonSchemaForTable?.jsonSchema.find(
+                    (jCol) => jCol.name === col
+                  )
+                    ? "Text"
+                    : "Numeric"
+                })`
+              )
+              .as(col);
+            return acc;
+          }, {}),
+        })
+        .from(tables[table])
+    );
+    tableAliases.push(tableAlias);
+    tableAliasMapper[table] = tableAlias;
+  }
 
   const needCtes =
     Object.keys(columns).filter((table) => table !== query.table).length > 0;
@@ -103,42 +148,6 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     }
     return [cte];
   }
-
-  // TODO: calculate all needed table aliases dynamically
-  const tableAliases: WithSubquery[] = [];
-  const lotAlias = db.$with("lotAlias").as(
-    db
-      .select({
-        id: tables["lot"]["id"],
-        event_id: tables["lot"]["event_id"],
-        lotdata: tables["lot"]["lotdata"],
-        route: sql`cast((lotdata->>'route') as Text)`.as("route"),
-        volume: sql`cast((lotdata->>'volume') as Text)`.as("volume"),
-        service: sql`cast((lotdata->>'service') as Text)`.as("service"),
-      })
-      .from(tables["lot"])
-  );
-  tableAliases.push(lotAlias);
-
-  const bidAlias = db.$with("bidAlias").as(
-    db
-      .select({
-        id: tables["bid"]["id"],
-        lot_id: tables["bid"]["lot_id"],
-        event_id: tables["bid"]["event_id"],
-        biddata: tables["bid"]["biddata"],
-        amount: sql`cast((biddata->>'amount') as Text)`.as("amount"),
-        currency: sql`cast((biddata->>'currency') as Text)`.as("currency"),
-        supplier: sql`cast((biddata->>'supplier') as Text)`.as("supplier"),
-      })
-      .from(tables["bid"])
-  );
-  tableAliases.push(bidAlias);
-
-  const tableAliasMapper: Record<string, WithSubquery> = {
-    lot: lotAlias,
-    bid: bidAlias,
-  };
 
   const tablePaths = Object.keys(operationParameters.columns)
     .filter((table) => table !== query.table)

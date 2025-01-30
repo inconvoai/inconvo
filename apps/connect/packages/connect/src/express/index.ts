@@ -12,7 +12,7 @@ import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetw
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
 import { countRelations } from "~/operations/countRelations";
-import { findDistinct } from "~/operations/findDistinct";
+import { findDistinct } from "~/operations/findDistinct/index";
 
 interface InconvoConfig {}
 
@@ -35,6 +35,7 @@ export function inconvo(config: InconvoConfig) {
       const prisma = getPrismaClient();
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;
+      console.log(JSON.stringify(parsedQuery, null, 2));
 
       if (operation === "findMany") {
         const response = await findMany(prisma, parsedQuery);

@@ -17,8 +17,11 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
   } = query;
 
   const computedColumnNames = computedColumns?.map((column) => column.name);
-  const jsonColumnNames = jsonColumnSchema
-    ? jsonColumnSchema.jsonSchema.map((column) => column.key)
+  const jsonColumnSchemaEntry = jsonColumnSchema?.find(
+    (x) => x.tableName === table
+  );
+  const jsonColumnNames = jsonColumnSchemaEntry
+    ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
     : [];
   const columnNames = operationParameters.columns;
 

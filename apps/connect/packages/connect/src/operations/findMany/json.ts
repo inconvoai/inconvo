@@ -32,8 +32,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   const tableAliasMapper: Record<string, WithSubquery> = {};
   const tableAliases: WithSubquery[] = [];
-  for (const [table, cols] of Object.entries(columns)) {
-    if (!cols) continue;
+  const tablesToAlias =
+    jsonColumnSchema?.map((jsonCol) => jsonCol.tableName) || [];
+  for (const table of tablesToAlias) {
     const jsonSchemaForTable = jsonColumnSchema?.find(
       (jsonCol) => jsonCol.tableName === table
     );

@@ -14,16 +14,22 @@ export async function countJson(prisma: PrismaClient, query: Query) {
 
   const columnNames = operationParameters.columns;
 
+  const jsonSchemaForTable = jsonColumnSchema?.find(
+    (jsonCol) => jsonCol.tableName === table
+  );
+
   const selectQuery: Record<string, any> = {};
   for (const name of columnNames) {
-    const jsonData = jsonColumnSchema?.jsonSchema.find((x) => x.key === name);
+    const jsonData = jsonSchemaForTable?.jsonSchema.find(
+      (x) => x.name === name
+    );
     if (tables[table][name]) {
       selectQuery[name] = tables[table][name];
     } else if (jsonData) {
       const castType = jsonData.type === "number" ? "Numeric" : "Text";
       selectQuery[name] = sql
         .raw(
-          `cast((${jsonColumnSchema?.nameOfJsonColumn}->>'${name}') as ${castType})`
+          `cast((${jsonSchemaForTable?.jsonColumnName}->>'${name}') as ${castType})`
         )
         .as(name);
     }

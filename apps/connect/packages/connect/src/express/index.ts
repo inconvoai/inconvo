@@ -11,7 +11,7 @@ import { countByTemporalComponent } from "~/operations/countByTemporalComponent"
 import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
-import { countRelations } from "~/operations/countRelations";
+import { countRelations } from "~/operations/countRelations/index";
 import { findDistinct } from "~/operations/findDistinct/index";
 
 interface InconvoConfig {}

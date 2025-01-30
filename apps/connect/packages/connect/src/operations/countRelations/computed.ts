@@ -5,10 +5,13 @@ import {
   filterResponseWithComputedConditions,
   getSelectColumns,
   splitWhereConditions,
-} from "./utils";
+} from "~/operations/utils";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
 
-export async function countRelations(prisma: PrismaClient, query: Query) {
+export async function countRelationsComputed(
+  prisma: PrismaClient,
+  query: Query
+) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, computedColumns } = query;
 
@@ -18,7 +21,7 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
   );
 
   const whereObject = {
-    AND: [...(dbWhere || [])],
+    AND: [...(whereAndArray || [])],
   };
 
   const selectColumns = getSelectColumns(
@@ -36,10 +39,11 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
       )
     : undefined;
 
-  const prismaClient =
-    computedWhere.length > 0
-      ? generatePrismaClientWithComputedColumns(prisma, table, computedColumns)
-      : prisma;
+  const prismaClient = generatePrismaClientWithComputedColumns(
+    prisma,
+    table,
+    computedColumns
+  );
 
   // @ts-ignore
   const prismaQuery: Function = prismaClient[table]["findMany"];
@@ -58,15 +62,10 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
           },
         }
       : undefined,
-    ...(computedWhere.length === 0 && { take: operationParameters.limit }),
   });
 
-  if (computedWhere.length > 0) {
-    return filterResponseWithComputedConditions(response, computedWhere).slice(
-      0,
-      operationParameters.limit
-    );
-  } else {
-    return response.length > 0 ? response : 0;
-  }
+  return filterResponseWithComputedConditions(response, computedWhere).slice(
+    0,
+    operationParameters.limit
+  );
 }

@@ -1,13 +1,8 @@
 import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
-import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
-import {
-  filterResponseWithComputedConditions,
-  splitWhereConditions,
-} from "../utils";
+import { splitWhereConditions } from "../utils";
 import { countWithComputedColumn } from "./computed";
-import { json } from "stream/consumers";
 import { countJson } from "./json";
 
 export async function count(prisma: PrismaClient, query: Query) {
@@ -31,8 +26,11 @@ export async function count(prisma: PrismaClient, query: Query) {
   }
 
   const columnNames = operationParameters.columns;
-  const jsonColumnNames = jsonColumnSchema
-    ? jsonColumnSchema.jsonSchema.map((column) => column.key)
+  const jsonColumnSchemaEntry = jsonColumnSchema?.find(
+    (x) => x.tableName === table
+  );
+  const jsonColumnNames = jsonColumnSchemaEntry
+    ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
     : [];
 
   if (

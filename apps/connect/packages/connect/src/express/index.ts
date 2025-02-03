@@ -3,7 +3,7 @@ import { authenticated } from "./middlewares";
 import { QuerySchema } from "../types/querySchema";
 import { ZodError } from "zod";
 import { getPrismaClient } from "../prismaClient";
-import { count } from "~/operations/count";
+import { count } from "~/operations/count/index";
 import { groupBy } from "~/operations/groupBy";
 import { findMany } from "~/operations/findMany";
 import { countByDateInterval } from "~/operations/countByDateInterval";
@@ -18,7 +18,7 @@ interface InconvoConfig {}
 
 export function inconvo(config: InconvoConfig) {
   const router = Router();
-  // router.use(authenticated);
+  router.use(authenticated);
 
   router.get("/", (req: Request, res: Response) => {
     try {

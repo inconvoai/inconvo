@@ -48,6 +48,8 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
       .from(tables[table])
   );
 
+  // FIXME: there is an issue here if you try to filter on the relations
+  // i.e https://www.prisma.io/docs/orm/prisma-client/queries/relation-queries#filter-on-absence-of--to-many-records
   const drizzleWhere = parsePrismaWhere(tableAlias, whereAndArray);
 
   function getTablePrimaryKey(table: AnyPgTable) {

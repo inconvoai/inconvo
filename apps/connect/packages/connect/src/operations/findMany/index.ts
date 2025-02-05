@@ -80,7 +80,9 @@ export async function findMany(prisma: PrismaClient, query: Query) {
     } else {
       return computedFindMany(xPrisma, query);
     }
-  } else if (true) {
+  }
+  // TODO: Write this condition
+  else if (false) {
     return findManyJson(prisma, query);
   } else {
     return dbFindMany(prisma, query);

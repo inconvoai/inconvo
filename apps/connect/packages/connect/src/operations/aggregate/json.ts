@@ -29,7 +29,7 @@ export async function aggregateJson(prisma: PrismaClient, query: Query) {
     if (tables[table][name]) {
       selectQuery[name] = tables[table][name];
     } else if (jsonData) {
-      const castType = jsonData.type === "number" ? "Numeric" : "Text";
+      const castType = jsonData.type === "Number" ? "Numeric" : "Text";
       selectQuery[name] = sql
         .raw(
           `cast((${tableJsonColumnSchema?.jsonColumnName}->>'${name}') as ${castType})`

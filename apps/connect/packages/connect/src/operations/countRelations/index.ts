@@ -16,7 +16,14 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
     jsonColumnSchema,
   } = query;
 
-  if (jsonColumnSchema && jsonColumnSchema?.length > 0) {
+  const columns = operationParameters.columns;
+  const jsonSchemaForTable = jsonColumnSchema?.find(
+    (jsonCol) => jsonCol.tableName === table
+  );
+  const jsonColumns =
+    jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
+
+  if (columns.some((column) => jsonColumns.includes(column))) {
     return countRelationsJson(prisma, query);
   }
 

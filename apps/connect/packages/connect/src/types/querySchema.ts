@@ -90,7 +90,7 @@ const findManySchema = z
     operation: z.literal("findMany"),
     operationParameters: z
       .object({
-        columns: z.record(z.array(z.string()).nullable()),
+        columns: z.record(z.string(), z.array(z.string())),
         orderBy: z
           .object({
             column: z.string(),

@@ -80,9 +80,9 @@ export async function findMany(prisma: PrismaClient, query: Query) {
     } else {
       return computedFindMany(xPrisma, query);
     }
-  }
-  // TODO: Write this condition
-  else if (false) {
+    // TODO: This could be a better check
+    // i.e see if any of the jsonColumnSchema tables and columns are in the query
+  } else if (jsonColumnSchema && jsonColumnSchema.length > 0) {
     return findManyJson(prisma, query);
   } else {
     return dbFindMany(prisma, query);

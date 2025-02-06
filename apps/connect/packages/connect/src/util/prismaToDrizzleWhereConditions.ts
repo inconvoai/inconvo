@@ -1,15 +1,8 @@
-import {
-  eq,
-  ne,
-  gt,
-  gte,
-  lt,
-  lte,
-  and,
-  or,
-  not,
-  // arrayContains, // or any other drizzle-orm helpers you need
-} from "drizzle-orm";
+import { eq, ne, gt, gte, lt, lte, and, or, not, SQL, sql } from "drizzle-orm";
+
+function getISOFormatDateQuery(value: string): SQL<string> {
+  return sql<string>`to_char(${value}, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
+}
 
 /**
  * Parses an individual operator on a column:
@@ -24,6 +17,32 @@ function parseColumnFilter(
   filterObj: Record<string, any> // e.g. { gte: "2024-01-01T00:00:00.000Z" }
 ) {
   const [operator, value] = Object.entries(filterObj)[0];
+  const isDateString = (val: any) => {
+    const iso8601Regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    return typeof val === "string" && iso8601Regex.test(val);
+  };
+
+  if (isDateString(value)) {
+    switch (operator) {
+      case "equals":
+        return sql`${table[columnName]} = ${value}::timestamp`;
+      case "gt":
+        return sql`${table[columnName]} > ${value}::timestamp`;
+      case "gte":
+        return sql`${table[columnName]} >= ${value}::timestamp`;
+      case "lt":
+        return sql`${table[columnName]} < ${value}::timestamp`;
+      case "lte":
+        return sql`${table[columnName]} <= ${value}::timestamp`;
+      case "not":
+        return sql`${table[columnName]} != ${value}::timestamp`;
+      default:
+        throw new Error(
+          `Unsupported operator "${operator}" in filter for "${columnName}"`
+        );
+    }
+  }
+
   switch (operator) {
     case "equals":
       return eq(table[columnName], value);
@@ -38,10 +57,6 @@ function parseColumnFilter(
     case "not":
       return ne(table[columnName], value);
 
-    // Extend as needed:
-    // case "in":
-    //   return arrayContains(table[columnName], value);
-
     default:
       throw new Error(
         `Unsupported operator "${operator}" in filter for "${columnName}"`
@@ -54,11 +69,11 @@ function parseColumnFilter(
  * E.g.:
  *
  *   {
- *     create_date_utc: { gte: "2024-01-01T00:00:00.000Z" },
+ *     create_date_utc: { gte: "2025-02-04T15:50:23.590Z" },
  *     another_col: { equals: 123 }
  *   }
  *
- * -> and( gte(table.create_date_utc, "2024-01-01T00:00:00.000Z"), eq(table.another_col, 123) )
+ * -> and( gte(table.create_date_utc, "2025-02-04T15:50:23.590Z"), eq(table.another_col, 123) )
  */
 function parseSingleCondition(
   table: Record<string, any>,

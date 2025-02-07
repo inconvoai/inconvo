@@ -3,7 +3,7 @@ import { type Query } from "~/types/querySchema";
 import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-import * as drizzleTables from "../../../drizzle/schema";
+import * as drizzleTables from "~/../drizzle/schema";
 import { eq, getTableColumns, sql } from "drizzle-orm";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 import { getTableConfig } from "drizzle-orm/pg-core";

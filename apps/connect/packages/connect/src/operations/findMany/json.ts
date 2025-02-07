@@ -55,7 +55,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
                 `cast((${jsonColumnName}->>'${col}') as ${
                   jsonSchemaForTable?.jsonSchema.find(
                     (jCol) => jCol.name === col
-                  )
+                  )?.type === "String"
                     ? "Text"
                     : "Numeric"
                 })`

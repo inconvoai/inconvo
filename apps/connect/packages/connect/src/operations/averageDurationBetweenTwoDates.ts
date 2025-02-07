@@ -12,7 +12,7 @@ export async function averageDurationBetweenTwoDates(
   );
   const { table, whereAndArray, operationParameters } = query;
   const prismaExtended = prisma.$extends({
-    // @ts-expect-error
+    // @ts-expect-error - We don't know the table name in advance
     result: {
       [table]: {
         computedDurationValue: {

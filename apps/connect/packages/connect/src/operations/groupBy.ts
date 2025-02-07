@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
@@ -115,7 +115,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
     const [nonRelationalSelect, relationalSelect] =
       splitSelect(columnsForSelection);
 
-    // @ts-expect-error
+    // @ts-expect-error - We don't know the table name in advance
     const prismaQuery: Function = xPrisma[table]["findMany"];
     const response = await prismaQuery({
       select: nonRelationalSelect,

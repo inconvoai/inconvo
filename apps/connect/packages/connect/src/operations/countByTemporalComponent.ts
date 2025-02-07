@@ -48,7 +48,7 @@ export async function countByTemporalComponent(
       : prisma;
 
   const prismaExtended = prismaClient.$extends({
-    // @ts-expect-error
+    // @ts-expect-error - We don't know the table name in advance
     result: {
       [`${table.charAt(0).toLowerCase() + table.slice(1)}`]: {
         computedTemporalComponent: {
@@ -79,7 +79,7 @@ export async function countByTemporalComponent(
     {}
   );
 
-  // @ts-expect-error
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = prismaExtended[table]["findMany"];
   const response = await prismaQuery({
     select: {

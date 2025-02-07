@@ -60,7 +60,7 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
       ? generatePrismaClientWithComputedColumns(prisma, table, computedColumns)
       : prisma;
 
-  // @ts-expect-error
+  // @ts-expect-error  - We don't know the table name in advance
   const prismaQuery: Function = prismaClient[table]["findMany"];
   const response = await prismaQuery({
     select: {

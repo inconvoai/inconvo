@@ -13,13 +13,7 @@ export async function aggregateWithComputedColumn(
   query: Query
 ) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
-  const {
-    table,
-    operation,
-    whereAndArray,
-    operationParameters,
-    computedColumns,
-  } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
   const [computedWhere, dbWhere] = splitWhereConditions(
     computedColumns || [],
@@ -41,7 +35,7 @@ export async function aggregateWithComputedColumn(
     computedColumns
   );
 
-  //@ts-expect-error
+  //@ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = xPrisma[table]["findMany"];
   const response = await prismaQuery({
     select: selectColumns,

@@ -37,7 +37,7 @@ export async function countWithComputedColumn(
     return acc;
   }, {});
 
-  // @ts-expect-error
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery = xPrisma[table]["findMany"];
   const response = await prismaQuery({
     select: selectColumns,

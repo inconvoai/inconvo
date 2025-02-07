@@ -14,9 +14,7 @@ import { aggregate } from "~/operations/aggregate/index";
 import { countRelations } from "~/operations/countRelations/index";
 import { findDistinct } from "~/operations/findDistinct/index";
 
-interface InconvoConfig {}
-
-export function inconvo(config: InconvoConfig) {
+export function inconvo() {
   const router = Router();
   router.use(authenticated);
 

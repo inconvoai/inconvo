@@ -13,13 +13,7 @@ const tables: Record<string, any> = drizzleTables;
 
 export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
-  const {
-    table,
-    whereAndArray,
-    operationParameters,
-    computedColumns,
-    jsonColumnSchema,
-  } = query;
+  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
   const db = prisma.$extends(drizzle()).$drizzle;
 

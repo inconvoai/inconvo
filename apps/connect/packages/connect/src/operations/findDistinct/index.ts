@@ -21,7 +21,7 @@ export async function findDistinct(prisma: PrismaClient, query: Query) {
   const whereObject = {
     AND: [...(whereAndArray || [])],
   };
-  // @ts-expect-error
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = prisma[table]["findMany"];
   const response = await prismaQuery({
     select: {

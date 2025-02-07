@@ -87,8 +87,8 @@ export async function computedFindMany(
 
   const [nonRelationalSelect, relationalSelect] = splitSelect(modifiedSelect);
 
-  // Can never apply a limit on this as it will break the order.
-  // @ts-expect-error
+  // NOTE: Can never apply a limit on this as it will break the order.
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = prisma[table]["findMany"];
   const response = await prismaQuery({
     select: {

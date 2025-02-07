@@ -1,7 +1,7 @@
 import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
-import { getTableColumns, sql, WithSubquery } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/prisma/pg/driver";
 import * as drizzleTables from "../../../drizzle/schema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";

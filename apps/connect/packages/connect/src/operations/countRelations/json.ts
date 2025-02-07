@@ -4,9 +4,9 @@ import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "../../../drizzle/schema";
-import { eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
-import { AnyPgTable, PgTable } from "drizzle-orm/pg-core";
-import { getTableConfig, pgTable } from "drizzle-orm/pg-core";
+import { eq, getTableColumns, sql } from "drizzle-orm";
+import { AnyPgTable } from "drizzle-orm/pg-core";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 
 const tables: Record<string, any> = drizzleTables;
@@ -50,7 +50,7 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
 
   // FIXME: there is an issue here if you try to filter on the relations
   // i.e https://www.prisma.io/docs/orm/prisma-client/queries/relation-queries#filter-on-absence-of--to-many-records
-  const drizzleWhere = parsePrismaWhere(tableAlias, whereAndArray);
+  const drizzleWhere = parsePrismaWhere(tableAlias, table, whereAndArray);
 
   function getTablePrimaryKey(table: AnyPgTable) {
     const { columns } = getTableConfig(table);
@@ -106,7 +106,5 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   dbQuery.groupBy(...groupByColumns);
   const response = await dbQuery;
 
-  console.log(response);
-
-  return response;
+  return response.length > 0 ? response : 0;
 }

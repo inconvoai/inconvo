@@ -45,7 +45,7 @@ export async function countRelationsComputed(
     computedColumns
   );
 
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prismaClient[table]["findMany"];
   const response = await prismaQuery({
     select: {

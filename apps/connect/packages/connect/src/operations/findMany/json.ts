@@ -183,7 +183,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
         const jsonFields =
           selectColsPerTable[table]?.map(
-            //@ts-ignore
+            //@ts-expect-error
             (col) => sql`${col}::text, ${tableSchema[col]}`
           ) || [];
 
@@ -202,7 +202,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           const previousTable = jsonCtes[jsonCtes.length - 1];
           const previousTableName = tablePath[index - 1];
           const extendedJsonFields = jsonFields.concat(
-            //@ts-ignore
+            //@ts-expect-error
             sql`${previousTableName}::text, ${previousTable["json_data"]}`
           );
           const ctes = createSubsequentCte(
@@ -226,12 +226,12 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   const tableSchema: AnyPgTable | WithSubquery =
     tableAliasMapper[query.table] || tables[query.table];
 
-  const drizzleWhere = parsePrismaWhere(tableSchema, whereAndArray);
+  const drizzleWhere = parsePrismaWhere(tableSchema, table, whereAndArray);
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns[table] || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    //@ts-ignore
+    //@ts-expect-error
     acc[column] = tableSchema[column];
     return acc;
   }, {});
@@ -245,7 +245,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
           const tableName = tablePath[1];
-          //@ts-ignore
+          //@ts-expect-error
           acc[tableName] = sql`${tableCte["json_data"]}`.as(tableName);
           return acc;
         },
@@ -263,9 +263,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
       dbQuery.leftJoin(
         tableCte,
         eq(
-          // @ts-ignore
+          // @ts-expect-error
           tableSchema[finalLink[1]],
-          // @ts-ignore
+          // @ts-expect-error
           tableCte[finalLink[0]]
         )
       );
@@ -276,9 +276,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   if (orderBy) {
     dbQuery.orderBy(
       orderBy.direction === "asc"
-        ? // @ts-ignore
+        ? // @ts-expect-error
           asc(tableSchema[orderBy.column])
-        : // @ts-ignore
+        : // @ts-expect-error
           desc(tableSchema[orderBy.column])
     );
   }

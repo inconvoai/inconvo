@@ -14,7 +14,7 @@ export function buildDrizzleRelationalSelect(
     if (!columnNames) return;
 
     const tableParts = tableName.split(".");
-    let current = selectObject;
+    const current = selectObject;
 
     // Traverse to the correct level for each part, skipping the first table name
     tableParts.slice(1).forEach((part, index) => {

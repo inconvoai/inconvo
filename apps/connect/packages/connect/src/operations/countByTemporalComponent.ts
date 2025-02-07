@@ -48,14 +48,14 @@ export async function countByTemporalComponent(
       : prisma;
 
   const prismaExtended = prismaClient.$extends({
-    // @ts-ignore
+    // @ts-expect-error
     result: {
       [`${table.charAt(0).toLowerCase() + table.slice(1)}`]: {
         computedTemporalComponent: {
           needs: { [operationParameters.dateColumn]: true },
           compute: (table) => {
             const date = new Date(table[operationParameters.dateColumn]);
-            let formattedDate = formatDateToTemporalComponent(
+            const formattedDate = formatDateToTemporalComponent(
               date,
               operationParameters.component
             );
@@ -79,7 +79,7 @@ export async function countByTemporalComponent(
     {}
   );
 
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prismaExtended[table]["findMany"];
   const response = await prismaQuery({
     select: {

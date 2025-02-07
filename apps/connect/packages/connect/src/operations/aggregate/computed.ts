@@ -41,7 +41,7 @@ export async function aggregateWithComputedColumn(
     computedColumns
   );
 
-  //@ts-ignore
+  //@ts-expect-error
   const prismaQuery: Function = xPrisma[table]["findMany"];
   const response = await prismaQuery({
     select: selectColumns,

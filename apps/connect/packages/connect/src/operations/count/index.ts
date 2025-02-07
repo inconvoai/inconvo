@@ -51,11 +51,11 @@ export async function count(prisma: PrismaClient, query: Query) {
     : undefined;
 
   assert(
-    // @ts-ignore
+    // @ts-expect-error
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
     select: selectObject,

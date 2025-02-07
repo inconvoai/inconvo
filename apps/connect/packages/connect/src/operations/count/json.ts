@@ -36,7 +36,7 @@ export async function countJson(prisma: PrismaClient, query: Query) {
   }
 
   const prismaDrizzle = prisma.$extends(drizzle()).$drizzle;
-  const drizzleWhere = parsePrismaWhere(tables[table], whereAndArray);
+  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
   const tmpTable = prismaDrizzle
     .$with("tmpTable")
     .as(

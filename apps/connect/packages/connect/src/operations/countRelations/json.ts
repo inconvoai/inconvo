@@ -63,18 +63,14 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   }
 
   const relationsToCount =
-    operationParameters.relations?.map(
-      //@ts-ignore
-      (table) => {
-        const primaryKey = getTablePrimaryKey(tables[table]);
-        return sql`${table}::text,  COUNT(DISTINCT ${tables[table][primaryKey]})::numeric`;
-      }
-    ) || [];
+    operationParameters.relations?.map((table) => {
+      const primaryKey = getTablePrimaryKey(tables[table]);
+      return sql`${table}::text,  COUNT(DISTINCT ${tables[table][primaryKey]})::numeric`;
+    }) || [];
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    //@ts-ignore
     acc[column] = tableAlias[column];
     return acc;
   }, {});

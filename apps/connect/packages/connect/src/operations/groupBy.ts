@@ -115,7 +115,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
     const [nonRelationalSelect, relationalSelect] =
       splitSelect(columnsForSelection);
 
-    // @ts-ignore
+    // @ts-expect-error
     const prismaQuery: Function = xPrisma[table]["findMany"];
     const response = await prismaQuery({
       select: nonRelationalSelect,
@@ -220,7 +220,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
         if (column.join) {
           const tableName = Object.keys(column.join)[0];
           const joinColumn = column.join[tableName];
-          // @ts-ignore
+          // @ts-expect-error
           const joins = await prisma[table]["findMany"]({
             select: {
               [column.column]: true,
@@ -307,12 +307,12 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
   };
 
   assert(
-    // @ts-ignore
+    // @ts-expect-error
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
 
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
     ...groupBy,
@@ -333,7 +333,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
       if (column.join) {
         const tableName = Object.keys(column.join)[0];
         const joinColumn = column.join[tableName];
-        // @ts-ignore
+        // @ts-expect-error
         const joins = await prisma[table]["findMany"]({
           select: {
             [column.column]: true,

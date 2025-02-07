@@ -13,7 +13,7 @@ export async function findDistinctJson(prisma: PrismaClient, query: Query) {
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
   const db = prisma.$extends(drizzle()).$drizzle;
-  const drizzleWhere = parsePrismaWhere(tables[table], whereAndArray);
+  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
 
   const jsonSchemaForTable = jsonColumnSchema?.find(
     (jsonCol) => jsonCol.tableName === table

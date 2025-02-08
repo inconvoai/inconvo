@@ -129,8 +129,6 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
     operationParameters.groupBy[0]?.join ?? {}
   );
 
-  console.log(joinTable, joinColumn);
-
   const joinTableAlias: AnyPgTable | WithSubquery =
     tableAliasMapper[joinTable] || tables[joinTable];
 

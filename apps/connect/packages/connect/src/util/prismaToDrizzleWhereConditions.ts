@@ -81,7 +81,6 @@ function parseToManyRelationFilter(
   relationName: string,
   filterObj: FilterObject
 ): SQL {
-  console.log(filterObj);
   const [operator, _nestedCondition] = Object.entries(filterObj)[0];
 
   const [currentKey, relatedKey] = findRelationsBetweenTables(
@@ -275,6 +274,5 @@ export function parsePrismaWhere(
   if (!where || (Array.isArray(where) && where.length === 0)) {
     return undefined;
   }
-  console.log("where", where);
   return parseCondition(table, tableName, where);
 }

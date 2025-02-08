@@ -33,7 +33,6 @@ export function inconvo() {
       const prisma = getPrismaClient();
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;
-      console.log(JSON.stringify(parsedQuery, null, 2));
 
       if (operation === "findMany") {
         const response = await findMany(prisma, parsedQuery);

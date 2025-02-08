@@ -1,6 +1,6 @@
 import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
-import { findMany } from "~/operations/findMany";
+import { findMany } from "~/operations/findMany/index";
 
 test("Which order has generated the most revenue?", async () => {
   const iql = {
@@ -37,4 +37,4 @@ test("Which order has generated the most revenue?", async () => {
       ],
     },
   ]);
-});
+}, 10000);

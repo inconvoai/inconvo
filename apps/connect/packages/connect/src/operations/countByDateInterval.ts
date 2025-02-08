@@ -54,14 +54,14 @@ export async function countByDateInterval(prisma: PrismaClient, query: Query) {
       : prisma;
 
   const prismaExtended = prismaClient.$extends({
-    // @ts-ignore
+    // @ts-expect-error
     result: {
       [`${table.charAt(0).toLowerCase() + table.slice(1)}`]: {
         computedDateInterval: {
           needs: { [operationParameters.dateColumn]: true },
           compute: (table) => {
             const date = new Date(table[operationParameters.dateColumn]);
-            let formattedDate = formatDateByInterval(
+            const formattedDate = formatDateByInterval(
               date,
               operationParameters.interval
             );
@@ -79,13 +79,16 @@ export async function countByDateInterval(prisma: PrismaClient, query: Query) {
     ],
   };
 
-  const selectComputedCols = computedWhere.reduce((acc, obj) => {
-    const key = Object.keys(obj)[0];
-    acc[key] = true;
-    return acc;
-  }, {});
+  const selectComputedCols = computedWhere.reduce(
+    (acc: Record<string, boolean>, obj) => {
+      const key = Object.keys(obj)[0];
+      acc[key] = true;
+      return acc;
+    },
+    {}
+  );
 
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prismaExtended[table]["findMany"];
   const response = await prismaQuery({
     select: {

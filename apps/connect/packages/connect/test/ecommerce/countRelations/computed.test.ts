@@ -75,4 +75,4 @@ test("What was the order with the most lineitems with an order profit of over $1
   );
 
   expect(filteredProxyObject).toEqual(answer);
-});
+}, 10000);

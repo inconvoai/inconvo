@@ -8,13 +8,14 @@ export async function dbFindMany(prisma: PrismaClient, query: Query) {
   const { table, operation, whereAndArray, operationParameters } = query;
 
   assert(
-    // @ts-ignore
+    // @ts-expect-error
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
+    relationLoadStrategy: "join",
     select: buildRelationalSelect(table, operationParameters.columns),
     where: { AND: [...(whereAndArray || [])] },
     orderBy: operationParameters.orderBy

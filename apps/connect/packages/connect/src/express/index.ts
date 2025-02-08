@@ -3,20 +3,18 @@ import { authenticated } from "./middlewares";
 import { QuerySchema } from "../types/querySchema";
 import { ZodError } from "zod";
 import { getPrismaClient } from "../prismaClient";
-import { count } from "~/operations/count";
+import { count } from "~/operations/count/index";
 import { groupBy } from "~/operations/groupBy";
 import { findMany } from "~/operations/findMany";
 import { countByDateInterval } from "~/operations/countByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { buildSchema } from "~/util/buildSchema";
-import { aggregate } from "~/operations/aggregate";
-import { countRelations } from "~/operations/countRelations";
-import { findDistinct } from "~/operations/findDistinct";
+import { aggregate } from "~/operations/aggregate/index";
+import { countRelations } from "~/operations/countRelations/index";
+import { findDistinct } from "~/operations/findDistinct/index";
 
-interface InconvoConfig {}
-
-export function inconvo(config: InconvoConfig) {
+export function inconvo() {
   const router = Router();
   router.use(authenticated);
 

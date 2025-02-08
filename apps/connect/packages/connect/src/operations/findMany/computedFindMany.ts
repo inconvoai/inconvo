@@ -87,8 +87,8 @@ export async function computedFindMany(
 
   const [nonRelationalSelect, relationalSelect] = splitSelect(modifiedSelect);
 
-  // Can never apply a limit on this as it will break the order.
-  // @ts-ignore
+  // NOTE: Can never apply a limit on this as it will break the order.
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = prisma[table]["findMany"];
   const response = await prismaQuery({
     select: {
@@ -132,7 +132,7 @@ export async function computedFindMany(
   // if computed where apply the limit
   const limitedRes = orderedRes.slice(0, operationParameters.limit);
 
-  // @ts-ignore
+  // @ts-expect-error
   const joins = await prisma[table].findMany({
     where: {
       [uniqueKey]: {
@@ -164,7 +164,7 @@ export async function selectOnlyComputedFindMany(
     computedColumns || [],
     whereAndArray
   );
-  // @ts-ignore
+  // @ts-expect-error
   const prismaQuery: Function = prisma[table]["findMany"];
   const response = await prismaQuery({
     select,

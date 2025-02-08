@@ -1,24 +1,43 @@
 import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
-import {
-  filterResponseWithComputedConditions,
-  getSelectColumns,
-  splitWhereConditions,
-} from "./utils";
+import { getSelectColumns, splitWhereConditions } from "~/operations/utils";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
+import { countRelationsComputed } from "./computed";
+import { countRelationsJson } from "./json";
 
 export async function countRelations(prisma: PrismaClient, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, computedColumns } = query;
+  const {
+    table,
+    whereAndArray,
+    operationParameters,
+    computedColumns,
+    jsonColumnSchema,
+  } = query;
+
+  const columns = operationParameters.columns;
+  const jsonSchemaForTable = jsonColumnSchema?.find(
+    (jsonCol) => jsonCol.tableName === table
+  );
+  const jsonColumns =
+    jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
+
+  if (columns.some((column) => jsonColumns.includes(column))) {
+    return countRelationsJson(prisma, query);
+  }
 
   const [computedWhere, dbWhere] = splitWhereConditions(
     computedColumns || [],
     whereAndArray
   );
 
+  if (computedWhere.length > 0) {
+    return countRelationsComputed(prisma, query);
+  }
+
   const whereObject = {
-    AND: [...(dbWhere || [])],
+    AND: [...(whereAndArray || [])],
   };
 
   const selectColumns = getSelectColumns(
@@ -41,7 +60,7 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
       ? generatePrismaClientWithComputedColumns(prisma, table, computedColumns)
       : prisma;
 
-  // @ts-ignore
+  // @ts-expect-error  - We don't know the table name in advance
   const prismaQuery: Function = prismaClient[table]["findMany"];
   const response = await prismaQuery({
     select: {
@@ -58,15 +77,8 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
           },
         }
       : undefined,
-    ...(computedWhere.length === 0 && { take: operationParameters.limit }),
+    take: operationParameters.limit,
   });
 
-  if (computedWhere.length > 0) {
-    return filterResponseWithComputedConditions(response, computedWhere).slice(
-      0,
-      operationParameters.limit
-    );
-  } else {
-    return response.length > 0 ? response : 0;
-  }
+  return response.length > 0 ? response : 0;
 }

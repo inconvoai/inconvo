@@ -125,12 +125,16 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
     selectFields.sum = sql`json_build_object${sumJsonFields}`.as("_sum");
   }
 
-  const [[joinTable, joinColumn]] = Object.entries(
+  const joinEntry = Object.entries(
     operationParameters.groupBy[0]?.join ?? {}
-  );
+  )[0];
+  const [joinTable, joinColumn] = joinEntry
+    ? joinEntry
+    : [undefined, undefined];
 
-  const joinTableAlias: AnyPgTable | WithSubquery =
-    tableAliasMapper[joinTable] || tables[joinTable];
+  const joinTableAlias: AnyPgTable | WithSubquery | undefined = joinTable
+    ? tableAliasMapper[joinTable] ?? tables[joinTable]
+    : undefined;
 
   const dbQuery = db
     .with(tableAlias)

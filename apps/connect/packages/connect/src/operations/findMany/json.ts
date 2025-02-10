@@ -244,7 +244,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
         (acc: Record<string, any>, tablePath, index) => {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
-          const tableName = tablePath[1];
+          const tableName = tablePath.reverse()[1];
           //@ts-expect-error
           acc[tableName] = sql`${tableCte["json_data"]}`.as(tableName);
           return acc;

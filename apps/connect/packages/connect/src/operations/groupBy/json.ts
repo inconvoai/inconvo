@@ -2,6 +2,7 @@ import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import {
+  asc,
   count,
   desc,
   eq,
@@ -151,7 +152,11 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
       // @ts-expect-error - We dont know the columns of joinTableAlias
       ...(joinTable ? [joinTableAlias[joinColumn]] : [])
     )
-    .orderBy(desc(count(tableAlias["id"])));
+    .orderBy(
+      operationParameters.orderBy.direction === "asc"
+        ? asc(count(tableAlias[operationParameters.orderBy.column]))
+        : desc(count(tableAlias[operationParameters.orderBy.column]))
+    );
 
   if (joinTable) {
     const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(

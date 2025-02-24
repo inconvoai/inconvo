@@ -83,7 +83,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     groupBy: boolean
   ) {
     const cte = db
-      .$with(`cte${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
+      .$with(`cteInitial${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
       .as(
         db
           .select({
@@ -122,7 +122,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     groupBy: boolean
   ) {
     const cte = db
-      .$with(`cte${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
+      .$with(`cteSubs${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
       .as(
         db
           .select({
@@ -172,9 +172,11 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   const outerTableLinks: string[][][] = [];
 
   if (needCtes) {
-    const jsonCtes: WithSubquery[] = [];
-    const tableLinks: string[][] = [];
+    let jsonCtes: WithSubquery[] = [];
+    let tableLinks: string[][] = [];
     for (const [outerIndex, tablePath] of dedupedTablePaths.entries()) {
+      jsonCtes = [];
+      tableLinks = [];
       const reverseTablePath = tablePath.reverse();
       for (const [index, table] of reverseTablePath.entries()) {
         if (table === query.table) {
@@ -253,8 +255,11 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
           const tableName = tablePath.reverse()[1];
-          //@ts-expect-error
-          acc[tableName] = sql`${tableCte["json_data"]}`.as(tableName);
+
+          acc[tableName] = sql`${sql.raw(`\"${tableCte._.alias}\".`)}${
+            //@ts-expect-error
+            tableCte["json_data"]
+          }`.as(tableName);
           return acc;
         },
         {}

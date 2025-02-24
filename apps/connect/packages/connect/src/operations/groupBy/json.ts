@@ -138,7 +138,7 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
     : undefined;
 
   const dbQuery = db
-    .with(tableAlias)
+    .with(tableAlias, ...tableAliases)
     .select({
       [operationParameters.groupBy[0].column]:
         tableAlias[operationParameters.groupBy[0].column],
@@ -164,7 +164,8 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
       tables[joinTable]
     );
     dbQuery.leftJoin(
-      tables[joinTable],
+      // @ts-expect-error - We dont know what this is
+      joinTableAlias,
       // @ts-expect-error - We dont know the columns of joinTableAlias
       eq(tableAlias[currentTableKey], joinTableAlias[relatedTableKey])
     );

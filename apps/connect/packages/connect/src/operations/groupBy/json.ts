@@ -164,7 +164,6 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
       tables[joinTable]
     );
     dbQuery.leftJoin(
-      // @ts-expect-error - We dont know what this is
       joinTableAlias,
       // @ts-expect-error - We dont know the columns of joinTableAlias
       eq(tableAlias[currentTableKey], joinTableAlias[relatedTableKey])

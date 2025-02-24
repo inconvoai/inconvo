@@ -75,23 +75,26 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   function createInitialCte(
     index: number,
+    outerIndex: number,
     table: string,
     tableSchema: any,
     currentTableKey: string,
     jsonFields: any[],
     groupBy: boolean
   ) {
-    const cte = db.$with(`cte${table}${index}${groupBy ? "_" : ""}`).as(
-      db
-        .select({
-          [currentTableKey]: tableSchema[currentTableKey],
-          json_data: sql`json_build_object${jsonFields}`.as("json_data"),
-        })
-        .from(tableSchema)
-    );
+    const cte = db
+      .$with(`cte${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
+      .as(
+        db
+          .select({
+            [currentTableKey]: tableSchema[currentTableKey],
+            json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+          })
+          .from(tableSchema)
+      );
 
     if (groupBy) {
-      const groupedCte = db.$with(`cte${table}${index}`).as(
+      const groupedCte = db.$with(`cte${table}${index}${outerIndex}`).as(
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
@@ -109,6 +112,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
 
   function createSubsequentCte(
     index: number,
+    outerIndex: number,
     table: string,
     tableSchema: any,
     currentTableKey: string,
@@ -117,24 +121,26 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     previousTableLinks: string[],
     groupBy: boolean
   ) {
-    const cte = db.$with(`cte${table}${index}${groupBy ? "_" : ""}`).as(
-      db
-        .select({
-          [currentTableKey]: tableSchema[currentTableKey],
-          json_data: sql`json_build_object${jsonFields}`.as("json_data"),
-        })
-        .from(tableSchema)
-        .leftJoin(
-          previousTable,
-          eq(
-            tableSchema[previousTableLinks[1]],
-            previousTable[previousTableLinks[0]]
+    const cte = db
+      .$with(`cte${table}${index}${outerIndex}${groupBy ? "_" : ""}`)
+      .as(
+        db
+          .select({
+            [currentTableKey]: tableSchema[currentTableKey],
+            json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+          })
+          .from(tableSchema)
+          .leftJoin(
+            previousTable,
+            eq(
+              tableSchema[previousTableLinks[1]],
+              previousTable[previousTableLinks[0]]
+            )
           )
-        )
-    );
+      );
 
     if (groupBy) {
-      const groupedCte = db.$with(`cte${table}${index}`).as(
+      const groupedCte = db.$with(`cte${table}${index}${outerIndex}`).as(
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
@@ -168,7 +174,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
   if (needCtes) {
     const jsonCtes: WithSubquery[] = [];
     const tableLinks: string[][] = [];
-    for (const tablePath of dedupedTablePaths) {
+    for (const [outerIndex, tablePath] of dedupedTablePaths.entries()) {
       const reverseTablePath = tablePath.reverse();
       for (const [index, table] of reverseTablePath.entries()) {
         if (table === query.table) {
@@ -190,6 +196,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
         if (index === 0) {
           const ctes = createInitialCte(
             index,
+            outerIndex,
             table,
             tableSchema,
             currentTableKey,
@@ -207,6 +214,7 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
           );
           const ctes = createSubsequentCte(
             index,
+            outerIndex,
             table,
             tableSchema,
             currentTableKey,

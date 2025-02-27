@@ -13,6 +13,7 @@ import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
 import { countRelations } from "~/operations/countRelations/index";
 import { findDistinct } from "~/operations/findDistinct/index";
+import packageJson from "../../package.json";
 
 export function inconvo() {
   const router = Router();
@@ -26,6 +27,10 @@ export function inconvo() {
       console.log(error);
       res.status(500).json({ error: "Failed to fetch schema" });
     }
+  });
+
+  router.get("/version", (req: Request, res: Response) => {
+    res.json({ version: packageJson.version });
   });
 
   router.post("/", async (req: Request, res: Response) => {

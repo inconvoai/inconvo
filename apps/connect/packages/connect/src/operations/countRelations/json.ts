@@ -4,7 +4,7 @@ import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import * as drizzleTables from "~/../drizzle/schema";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
@@ -57,9 +57,14 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   }
 
   const relationsToCount =
-    operationParameters.relations?.map((table) => {
-      const primaryKey = getTablePrimaryKey(tables[table]);
-      return sql`${table}::text,  COUNT(DISTINCT ${tables[table][primaryKey]})::numeric`;
+    operationParameters.relationsToCount?.map((table) => {
+      const primaryKey = getTablePrimaryKey(tables[table.name]);
+      // Use the distinct column if specified, otherwise use the primary key
+      const distinctColumn = table.distinct
+        ? tables[table.name][table.distinct]
+        : tables[table.name][primaryKey];
+
+      return sql`${table.name}::text,  COUNT(DISTINCT ${distinctColumn})::numeric`;
     }) || [];
 
   const rootSelect: { [key: string]: any } = (
@@ -78,14 +83,14 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
     .from(tableAlias)
     .where(drizzleWhere);
 
-  for (const joinTable of operationParameters.relations) {
+  for (const joinTable of operationParameters.relationsToCount) {
     const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(
       tables[table],
-      tables[joinTable]
+      tables[joinTable.name]
     );
     dbQuery.leftJoin(
-      tables[joinTable],
-      eq(tables[joinTable][relatedTableKey], tableAlias[currentTableKey])
+      tables[joinTable.name],
+      eq(tables[joinTable.name][relatedTableKey], tableAlias[currentTableKey])
     );
   }
 
@@ -94,7 +99,32 @@ export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   );
 
   dbQuery.groupBy(...groupByColumns);
-  const response = await dbQuery;
 
+  if (operationParameters.orderBy) {
+    const relationName = operationParameters.orderBy.relation;
+
+    // Create a direct SQL expression to get the count for the specific relation
+    const matchingRelation = operationParameters.relationsToCount?.find(
+      (rel) => rel.name === relationName
+    );
+
+    if (matchingRelation) {
+      const primaryKey = getTablePrimaryKey(tables[relationName]);
+      // Use the distinct column if specified, otherwise use the primary key
+      const distinctColumn = matchingRelation.distinct
+        ? tables[relationName][matchingRelation.distinct]
+        : tables[relationName][primaryKey];
+
+      const countExpression = sql`COUNT(DISTINCT ${distinctColumn})`;
+
+      if (operationParameters.orderBy.direction === "desc") {
+        dbQuery.orderBy(desc(countExpression));
+      } else {
+        dbQuery.orderBy(asc(countExpression));
+      }
+    }
+  }
+
+  const response = await dbQuery;
   return response.length > 0 ? response : 0;
 }

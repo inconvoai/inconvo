@@ -135,7 +135,12 @@ const countRelationsSchema = z
     operationParameters: z
       .object({
         columns: z.array(z.string()),
-        relations: z.array(z.string()),
+        relationsToCount: z.array(
+          z.object({
+            name: z.string(),
+            distinct: z.string().nullable(),
+          })
+        ),
         orderBy: z
           .object({
             relation: z.string(),

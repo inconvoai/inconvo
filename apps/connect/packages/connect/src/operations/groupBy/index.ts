@@ -68,11 +68,31 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
     ...maxColumns,
   ];
 
+  const whereColumns: string[] = whereAndArray
+    .map((where) => Object.keys(where))
+    .flat();
+
   const jsoncolumns: string[] = (jsonColumnSchema || []).flatMap((jsonTable) =>
     jsonTable.jsonSchema.map((jsonCol) => jsonCol.name)
   );
 
-  if (operationColumns.some((col) => jsoncolumns.includes(col))) {
+  const joinColumns: string[] = operationParameters.groupBy.reduce(
+    (acc: string[], column: any) => {
+      if (column.join) {
+        const tableName = Object.keys(column.join)[0];
+        const joinColumn = column.join[tableName];
+        acc.push(joinColumn);
+      }
+      return acc;
+    },
+    []
+  );
+
+  if (
+    operationColumns.some((col) => jsoncolumns.includes(col)) ||
+    whereColumns.some((col) => jsoncolumns.includes(col)) ||
+    joinColumns.some((col) => jsoncolumns.includes(col))
+  ) {
     return groupByJson(prisma, query);
   }
 

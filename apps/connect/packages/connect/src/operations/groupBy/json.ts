@@ -32,7 +32,6 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
   );
   const jsonCols = jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
   const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
-  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
 
   const tableAlias = db.$with(`${table}Alias`).as(
     db
@@ -53,7 +52,6 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
         }, {}),
       })
       .from(tables[table])
-      .where(drizzleWhere)
   );
 
   const tableAliasMapper: Record<string, WithSubquery> = {};
@@ -137,6 +135,8 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
     ? tableAliasMapper[joinTable] ?? tables[joinTable]
     : undefined;
 
+  const drizzleWhere = parsePrismaWhere(tableAlias, table, whereAndArray);
+
   const dbQuery = db
     .with(tableAlias, ...tableAliases)
     .select({
@@ -152,6 +152,7 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
       // @ts-expect-error - We dont know the columns of joinTableAlias
       ...(joinTable ? [joinTableAlias[joinColumn]] : [])
     )
+    .where(drizzleWhere)
     .orderBy(
       operationParameters.orderBy.direction === "asc"
         ? asc(count(tableAlias[operationParameters.orderBy.column]))

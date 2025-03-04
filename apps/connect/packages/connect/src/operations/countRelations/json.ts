@@ -1,20 +1,19 @@
 import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
-import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-import * as drizzleTables from "~/../drizzle/schema";
 import { asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
-
-const tables: Record<string, any> = drizzleTables;
+import { loadDrizzleTables } from "../utils";
+import assert from "assert";
 
 export async function countRelationsJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
+  const tables = await loadDrizzleTables();
   const db = prisma.$extends(drizzle()).$drizzle;
 
   const jsonSchemaForTable = jsonColumnSchema?.find(

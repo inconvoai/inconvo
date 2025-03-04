@@ -3,12 +3,10 @@ import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-import * as drizzleTables from "~/../drizzle/schema";
 import { asc, desc, eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
-
-const tables: Record<string, any> = drizzleTables;
+import { loadDrizzleTables } from "../utils";
 
 export async function findManyJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
@@ -20,6 +18,9 @@ export async function findManyJson(prisma: PrismaClient, query: Query) {
     jsonColumnSchema,
   } = query;
   const { columns, orderBy, limit } = operationParameters;
+
+  const drizzleTables = await loadDrizzleTables();
+  const tables = drizzleTables;
 
   const db = prisma.$extends(drizzle()).$drizzle;
 

@@ -1,5 +1,16 @@
 import { ComputedColumn, WhereConditions } from "~/types/querySchema";
 
+export async function loadDrizzleTables() {
+  try {
+    const modulePath = `../../drizzle/schema.js`;
+    const tablesModule = await import(modulePath);
+    return tablesModule as Record<string, any>;
+  } catch (error) {
+    console.error("Failed to load Drizzle tables:", error);
+    throw error;
+  }
+}
+
 export function getSelectColumns(
   cols: string[],
   computedCols?: { name: string }[]

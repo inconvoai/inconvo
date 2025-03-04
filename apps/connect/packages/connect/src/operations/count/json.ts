@@ -3,14 +3,16 @@ import { type Query } from "~/types/querySchema";
 import assert from "assert";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import { sql } from "drizzle-orm";
-import * as drizzleTables from "~/../drizzle/schema";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-
-const tables: Record<string, any> = drizzleTables;
+import { loadDrizzleTables } from "../utils";
 
 export async function countJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+
+  const tables = await loadDrizzleTables();
+  const db = prisma.$extends(drizzle()).$drizzle;
+  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
 
   const columnNames = operationParameters.columns;
 
@@ -35,13 +37,9 @@ export async function countJson(prisma: PrismaClient, query: Query) {
     }
   }
 
-  const prismaDrizzle = prisma.$extends(drizzle()).$drizzle;
-  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
-  const tmpTable = prismaDrizzle
+  const tmpTable = db
     .$with("tmpTable")
-    .as(
-      prismaDrizzle.select(selectQuery).from(tables[table]).where(drizzleWhere)
-    );
+    .as(db.select(selectQuery).from(tables[table]).where(drizzleWhere));
 
   const aggregateSelect = columnNames.reduce((acc, column) => {
     const colSelect = {
@@ -53,7 +51,7 @@ export async function countJson(prisma: PrismaClient, query: Query) {
     return { ...acc, ...colSelect };
   }, {});
 
-  const response = (await prismaDrizzle
+  const response = (await db
     .with(tmpTable)
     .select(aggregateSelect)
     .from(tmpTable)) as any;

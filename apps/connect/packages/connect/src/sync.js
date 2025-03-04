@@ -43,6 +43,39 @@ function runPrismaCommand(command, prismaPath, schemaPath) {
   });
 }
 
+function getDrizzleSchemaPath() {
+  try {
+    const inconvoPath = require.resolve("@ten-dev/inconvo/express");
+    return path.resolve(inconvoPath, "../../../drizzle/schema.ts");
+  } catch (e) {}
+  return null;
+}
+function getDrizzleSchemaJsPath() {
+  try {
+    const inconvoPath = require.resolve("@ten-dev/inconvo/express");
+    return path.resolve(inconvoPath, "../../../drizzle");
+  } catch (e) {}
+  return null;
+}
+
+function compileDrizzleSchema() {
+  const tsPath = getDrizzleSchemaPath();
+  const jsPath = getDrizzleSchemaJsPath();
+  console.log("Compiling drizzle schema", tsPath, jsPath);
+  return new Promise((resolve, reject) => {
+    exec(
+      `npx tsc ${tsPath} --outDir ${jsPath} --skipLibCheck `,
+      { env: process.env, cwd: userProjectDir },
+      (error) => {
+        if (error) {
+          return reject(error);
+        }
+        resolve();
+      }
+    );
+  });
+}
+
 (async () => {
   try {
     const prismaPath = getPrismaPath();
@@ -54,7 +87,8 @@ function runPrismaCommand(command, prismaPath, schemaPath) {
     }
     await runPrismaCommand("db pull", prismaPath, prismaSchemaPath);
     await runPrismaCommand("generate", prismaPath, prismaSchemaPath);
-    console.log(" Schema pulled successfully.");
+    console.log("Schema pulled successfully.");
+    await compileDrizzleSchema();
   } catch (error) {
     console.error("An error occurred while syncing DB:", error);
     process.exit(1);

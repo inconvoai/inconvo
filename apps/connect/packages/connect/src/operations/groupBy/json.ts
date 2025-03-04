@@ -15,16 +15,15 @@ import {
 } from "drizzle-orm";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import assert from "assert";
-import * as drizzleTables from "~/../drizzle/schema";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
-
-const tables: Record<string, any> = drizzleTables;
+import { loadDrizzleTables } from "../utils";
 
 export async function groupByJson(prisma: PrismaClient, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
+  const tables = await loadDrizzleTables();
   const db = prisma.$extends(drizzle()).$drizzle;
 
   const jsonSchemaForTable = jsonColumnSchema?.find(

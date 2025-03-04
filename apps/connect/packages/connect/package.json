@@ -4,6 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
+    "sync": "npx sync-schema ",
     "test:ecommerce": "jest",
     "dev": "tsup --watch"
   },

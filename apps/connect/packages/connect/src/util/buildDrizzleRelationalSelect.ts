@@ -22,8 +22,7 @@ export function buildDrizzleRelationalSelect(
       if (index === tableParts.length - 2) {
         current[part] = columnNames.reduce<Record<string, any>>(
           (acc, columnName) => {
-            // acc[columnName] = tables[table][columnName];
-            acc[columnName] = tables["lot"][columnName];
+            acc[columnName] = tables[table][columnName];
             return acc;
           },
           {}

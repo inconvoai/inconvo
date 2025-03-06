@@ -23,7 +23,15 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
   const jsonColumnNames = jsonColumnSchemaEntry
     ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
     : [];
-  const columnNames = operationParameters.columns;
+
+  const columnNames = [
+    ...(operationParameters.avg ?? []),
+    ...(operationParameters.sum ?? []),
+    ...(operationParameters.min ?? []),
+    ...(operationParameters.max ?? []),
+    ...(operationParameters.count ?? []),
+    ...(operationParameters.median ?? []),
+  ];
 
   const [computedWhere, _dbWhere] = splitWhereConditions(
     computedColumns || [],
@@ -45,27 +53,61 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
     return aggregateJson(prisma, query);
   }
 
-  const columns = operationParameters.columns.reduce(
-    (acc: { [key: string]: boolean }, column: string) => {
+  const createColumnObject = (columns: string[] | null) => {
+    if (!columns) return {};
+    return columns.reduce((acc: { [key: string]: boolean }, column: string) => {
       acc[column] = true;
       return acc;
-    },
-    {}
-  );
+    }, {});
+  };
+
+  const aggregateObject = {
+    ...(operationParameters.avg
+      ? { _avg: createColumnObject(operationParameters.avg) }
+      : {}),
+    ...(operationParameters.sum
+      ? { _sum: createColumnObject(operationParameters.sum) }
+      : {}),
+    ...(operationParameters.min
+      ? { _min: createColumnObject(operationParameters.min) }
+      : {}),
+    ...(operationParameters.max
+      ? { _max: createColumnObject(operationParameters.max) }
+      : {}),
+    ...(operationParameters.count
+      ? { _count: createColumnObject(operationParameters.count) }
+      : {}),
+  };
+
   assert(
-    // @ts-expect-error
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
-  // @ts-expect-error
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
-    _avg: { ...columns },
-    _sum: { ...columns },
-    _min: { ...columns },
-    _max: { ...columns },
-    _count: { ...columns },
+    ...aggregateObject,
     where: { AND: [...(whereAndArray || [])] },
   });
+
+  if (operationParameters.median) {
+    const medianFm = await prisma[table]["findMany"]({
+      select: createColumnObject(operationParameters.median),
+      where: { AND: [...(whereAndArray || [])] },
+    });
+    const median = operationParameters.median.reduce((acc, column) => {
+      const sorted = medianFm
+        .map((x: any) => x[column])
+        .sort((a: number, b: number) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return {
+        ...acc,
+        [column]:
+          sorted.length % 2 !== 0
+            ? sorted[mid]
+            : (sorted[mid - 1] + sorted[mid]) / 2,
+      };
+    }, {});
+    response._median = median;
+  }
   return response;
 }

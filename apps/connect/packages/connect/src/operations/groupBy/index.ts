@@ -152,12 +152,10 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
   };
 
   assert(
-    // @ts-expect-error
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
 
-  // @ts-expect-error
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
     ...groupBy,
@@ -178,7 +176,6 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
       if (column.join) {
         const tableName = Object.keys(column.join)[0];
         const joinColumn = column.join[tableName];
-        // @ts-expect-error
         const joins = await prisma[table]["findMany"]({
           select: {
             [column.column]: true,

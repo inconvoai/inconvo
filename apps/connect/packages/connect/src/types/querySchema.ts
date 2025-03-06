@@ -160,7 +160,12 @@ const aggregateSchema = z
     operation: z.literal("aggregate"),
     operationParameters: z
       .object({
-        columns: z.array(z.string()),
+        min: z.array(z.string()).nullable(),
+        max: z.array(z.string()).nullable(),
+        avg: z.array(z.string()).nullable(),
+        sum: z.array(z.string()).nullable(),
+        count: z.array(z.string()).nullable(),
+        median: z.array(z.string()).nullable(),
       })
       .strict(),
   })

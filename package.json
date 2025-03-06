@@ -7,7 +7,7 @@
     "build": "next build",
     "generate": "npx prisma generate",
     "migrate": "npx prisma migrate deploy",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "postinstall": "prisma generate",
     "lint": "next lint",
     "start": "next start",

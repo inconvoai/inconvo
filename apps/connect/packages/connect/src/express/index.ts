@@ -15,6 +15,12 @@ import { countRelations } from "~/operations/countRelations/index";
 import { findDistinct } from "~/operations/findDistinct/index";
 import packageJson from "../../package.json";
 
+function safeJsonStringify(value: unknown): string {
+  return JSON.stringify(value, (key, val) =>
+    typeof val === "bigint" ? val.toString() : val
+  );
+}
+
 export function inconvo() {
   const router = Router();
   router.use(authenticated);
@@ -22,15 +28,18 @@ export function inconvo() {
   router.get("/", (req: Request, res: Response) => {
     try {
       const schema = buildSchema();
-      res.json(schema);
+      res.setHeader("Content-Type", "application/json");
+      res.send(safeJsonStringify(schema));
     } catch (error) {
       console.log(error);
-      res.status(500).json({ error: "Failed to fetch schema" });
+      res.status(500).setHeader("Content-Type", "application/json");
+      res.send(safeJsonStringify({ error: "Failed to fetch schema" }));
     }
   });
 
   router.get("/version", (req: Request, res: Response) => {
-    res.json({ version: packageJson.version });
+    res.setHeader("Content-Type", "application/json");
+    res.send(safeJsonStringify({ version: packageJson.version }));
   });
 
   router.post("/", async (req: Request, res: Response) => {
@@ -39,61 +48,47 @@ export function inconvo() {
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;
 
+      let response;
+
       if (operation === "findMany") {
-        const response = await findMany(prisma, parsedQuery);
-        return res.json(response);
+        response = await findMany(prisma, parsedQuery);
+      } else if (operation === "findDistinct") {
+        response = await findDistinct(prisma, parsedQuery);
+      } else if (operation === "count") {
+        response = await count(prisma, parsedQuery);
+      } else if (operation === "countRelations") {
+        response = await countRelations(prisma, parsedQuery);
+      } else if (operation === "aggregate") {
+        response = await aggregate(prisma, parsedQuery);
+      } else if (operation === "groupBy") {
+        response = await groupBy(prisma, parsedQuery);
+      } else if (operation === "countByDateInterval") {
+        response = await countByDateInterval(prisma, parsedQuery);
+      } else if (operation === "countByTemporalComponent") {
+        response = await countByTemporalComponent(prisma, parsedQuery);
+      } else if (operation === "averageDurationBetweenTwoDates") {
+        response = await averageDurationBetweenTwoDates(prisma, parsedQuery);
+      } else {
+        return res
+          .status(400)
+          .setHeader("Content-Type", "application/json")
+          .send(safeJsonStringify({ error: "Invalid operation" }));
       }
 
-      if (operation === "findDistinct") {
-        const response = await findDistinct(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "count") {
-        const response = await count(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "countRelations") {
-        const response = await countRelations(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "aggregate") {
-        const response = await aggregate(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "groupBy") {
-        const response = await groupBy(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "countByDateInterval") {
-        const response = await countByDateInterval(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "countByTemporalComponent") {
-        const response = await countByTemporalComponent(prisma, parsedQuery);
-        return res.json(response);
-      }
-
-      if (operation === "averageDurationBetweenTwoDates") {
-        const response = await averageDurationBetweenTwoDates(
-          prisma,
-          parsedQuery
-        );
-        return res.json(response);
-      }
-
-      return res.status(400).json({ error: "Invalid operation" });
+      res.setHeader("Content-Type", "application/json");
+      return res.send(safeJsonStringify(response));
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res
+          .status(400)
+          .setHeader("Content-Type", "application/json")
+          .send(safeJsonStringify({ error: error.errors }));
       }
       console.error(error);
-      res.status(500).json({ error: "Failed to execute query" });
+      res
+        .status(500)
+        .setHeader("Content-Type", "application/json")
+        .send(safeJsonStringify({ error: "Failed to execute query" }));
     }
   });
 

@@ -11,12 +11,12 @@ dotenv.config({ path: path.join(userProjectDir, ".env") });
 
 function getPrismaPath() {
   try {
-    const packagePath = require.resolve("prisma/package.json");
-    if (packagePath) {
-      const prismaPath = require.resolve("prisma");
-      return path.resolve(prismaPath, "../../../");
-    }
-  } catch (e) {}
+    const prismaPath = require.resolve("prisma/package.json");
+    return path.resolve(prismaPath, "../../../");
+  } catch (e) {
+    console.error("Prisma package not found");
+    console.error(e);
+  }
   return null;
 }
 
@@ -82,6 +82,7 @@ function compileDrizzleSchema() {
     const prismaSchemaPath = getPrismaSchemaPath();
     console.log("Prisma schema path", prismaSchemaPath);
     if (!prismaPath || !prismaSchemaPath) {
+      console.log(prismaPath, prismaSchemaPath);
       console.error("Inconvo not found in the project");
       process.exit(1);
     }

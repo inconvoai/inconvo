@@ -13,6 +13,7 @@ import {
   filterResponseWithComputedConditions,
   splitWhereConditions,
 } from "./utils";
+import { isPrismaFieldNullable } from "~/util/isPrismaFieldNullable";
 
 type interval = "year" | "month" | "week" | "day";
 function formatDateByInterval(date: Date, interval: interval): string {
@@ -72,9 +73,16 @@ export async function countByDateInterval(prisma: PrismaClient, query: Query) {
     },
   });
 
+  const isNullable = isPrismaFieldNullable(
+    operationParameters.dateColumn,
+    table
+  );
+
   const whereObject = {
     AND: [
-      { [operationParameters.dateColumn]: { not: null } },
+      ...(isNullable
+        ? [{ [operationParameters.dateColumn]: { not: null } }]
+        : []),
       ...(dbWhere || []),
     ],
   };

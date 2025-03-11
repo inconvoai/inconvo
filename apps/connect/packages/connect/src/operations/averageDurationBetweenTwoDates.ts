@@ -1,6 +1,7 @@
 import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
+import { isPrismaFieldNullable } from "~/util/isPrismaFieldNullable";
 
 export async function averageDurationBetweenTwoDates(
   prisma: PrismaClient,
@@ -11,6 +12,16 @@ export async function averageDurationBetweenTwoDates(
     "Invalid inconvo operation"
   );
   const { table, whereAndArray, operationParameters } = query;
+
+  const isColANullable = isPrismaFieldNullable(
+    operationParameters.columnA,
+    table
+  );
+  const isColBNullable = isPrismaFieldNullable(
+    operationParameters.columnB,
+    table
+  );
+
   const prismaExtended = prisma.$extends({
     // @ts-expect-error - We don't know the table name in advance
     result: {
@@ -35,8 +46,12 @@ export async function averageDurationBetweenTwoDates(
   });
   const whereObject = {
     AND: [
-      { [operationParameters.columnA]: { not: null } },
-      { [operationParameters.columnB]: { not: null } },
+      ...(isColANullable
+        ? [{ [operationParameters.columnA]: { not: null } }]
+        : []),
+      ...(isColBNullable
+        ? [{ [operationParameters.columnB]: { not: null } }]
+        : []),
       ...(whereAndArray || []),
     ],
   };

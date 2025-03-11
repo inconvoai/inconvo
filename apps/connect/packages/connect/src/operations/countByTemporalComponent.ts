@@ -7,6 +7,7 @@ import {
   splitWhereConditions,
 } from "./utils";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
+import { isPrismaFieldNullable } from "~/util/isPrismaFieldNullable";
 
 type temporalComponent = "Day" | "Month";
 function formatDateToTemporalComponent(
@@ -66,7 +67,15 @@ export async function countByTemporalComponent(
     },
   });
 
+  const isNullable = isPrismaFieldNullable(
+    operationParameters.dateColumn,
+    table
+  );
+
   const whereObject = {
+    ...(isNullable
+      ? [{ [operationParameters.dateColumn]: { not: null } }]
+      : []),
     AND: [...(dbWhere || [])],
   };
 

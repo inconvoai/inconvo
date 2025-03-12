@@ -1,6 +1,6 @@
 {
   "name": "@ten-dev/inconvo",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",

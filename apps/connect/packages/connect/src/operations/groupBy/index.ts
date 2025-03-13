@@ -27,12 +27,13 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
       return false;
     }
 
-    const { orderBy, groupBy, sum, min, max } = opParams;
+    const { orderBy, groupBy, sum, min, max, avg } = opParams;
     const opParamColsToCheck = [
       ...(groupBy.map((col: any) => col.column) || []),
       ...(sum?.columns || []),
       ...(min?.columns || []),
       ...(max?.columns || []),
+      ...(avg?.columns || []),
       orderBy?.column,
     ].filter(Boolean);
 
@@ -59,6 +60,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
   const sumColumns = operationParameters.sum?.columns || [];
   const minColumns = operationParameters.min?.columns || [];
   const maxColumns = operationParameters.max?.columns || [];
+  const avgColumns = operationParameters.avg?.columns || [];
 
   const operationColumns: string[] = [
     ...groupByColumns,
@@ -66,6 +68,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
     ...sumColumns,
     ...minColumns,
     ...maxColumns,
+    ...avgColumns,
   ];
 
   const whereColumns: string[] = whereAndArray
@@ -138,6 +141,15 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
         {}
       ),
     }),
+    ...(operationParameters?.avg?.columns && {
+      _avg: operationParameters.avg.columns.reduce(
+        (acc: Record<string, boolean>, column) => {
+          acc[column] = true;
+          return acc;
+        },
+        {}
+      ),
+    }),
   };
 
   const groupBy = {
@@ -152,10 +164,12 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
   };
 
   assert(
+    // @ts-ignore
     typeof prisma[table][operation] === "function",
     "Invalid prisma operation"
   );
 
+  // @ts-ignore
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
     ...groupBy,
@@ -176,6 +190,7 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
       if (column.join) {
         const tableName = Object.keys(column.join)[0];
         const joinColumn = column.join[tableName];
+        // @ts-ignore
         const joins = await prisma[table]["findMany"]({
           select: {
             [column.column]: true,

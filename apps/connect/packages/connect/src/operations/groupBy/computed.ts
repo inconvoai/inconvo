@@ -110,6 +110,13 @@ export async function groupByComputed(prisma: PrismaClient, query: Query) {
       if (!acc[groupByValue]) {
         acc[groupByValue] = {};
       }
+
+      // Ensure the groupBy column itself is included in aggregations
+      if (!acc[groupByValue][groupByColumn.column]) {
+        acc[groupByValue][groupByColumn.column] = [];
+      }
+      acc[groupByValue][groupByColumn.column].push(groupByValue);
+
       Object.keys(rest).forEach((key) => {
         if (!acc[groupByValue][key]) {
           acc[groupByValue][key] = [];
@@ -126,6 +133,7 @@ export async function groupByComputed(prisma: PrismaClient, query: Query) {
     _max?: { [key: string]: number };
     _count?: { [key: string]: number };
     _sum?: { [key: string]: number };
+    _avg?: { [key: string]: number };
   }[] = [];
 
   Object.keys(groupedByValues).forEach((groupedByValue) => {
@@ -134,43 +142,69 @@ export async function groupByComputed(prisma: PrismaClient, query: Query) {
       _max?: { [key: string]: number };
       _count?: { [key: string]: number };
       _sum?: { [key: string]: number };
+      _avg?: { [key: string]: number };
     } = {
       [groupByColumn.column]: groupedByValue,
     };
-    Object.keys(groupedByValues[groupedByValue]).forEach((column) => {
-      if (operationParameters.min) {
-        group["_min"] = {};
-        group["_min"][`${column}`] = groupedByValues[groupedByValue][
-          column
-        ].reduce(
-          (acc: number, curr: number) => (acc < curr ? acc : curr),
-          Infinity
-        );
-      }
 
-      if (operationParameters.max) {
-        group["_max"] = {};
-        group["_max"][`${column}`] = groupedByValues[groupedByValue][
-          column
-        ].reduce(
-          (acc: number, curr: number) => (acc > curr ? acc : curr),
-          -Infinity
-        );
-      }
+    // Process the aggregation functions based on the requested columns
+    if (operationParameters.min && operationParameters.min.columns) {
+      group["_min"] = {};
+      operationParameters.min.columns.forEach((columnName: string) => {
+        if (groupedByValues[groupedByValue][columnName]) {
+          group["_min"]![columnName] = Math.min(
+            ...groupedByValues[groupedByValue][columnName]
+          );
+        }
+      });
+    }
 
-      if (operationParameters.sum) {
-        group["_sum"] = {};
-        group["_sum"][`${column}`] = groupedByValues[groupedByValue][
-          column
-        ].reduce((acc: number, curr: number) => acc + curr, 0);
-      }
+    if (operationParameters.max && operationParameters.max.columns) {
+      group["_max"] = {};
+      operationParameters.max.columns.forEach((columnName: string) => {
+        if (groupedByValues[groupedByValue][columnName]) {
+          group["_max"]![columnName] = Math.max(
+            ...groupedByValues[groupedByValue][columnName]
+          );
+        }
+      });
+    }
 
-      if (operationParameters.count) {
-        group["_count"] = {};
-        group["_count"][`${column}`] =
-          groupedByValues[groupedByValue][column].length;
-      }
-    });
+    if (operationParameters.sum && operationParameters.sum.columns) {
+      group["_sum"] = {};
+      operationParameters.sum.columns.forEach((columnName: string) => {
+        if (groupedByValues[groupedByValue][columnName]) {
+          group["_sum"]![columnName] = groupedByValues[groupedByValue][
+            columnName
+          ].reduce((acc: number, curr: number) => acc + Number(curr), 0);
+        }
+      });
+    }
+
+    if (operationParameters.count && operationParameters.count.columns) {
+      group["_count"] = {};
+      operationParameters.count.columns.forEach((columnName: string) => {
+        if (groupedByValues[groupedByValue][columnName]) {
+          group["_count"]![columnName] =
+            groupedByValues[groupedByValue][columnName].length;
+        }
+      });
+    }
+
+    if (operationParameters.avg && operationParameters.avg.columns) {
+      group["_avg"] = {};
+      operationParameters.avg.columns.forEach((columnName: string) => {
+        if (groupedByValues[groupedByValue][columnName]) {
+          const values = groupedByValues[groupedByValue][columnName];
+          group["_avg"]![columnName] =
+            values.reduce(
+              (acc: number, curr: number) => acc + Number(curr),
+              0
+            ) / values.length;
+        }
+      });
+    }
+
     groupedByResults.push(group);
   });
 

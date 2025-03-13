@@ -226,8 +226,9 @@ const groupBySchema = z
         sum: z.object({ columns: z.array(z.string()) }).nullable(),
         min: z.object({ columns: z.array(z.string()) }).nullable(),
         max: z.object({ columns: z.array(z.string()) }).nullable(),
+        avg: z.object({ columns: z.array(z.string()) }).nullable(),
         orderBy: z.object({
-          function: z.enum(["count", "sum", "min", "max"]),
+          function: z.enum(["count", "sum", "min", "max", "avg"]),
           column: z.string(),
           direction: z.enum(["asc", "desc"]),
         }),

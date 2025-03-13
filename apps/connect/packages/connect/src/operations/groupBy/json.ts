@@ -3,6 +3,7 @@ import { type Query } from "~/types/querySchema";
 import { drizzle } from "drizzle-orm/prisma/pg";
 import {
   asc,
+  avg,
   count,
   desc,
   eq,
@@ -107,6 +108,9 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
   const sumJsonFields = operationParameters.sum?.columns.map(
     (col) => sql`${col}::text, cast(${sum(tableAlias[col])} as Numeric)`
   );
+  const avgJsonFields = operationParameters.avg?.columns.map(
+    (col) => sql`${col}::text, cast(${avg(tableAlias[col])} as Numeric)`
+  );
 
   const selectFields: Record<string, any> = {};
 
@@ -121,6 +125,9 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
   }
   if (sumJsonFields) {
     selectFields.sum = sql`json_build_object${sumJsonFields}`.as("_sum");
+  }
+  if (avgJsonFields) {
+    selectFields.avg = sql`json_build_object${avgJsonFields}`.as("_avg");
   }
 
   const joinEntry = Object.entries(
@@ -152,11 +159,13 @@ export async function groupByJson(prisma: PrismaClient, query: Query) {
       ...(joinTable ? [joinTableAlias[joinColumn]] : [])
     )
     .where(drizzleWhere)
+    // TODO: Add support for other orderBy funcitons
     .orderBy(
       operationParameters.orderBy.direction === "asc"
         ? asc(count(tableAlias[operationParameters.orderBy.column]))
         : desc(count(tableAlias[operationParameters.orderBy.column]))
-    );
+    )
+    .limit(operationParameters.limit);
 
   if (joinTable) {
     const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(

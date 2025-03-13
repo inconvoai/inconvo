@@ -184,14 +184,16 @@ const averageDurationBetweenTwoDatesSchema = z
   })
   .strict();
 
-const countByDateIntervalSchema = z
+const aggregateByDateIntervalSchema = z
   .object({
     ...baseSchema,
-    operation: z.literal("countByDateInterval"),
+    operation: z.literal("aggregateByDateInterval"),
     operationParameters: z
       .object({
         interval: z.enum(["day", "week", "month", "year"]),
+        aggregationType: z.enum(["min", "max", "count", "sum", "avg"]),
         dateColumn: z.string(),
+        aggregateColumn: z.string(),
       })
       .strict(),
   })
@@ -259,7 +261,7 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,
-  countByDateIntervalSchema,
+  aggregateByDateIntervalSchema,
   countByTemporalComponentSchema,
   averageDurationBetweenTwoDatesSchema,
   findManyBelowPercentageOfMedianSchema,

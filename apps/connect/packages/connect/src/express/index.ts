@@ -6,7 +6,7 @@ import { getPrismaClient } from "../prismaClient";
 import { count } from "~/operations/count/index";
 import { groupBy } from "~/operations/groupBy";
 import { findMany } from "~/operations/findMany";
-import { countByDateInterval } from "~/operations/countByDateInterval";
+import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { buildSchema } from "~/util/buildSchema";
@@ -62,8 +62,8 @@ export function inconvo() {
         response = await aggregate(prisma, parsedQuery);
       } else if (operation === "groupBy") {
         response = await groupBy(prisma, parsedQuery);
-      } else if (operation === "countByDateInterval") {
-        response = await countByDateInterval(prisma, parsedQuery);
+      } else if (operation === "aggregateByDateInterval") {
+        response = await aggregateByDateInterval(prisma, parsedQuery);
       } else if (operation === "countByTemporalComponent") {
         response = await countByTemporalComponent(prisma, parsedQuery);
       } else if (operation === "averageDurationBetweenTwoDates") {

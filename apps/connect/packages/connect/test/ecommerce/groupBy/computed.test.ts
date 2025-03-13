@@ -72,6 +72,7 @@ test("What is the product with the highest total profit where the profit on sale
       sum: {
         columns: ["profit"],
       },
+      avg: null,
       min: null,
       max: null,
       orderBy: {

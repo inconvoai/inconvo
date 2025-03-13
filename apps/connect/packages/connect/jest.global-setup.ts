@@ -7,14 +7,14 @@ dotenv.config({ path: ".env.test" });
 
 const execPromise = promisify(exec);
 
-function getPrismaPath(): string | null {
+function getPrismaPath() {
   try {
-    const packagePath = require.resolve("prisma/package.json");
-    if (packagePath) {
-      const prismaPath = require.resolve("prisma");
-      return path.resolve(prismaPath, "../../../");
-    }
-  } catch (e) {} // eslint-disable-line no-empty
+    const prismaPath = require.resolve("prisma/package.json");
+    return path.resolve(prismaPath, "../../../");
+  } catch (e) {
+    console.error("Prisma package not found");
+    console.error(e);
+  }
   return null;
 }
 
@@ -22,7 +22,9 @@ function getPrismaSchemaPath(): string | null {
   try {
     const inconvoPath = require.resolve("@ten-dev/inconvo/express");
     return path.resolve(inconvoPath, "../../../prisma/schema");
-  } catch (e) {} // eslint-disable-line no-empty
+  } catch (e) {
+    console.error("Inconvo schema not found");
+  }
   return null;
 }
 

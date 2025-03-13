@@ -79,10 +79,7 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
       : {}),
   };
 
-  assert(
-    typeof prisma[table][operation] === "function",
-    "Invalid prisma operation"
-  );
+  // @ts-expect-error - We don't know the table name in advance
   const prismaQuery: Function = prisma[table][operation];
   const response = await prismaQuery({
     ...aggregateObject,
@@ -90,6 +87,7 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
   });
 
   if (operationParameters.median) {
+    // @ts-expect-error - We don't know the table name in advance
     const medianFm = await prisma[table]["findMany"]({
       select: createColumnObject(operationParameters.median),
       where: { AND: [...(whereAndArray || [])] },

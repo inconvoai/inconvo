@@ -8,7 +8,12 @@ test("What is the most gross revenue we have made on an order?", async () => {
     whereAndArray: [],
     operation: "aggregate",
     operationParameters: {
-      columns: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      min: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      max: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      avg: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      sum: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      count: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      median: null,
     },
   };
 
@@ -47,7 +52,12 @@ test("What is the most gross revenue we made on an order which was priced over $
     ],
     operation: "aggregate",
     operationParameters: {
-      columns: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      min: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      max: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      avg: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      sum: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      count: ["ORDER_PRODUCT_GROSS_REVENUE"],
+      median: null,
     },
   };
 

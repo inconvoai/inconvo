@@ -6,7 +6,7 @@ import { ZodError } from "zod";
 import { generateHmac, generateMessage } from "~/util/hmac";
 import { findMany } from "~/operations/findMany";
 import { groupBy } from "~/operations/groupBy";
-import { countByDateInterval } from "~/operations/countByDateInterval";
+import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { count } from "~/operations/count";
 import { buildSchema } from "~/util/buildSchema";
@@ -139,8 +139,8 @@ async function handlePostRequest(request: NextRequest) {
       return NextResponse.json(response, { status: 200 });
     }
 
-    if (operation === "countByDateInterval") {
-      const response = await countByDateInterval(prisma, parsedQuery);
+    if (operation === "aggregateByDateInterval") {
+      const response = await aggregateByDateInterval(prisma, parsedQuery);
       return NextResponse.json(response, { status: 200 });
     }
 

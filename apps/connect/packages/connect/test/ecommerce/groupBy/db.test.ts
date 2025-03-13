@@ -22,6 +22,7 @@ test("What are my highest revenue generating products?", async () => {
       },
       min: null,
       max: null,
+      avg: null,
       orderBy: {
         function: "sum",
         column: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",

@@ -73,10 +73,12 @@ export async function countByTemporalComponent(
   );
 
   const whereObject = {
-    ...(isNullable
-      ? [{ [operationParameters.dateColumn]: { not: null } }]
-      : []),
-    AND: [...(dbWhere || [])],
+    AND: [
+      ...(isNullable
+        ? [{ [operationParameters.dateColumn]: { not: null } }]
+        : []),
+      ...(dbWhere || []),
+    ],
   };
 
   const selectComputedCols = computedWhere.reduce<Record<string, boolean>>(

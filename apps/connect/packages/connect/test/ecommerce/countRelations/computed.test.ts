@@ -47,7 +47,12 @@ test("What was the order with the most lineitems with an order profit of over $1
     operation: "countRelations",
     operationParameters: {
       columns: ["unique_key", "store_key"],
-      relations: ["fct_order_lineitem"],
+      relationsToCount: [
+        {
+          name: "fct_order_lineitem",
+          distinct: null,
+        },
+      ],
       orderBy: {
         relation: "fct_order_lineitem",
         direction: "desc",

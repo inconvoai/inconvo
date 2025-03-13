@@ -54,7 +54,12 @@ test("What is our average profit on a lineitem?", async () => {
     whereAndArray: [],
     operation: "aggregate",
     operationParameters: {
-      columns: ["profit"],
+      min: ["profit"],
+      max: ["profit"],
+      avg: ["profit"],
+      sum: ["profit"],
+      count: ["profit"],
+      median: null,
     },
   };
 
@@ -139,7 +144,12 @@ test("How many times have we made more than $900 profit on a lineitem?", async (
     ],
     operation: "aggregate",
     operationParameters: {
-      columns: ["profit"],
+      min: ["profit"],
+      max: ["profit"],
+      avg: ["profit"],
+      sum: ["profit"],
+      count: ["profit"],
+      median: null,
     },
   };
 

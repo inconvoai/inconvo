@@ -45,6 +45,10 @@ export async function countRelationsComputed(
     computedColumns
   );
 
+  const dbWhereObject = {
+    AND: [...(dbWhere || [])],
+  };
+
   if (!needDistinct) {
     // @ts-expect-error  - We don't know the table name in advance
     const prismaQuery: Function = prismaClient[table]["findMany"];
@@ -55,7 +59,7 @@ export async function countRelationsComputed(
           select: countObject,
         },
       },
-      where: dbWhere,
+      where: dbWhereObject,
       orderBy: operationParameters.orderBy
         ? {
             [operationParameters.orderBy.relation]: {
@@ -98,7 +102,7 @@ export async function countRelationsComputed(
       ...selectColumns,
       ...relationSelect,
     },
-    where: dbWhere,
+    where: dbWhereObject,
   });
 
   const filteredInitialData = filterResponseWithComputedConditions(

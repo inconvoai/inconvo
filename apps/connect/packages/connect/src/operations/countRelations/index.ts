@@ -4,6 +4,7 @@ import assert from "assert";
 import { getSelectColumns, splitWhereConditions } from "~/operations/utils";
 import { countRelationsComputed } from "./computed";
 import { countRelationsJson } from "./json";
+import { env } from "~/env";
 
 export async function countRelations(prisma: PrismaClient, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
@@ -22,7 +23,10 @@ export async function countRelations(prisma: PrismaClient, query: Query) {
   const jsonColumns =
     jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
 
-  if (columns.some((column) => jsonColumns.includes(column))) {
+  if (
+    columns.some((column) => jsonColumns.includes(column)) &&
+    env.DRIZZLE === "TRUE"
+  ) {
     return countRelationsJson(prisma, query);
   }
 

@@ -61,6 +61,16 @@ function getDrizzleSchemaJsPath() {
 function compileDrizzleSchema() {
   const tsPath = getDrizzleSchemaPath();
   const jsPath = getDrizzleSchemaJsPath();
+  if (process.env.DRIZZLE === "FALSE") {
+    console.log("Skipping drizzle schema compilation");
+    // make a empty schema file
+    const fs = require("fs");
+    const emptySchema = `export const schema = {};`;
+    const emptySchemaPath = path.join(jsPath, "schema.js");
+    fs.writeFileSync(emptySchemaPath, emptySchema);
+    console.log("Empty drizzle schema created at", emptySchemaPath);
+    return Promise.resolve();
+  }
   console.log("Compiling drizzle schema", tsPath, jsPath);
   return new Promise((resolve, reject) => {
     exec(

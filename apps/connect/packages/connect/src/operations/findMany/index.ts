@@ -9,6 +9,7 @@ import {
 } from "./computedFindMany";
 import { generatePrismaClientWithComputedColumns } from "~/util/generatePrismaClientWithComputedColumns";
 import { findManyJson } from "./json";
+import { env } from "~/env";
 
 export async function findMany(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
@@ -82,7 +83,11 @@ export async function findMany(prisma: PrismaClient, query: Query) {
     }
     // TODO: This could be a better check
     // i.e see if any of the jsonColumnSchema tables and columns are in the query
-  } else if (jsonColumnSchema && jsonColumnSchema.length > 0) {
+  } else if (
+    jsonColumnSchema &&
+    jsonColumnSchema.length > 0 &&
+    env.DRIZZLE === "TRUE"
+  ) {
     return findManyJson(prisma, query);
   } else {
     return dbFindMany(prisma, query);

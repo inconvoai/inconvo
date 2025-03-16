@@ -4,6 +4,7 @@ import assert from "assert";
 import { splitWhereConditions } from "../utils";
 import { groupByComputed } from "./computed";
 import { groupByJson } from "./json";
+import { env } from "~/env";
 
 export async function groupBy(prisma: PrismaClient, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
@@ -92,9 +93,10 @@ export async function groupBy(prisma: PrismaClient, query: Query) {
   );
 
   if (
-    operationColumns.some((col) => jsoncolumns.includes(col)) ||
-    whereColumns.some((col) => jsoncolumns.includes(col)) ||
-    joinColumns.some((col) => jsoncolumns.includes(col))
+    (operationColumns.some((col) => jsoncolumns.includes(col)) ||
+      whereColumns.some((col) => jsoncolumns.includes(col)) ||
+      joinColumns.some((col) => jsoncolumns.includes(col))) &&
+    env.DRIZZLE === "TRUE"
   ) {
     return groupByJson(prisma, query);
   }

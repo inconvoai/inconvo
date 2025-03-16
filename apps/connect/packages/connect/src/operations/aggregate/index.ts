@@ -4,6 +4,7 @@ import { splitWhereConditions } from "../utils";
 import { aggregateWithComputedColumn } from "./computed";
 import { aggregateJson } from "./json";
 import assert from "assert";
+import { env } from "~/env";
 
 export async function aggregate(prisma: PrismaClient, query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
@@ -48,7 +49,8 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
 
   if (
     jsonColumnSchema &&
-    columnNames.some((col) => jsonColumnNames.includes(col))
+    columnNames.some((col) => jsonColumnNames.includes(col)) &&
+    env.DRIZZLE === "TRUE"
   ) {
     return aggregateJson(prisma, query);
   }

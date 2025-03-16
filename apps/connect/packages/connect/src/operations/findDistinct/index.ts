@@ -2,6 +2,7 @@ import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
 import assert from "assert";
 import { findDistinctJson } from "./json";
+import { env } from "~/env";
 
 export async function findDistinct(prisma: PrismaClient, query: Query) {
   assert(query.operation === "findDistinct", "Invalid inconvo operation");
@@ -14,7 +15,10 @@ export async function findDistinct(prisma: PrismaClient, query: Query) {
   const jsonColumnNames =
     jsonSchemaMapForTable?.jsonSchema.map((col) => col.name) || [];
 
-  if (jsonColumnNames.includes(operationParameters.column)) {
+  if (
+    jsonColumnNames.includes(operationParameters.column) &&
+    env.DRIZZLE === "TRUE"
+  ) {
     return findDistinctJson(prisma, query);
   }
 

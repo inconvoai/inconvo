@@ -4,6 +4,7 @@ import assert from "assert";
 import { splitWhereConditions } from "../utils";
 import { countWithComputedColumn } from "./computed";
 import { countJson } from "./json";
+import { env } from "~/env";
 
 export async function count(prisma: PrismaClient, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
@@ -35,7 +36,8 @@ export async function count(prisma: PrismaClient, query: Query) {
 
   if (
     jsonColumnSchema &&
-    columnNames.some((col) => jsonColumnNames.includes(col))
+    columnNames.some((col) => jsonColumnNames.includes(col)) &&
+    env.DRIZZLE === "TRUE"
   ) {
     return countJson(prisma, query);
   }

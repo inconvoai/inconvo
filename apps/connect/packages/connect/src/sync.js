@@ -61,7 +61,7 @@ function getDrizzleSchemaJsPath() {
 function compileDrizzleSchema() {
   const tsPath = getDrizzleSchemaPath();
   const jsPath = getDrizzleSchemaJsPath();
-  if (process.env.DRIZZLE === "FALSE") {
+  if (process.env.DRIZZLE !== "TRUE") {
     console.log("Skipping drizzle schema compilation");
     // make a empty schema file
     const fs = require("fs");

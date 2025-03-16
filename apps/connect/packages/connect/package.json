@@ -43,15 +43,16 @@
     "express": "^4.21.1"
   },
   "dependencies": {
-    "prisma": "^6.5.0",
     "@prisma/client": "^6.5.0",
-    "drizzle-orm": "^0.40.0",
-    "drizzle-prisma-generator": "^0.1.7",
-    "pg": "^8.13.3",
+    "@t3-oss/env-core": "^0.12.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.40.0",
+    "drizzle-prisma-generator": "^0.1.7",
     "mathjs": "^14.3.0",
     "next": "^15.2.1",
+    "pg": "^8.13.3",
+    "prisma": "^6.5.0",
     "typescript": "^5.8.2",
     "zod": "^3.24.2"
   },

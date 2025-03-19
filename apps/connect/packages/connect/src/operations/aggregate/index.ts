@@ -21,11 +21,9 @@ export async function aggregate(query: Query) {
 
   const tables = await loadDrizzleTables();
   const dbTable = tables[table];
-
   const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
 
   const aggregateSelect: Record<string, any> = {};
-
   const aggregateFunctions: Record<AggregateTypes, (column: string) => any> = {
     avg: (column) => avg(dbTable[column]).as(`avg_${column}`),
     sum: (column) => sum(dbTable[column]).as(`sum_${column}`),

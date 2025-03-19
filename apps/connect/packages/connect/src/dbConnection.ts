@@ -18,7 +18,7 @@ if (env.NODE_ENV !== "production") globalForDb.conn = conn;
 
 class MyLogger implements Logger {
   logQuery(query: string, params: unknown[]): void {
-    console.log({ query, params });
+    console.log({ query });
   }
 }
 

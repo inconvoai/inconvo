@@ -1,19 +1,11 @@
 import assert from "assert";
 import { NextRequest, NextResponse } from "next/server";
-import { getPrismaClient } from "../prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { ZodError } from "zod";
 import { generateHmac, generateMessage } from "~/util/hmac";
-import { findMany } from "~/operations/findMany";
-import { groupBy } from "~/operations/groupBy";
-import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
-import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
-import { count } from "~/operations/count";
 import { buildSchema } from "~/util/buildSchema";
-import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { aggregate } from "~/operations/aggregate";
-import { countRelations } from "~/operations/countRelations";
-import { findDistinct } from "~/operations/findDistinct";
+import { db } from "~/dbConnection";
 
 const SECRET_KEY = process.env.INCONVO_SECRET_KEY;
 assert(SECRET_KEY, "Inconvo secret key is not set");
@@ -65,7 +57,6 @@ async function handleGetRequest(request: NextRequest) {
 
 async function handlePostRequest(request: NextRequest) {
   try {
-    const prisma = getPrismaClient();
     const timestamp = request.headers.get("inconvo-timestamp");
     const random = request.headers.get("inconvo-random");
     const signature = request.headers.get("inconvo-signature");
@@ -101,51 +92,8 @@ async function handlePostRequest(request: NextRequest) {
     const parsedQuery = QuerySchema.parse(body);
     const { operation } = parsedQuery;
 
-    if (operation === "findMany") {
-      const response = await findMany(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "findDistinct") {
-      const response = await findDistinct(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "count") {
-      const response = await count(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "countRelations") {
-      const response = await countRelations(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
     if (operation === "aggregate") {
-      const response = await aggregate(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "groupBy") {
-      const response = await groupBy(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "averageDurationBetweenTwoDates") {
-      const response = await averageDurationBetweenTwoDates(
-        prisma,
-        parsedQuery
-      );
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "aggregateByDateInterval") {
-      const response = await aggregateByDateInterval(prisma, parsedQuery);
-      return NextResponse.json(response, { status: 200 });
-    }
-
-    if (operation === "countByTemporalComponent") {
-      const response = await countByTemporalComponent(prisma, parsedQuery);
+      const response = await aggregate(parsedQuery);
       return NextResponse.json(response, { status: 200 });
     }
 

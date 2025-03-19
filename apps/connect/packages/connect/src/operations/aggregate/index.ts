@@ -1,12 +1,11 @@
-import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
-import { splitWhereConditions } from "../utils";
-import { aggregateWithComputedColumn } from "./computed";
-import { aggregateJson } from "./json";
+import { sql } from "drizzle-orm";
+import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { loadDrizzleTables } from "../utils";
 import assert from "assert";
-import { env } from "~/env";
+import { db } from "~/dbConnection";
 
-export async function aggregate(prisma: PrismaClient, query: Query) {
+export async function aggregate(query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
   const {
     table,
@@ -17,97 +16,114 @@ export async function aggregate(prisma: PrismaClient, query: Query) {
     jsonColumnSchema,
   } = query;
 
-  const computedColumnNames = computedColumns?.map((column) => column.name);
-  const jsonColumnSchemaEntry = jsonColumnSchema?.find(
-    (x) => x.tableName === table
-  );
-  const jsonColumnNames = jsonColumnSchemaEntry
-    ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
-    : [];
+  const tables = await loadDrizzleTables();
+  const dbTable = tables[table];
 
-  const columnNames = [
-    ...(operationParameters.avg ?? []),
-    ...(operationParameters.sum ?? []),
-    ...(operationParameters.min ?? []),
-    ...(operationParameters.max ?? []),
-    ...(operationParameters.count ?? []),
-    ...(operationParameters.median ?? []),
-  ];
+  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
 
-  const [computedWhere, _dbWhere] = splitWhereConditions(
-    computedColumns || [],
-    whereAndArray
-  );
+  const aggregateSelect: Record<string, any> = {};
 
-  const computedColumnUsed = !computedColumnNames
-    ? false
-    : columnNames.some((col) => computedColumnNames.includes(col));
-
-  if (computedColumnUsed || computedWhere.length > 0) {
-    return aggregateWithComputedColumn(prisma, query);
+  if (operationParameters.avg) {
+    operationParameters.avg.forEach((column) => {
+      aggregateSelect[`avg_${column}`] =
+        sql<number>`cast(avg(${dbTable[column]}) as Numeric)`
+          .mapWith(Number)
+          .as(`avg_${column}`);
+    });
   }
 
-  if (
-    jsonColumnSchema &&
-    columnNames.some((col) => jsonColumnNames.includes(col)) &&
-    env.DRIZZLE === "TRUE"
-  ) {
-    return aggregateJson(prisma, query);
+  if (operationParameters.sum) {
+    operationParameters.sum.forEach((column) => {
+      aggregateSelect[`sum_${column}`] =
+        sql<number>`cast(sum(${dbTable[column]}) as Numeric)`
+          .mapWith(Number)
+          .as(`sum_${column}`);
+    });
   }
 
-  const createColumnObject = (columns: string[] | null) => {
-    if (!columns) return {};
-    return columns.reduce((acc: { [key: string]: boolean }, column: string) => {
-      acc[column] = true;
-      return acc;
-    }, {});
-  };
+  if (operationParameters.min) {
+    operationParameters.min.forEach((column) => {
+      aggregateSelect[`min_${column}`] =
+        sql<number>`cast(min(${dbTable[column]}) as Numeric)`
+          .mapWith(Number)
+          .as(`min_${column}`);
+    });
+  }
 
-  const aggregateObject = {
-    ...(operationParameters.avg
-      ? { _avg: createColumnObject(operationParameters.avg) }
-      : {}),
-    ...(operationParameters.sum
-      ? { _sum: createColumnObject(operationParameters.sum) }
-      : {}),
-    ...(operationParameters.min
-      ? { _min: createColumnObject(operationParameters.min) }
-      : {}),
-    ...(operationParameters.max
-      ? { _max: createColumnObject(operationParameters.max) }
-      : {}),
-    ...(operationParameters.count
-      ? { _count: createColumnObject(operationParameters.count) }
-      : {}),
-  };
-
-  // @ts-expect-error - We don't know the table name in advance
-  const prismaQuery: Function = prisma[table][operation];
-  const response = await prismaQuery({
-    ...aggregateObject,
-    where: { AND: [...(whereAndArray || [])] },
-  });
+  if (operationParameters.max) {
+    operationParameters.max.forEach((column) => {
+      aggregateSelect[`max_${column}`] =
+        sql<number>`cast(max(${dbTable[column]}) as Numeric)`
+          .mapWith(Number)
+          .as(`max_${column}`);
+    });
+  }
 
   if (operationParameters.median) {
-    // @ts-expect-error - We don't know the table name in advance
-    const medianFm = await prisma[table]["findMany"]({
-      select: createColumnObject(operationParameters.median),
-      where: { AND: [...(whereAndArray || [])] },
+    operationParameters.median.forEach((column) => {
+      aggregateSelect[`median_${column}`] =
+        sql<number>`cast(percentile_cont(0.5) within group (order by ${dbTable[column]}) as Numeric)`
+          .mapWith(Number)
+          .as(`median_${column}`);
     });
-    const median = operationParameters.median.reduce((acc, column) => {
-      const sorted = medianFm
-        .map((x: any) => x[column])
-        .sort((a: number, b: number) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      return {
-        ...acc,
-        [column]:
-          sorted.length % 2 !== 0
-            ? sorted[mid]
-            : (sorted[mid - 1] + sorted[mid]) / 2,
-      };
-    }, {});
-    response._median = median;
   }
-  return response;
+
+  if (operationParameters.count) {
+    operationParameters.count.forEach((column) => {
+      aggregateSelect[`count_${column}`] =
+        sql<number>`cast(count(${dbTable[column]}) as Int)`.as(
+          `count_${column}`
+        );
+    });
+  }
+
+  const response = (await db
+    .select(aggregateSelect)
+    .from(tables[table])
+    .where(drizzleWhere)) as any;
+
+  const formattedResponse = response[0]
+    ? Object.keys(response[0]).reduce(
+        (
+          acc: {
+            _avg?: { [key: string]: any };
+            _sum?: { [key: string]: any };
+            _min?: { [key: string]: any };
+            _max?: { [key: string]: any };
+            _median?: { [key: string]: any };
+            _count?: { [key: string]: any };
+          },
+          key
+        ) => {
+          if (key.startsWith("avg_")) {
+            acc._avg = acc._avg || {};
+            acc._avg[key.replace("avg_", "")] = response[0][key];
+          }
+          if (key.startsWith("sum_")) {
+            acc._sum = acc._sum || {};
+            acc._sum[key.replace("sum_", "")] = response[0][key];
+          }
+          if (key.startsWith("min_")) {
+            acc._min = acc._min || {};
+            acc._min[key.replace("min_", "")] = response[0][key];
+          }
+          if (key.startsWith("max_")) {
+            acc._max = acc._max || {};
+            acc._max[key.replace("max_", "")] = response[0][key];
+          }
+          if (key.startsWith("median_")) {
+            acc._median = acc._median || {};
+            acc._median[key.replace("median_", "")] = response[0][key];
+          }
+          if (key.startsWith("count_")) {
+            acc._count = acc._count || {};
+            acc._count[key.replace("count_", "")] = response[0][key];
+          }
+          return acc;
+        },
+        {}
+      )
+    : {};
+
+  return formattedResponse;
 }

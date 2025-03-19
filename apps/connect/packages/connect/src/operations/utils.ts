@@ -1,15 +1,30 @@
 import { ComputedColumn, WhereConditions } from "~/types/querySchema";
 
-export async function loadDrizzleTables() {
-  try {
-    const modulePath = `../../drizzle/schema.js`;
-    const tablesModule = await import(modulePath);
-    return tablesModule as Record<string, any>;
-  } catch (error) {
-    console.error("Failed to load Drizzle tables:", error);
-    throw error;
-  }
+import * as dSchema from "~/../drizzle/schema";
+import * as dRelations from "~/../drizzle/relations";
+
+const drizzleSchema = {
+  ...dSchema,
+  ...dRelations,
+};
+
+export function loadDrizzleTables(): Record<string, any> {
+  return drizzleSchema;
 }
+
+// export async function loadDrizzleTables() {
+//   try {
+//     const schema = `../../drizzle/schema.ts`;
+//     const relations = `../../drizzle/relations.ts`;
+//     const schemaModule = await import(schema);
+//     const relationsModule = await import(relations);
+//     const tablesModule = { ...schemaModule, ...relationsModule };
+//     return tablesModule as Record<string, any>;
+//   } catch (error) {
+//     console.error("Failed to load Drizzle tables:", error);
+//     throw error;
+//   }
+// }
 
 export function getSelectColumns(
   cols: string[],

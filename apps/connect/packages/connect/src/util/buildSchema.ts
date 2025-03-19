@@ -59,11 +59,7 @@ function buildTableRelations(relations: Record<string, Relation>) {
       isList: !value.config,
       targetTable: value.referencedTableName,
       relationName: value.relationName,
-      sourceColumns: value?.config?.fields.map((field) => {
-        console.log(field);
-        console.log("\n");
-        return field.name;
-      }),
+      sourceColumns: value?.config?.fields.map((field) => field.name),
       targetColumns: value?.config?.references.map((field) => field.name),
     };
     schemaRelations.push(relation);

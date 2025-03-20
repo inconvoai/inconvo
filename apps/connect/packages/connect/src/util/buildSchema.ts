@@ -1,6 +1,4 @@
 import { SchemaResponse } from "~/types/types";
-import * as dSchema from "~/../drizzle/schema";
-import * as dRelations from "~/../drizzle/relations";
 import {
   createTableRelationsHelpers,
   getTableName,
@@ -11,6 +9,8 @@ import {
   Relations,
   Table,
 } from "drizzle-orm";
+import * as dSchema from "~/../drizzle/schema";
+import * as dRelations from "~/../drizzle/relations";
 
 const drizzleSchema = {
   ...dSchema,
@@ -61,8 +61,10 @@ function buildTableRelations(relations: Record<string, Relation>) {
       isList: !value.config,
       targetTable: value.referencedTableName,
       relationName: value.relationName,
-      sourceColumns: value?.config?.fields.map((field) => field.name),
-      targetColumns: value?.config?.references.map((field) => field.name),
+      sourceColumns:
+        value?.config?.fields?.map((field) => field.name) ?? undefined,
+      targetColumns:
+        value?.config?.references?.map((field) => field.name) ?? undefined,
     };
     schemaRelations.push(relation);
   }

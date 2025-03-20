@@ -1,21 +1,15 @@
 import { SchemaResponse } from "~/types/types";
 import {
+  Column,
   createTableRelationsHelpers,
   getTableName,
   getTableUniqueName,
   is,
   isTable,
-  Relation,
   Relations,
   Table,
 } from "drizzle-orm";
-import * as dSchema from "~/../drizzle/schema";
-import * as dRelations from "~/../drizzle/relations";
-
-const drizzleSchema = {
-  ...dSchema,
-  ...dRelations,
-};
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
 function getColumnType(column: any): string {
   const columnType = column["columnType"].toLowerCase();
@@ -53,7 +47,7 @@ function buildTableSchema(table: Table) {
   };
 }
 
-function buildTableRelations(relations: Record<string, Relation>) {
+function buildTableRelations(relations: Relations) {
   let schemaRelations: SchemaResponse["tables"][number]["relations"] = [];
   for (const [key, value] of Object.entries(relations)) {
     const relation = {
@@ -62,9 +56,10 @@ function buildTableRelations(relations: Record<string, Relation>) {
       targetTable: value.referencedTableName,
       relationName: value.relationName,
       sourceColumns:
-        value?.config?.fields?.map((field) => field.name) ?? undefined,
+        value?.config?.fields?.map((field: Column) => field.name) ?? undefined,
       targetColumns:
-        value?.config?.references?.map((field) => field.name) ?? undefined,
+        value?.config?.references?.map((field: Column) => field.name) ??
+        undefined,
     };
     schemaRelations.push(relation);
   }
@@ -72,6 +67,8 @@ function buildTableRelations(relations: Record<string, Relation>) {
 }
 
 export function buildSchema(): SchemaResponse {
+  const drizzleSchema = loadDrizzleSchema();
+
   const tableNamesMap: Record<string, string> = {};
   let tmpTables: Record<string, any> = {};
   for (const [key, value] of Object.entries(drizzleSchema)) {
@@ -83,9 +80,9 @@ export function buildSchema(): SchemaResponse {
     } else if (is(value, Relations)) {
       const dbName = getTableUniqueName(value.table);
       const tableName = tableNamesMap[dbName];
-      const relations: Record<string, Relation> = value.config(
+      const relations = value.config(
         createTableRelationsHelpers(drizzleSchema[tableName])
-      );
+      ) as unknown as Relations;
       const tableRelations = buildTableRelations(relations);
       tmpTables[tableName]["relations"] = tableRelations;
     }

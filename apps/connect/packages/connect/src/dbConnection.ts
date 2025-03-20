@@ -4,9 +4,7 @@ import { env } from "~/env";
 import { Logger } from "drizzle-orm";
 import postgres from "postgres";
 import { createPool, type Pool } from "mysql2/promise";
-
-import * as schema from "~/../drizzle/schema";
-import * as drizzleRelations from "~/../drizzle/relations";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
 /**
  * Cache the database connection in development. This avoids creating a new connection on every HMR
@@ -25,6 +23,7 @@ class MyLogger implements Logger {
 
 const isMysql = env.INCONVO_DATABASE_URL.startsWith("mysql");
 const isPostgres = env.INCONVO_DATABASE_URL.startsWith("postgres");
+const drizzleSchema = loadDrizzleSchema();
 
 let db: any;
 
@@ -33,7 +32,7 @@ if (isMysql) {
     globalForDb.mysqlConn ?? createPool({ uri: env.INCONVO_DATABASE_URL });
   if (env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
   db = drizzleMysql(mysqlConn, {
-    schema: { ...schema, ...drizzleRelations },
+    schema: drizzleSchema,
     logger: new MyLogger(),
     mode: "default",
   });
@@ -42,7 +41,7 @@ if (isMysql) {
   if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
 
   db = drizzlePostgres(pgConn, {
-    schema: { ...schema, ...drizzleRelations },
+    schema: drizzleSchema,
     logger: new MyLogger(),
   });
 } else {

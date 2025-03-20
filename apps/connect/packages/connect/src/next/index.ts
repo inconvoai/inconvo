@@ -5,7 +5,6 @@ import { ZodError } from "zod";
 import { generateHmac, generateMessage } from "~/util/hmac";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate";
-import { db } from "~/dbConnection";
 
 const SECRET_KEY = process.env.INCONVO_SECRET_KEY;
 assert(SECRET_KEY, "Inconvo secret key is not set");

@@ -48,7 +48,7 @@ function buildTableSchema(table: Table) {
 }
 
 function buildTableRelations(relations: Relations) {
-  let schemaRelations: SchemaResponse["tables"][number]["relations"] = [];
+  const schemaRelations: SchemaResponse["tables"][number]["relations"] = [];
   for (const [key, value] of Object.entries(relations)) {
     const relation = {
       name: value.fieldName,
@@ -70,7 +70,7 @@ export function buildSchema(): SchemaResponse {
   const drizzleSchema = loadDrizzleSchema();
 
   const tableNamesMap: Record<string, string> = {};
-  let tmpTables: Record<string, any> = {};
+  const tmpTables: Record<string, any> = {};
   for (const [key, value] of Object.entries(drizzleSchema)) {
     if (isTable(value)) {
       const dbName = getTableUniqueName(value);
@@ -90,7 +90,7 @@ export function buildSchema(): SchemaResponse {
 
   const tablesArr = Object.values(tmpTables);
 
-  let tables: SchemaResponse["tables"] = tablesArr as SchemaResponse["tables"];
+  const tables: SchemaResponse["tables"] = tablesArr as SchemaResponse["tables"];
   const schema: SchemaResponse = { tables };
 
   return schema;

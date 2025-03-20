@@ -4,7 +4,7 @@ import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import { asc, desc, eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
-import { loadDrizzleTables } from "../utils";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { db } from "~/dbConnection";
 import { getColumnFromTableSchema } from "~/util/getColumnFromTableSchema";
 
@@ -13,7 +13,7 @@ export async function findMany(query: Query) {
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
   const { columns, orderBy, limit } = operationParameters;
 
-  const tables = await loadDrizzleTables();
+  const tables = await loadDrizzleSchema();
 
   const selectColsPerTable: Record<string, string[] | null> = {};
   Object.entries(columns).forEach(([tableRelations, value]) => {

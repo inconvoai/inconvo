@@ -1,7 +1,7 @@
 import { type Query } from "~/types/querySchema";
 import { avg, min, sql, sum, max, count } from "drizzle-orm";
 import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-import { loadDrizzleTables } from "../utils";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { db } from "~/dbConnection";
 import assert from "assert";
 
@@ -19,7 +19,7 @@ export async function aggregate(query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters } = query;
 
-  const tables = await loadDrizzleTables();
+  const tables = await loadDrizzleSchema();
   const dbTable = tables[table];
   const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
 

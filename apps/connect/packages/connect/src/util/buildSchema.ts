@@ -29,6 +29,7 @@ function getColumnType(column: any): string {
 }
 
 function getTableColumnNames(table: Table) {
+  //@ts-expect-error
   const columns = table[Table.Symbol.Columns];
 
   const columnNamesWithTypes = Object.entries(columns).map(
@@ -36,6 +37,7 @@ function getTableColumnNames(table: Table) {
       const column = columns[columnName];
       const columnType = getColumnType(column);
       return {
+        // @ts-expect-error
         name: columnObj.name,
         type: columnType,
       };

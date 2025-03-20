@@ -2,10 +2,10 @@ import { Request, Response, Router } from "express";
 import { authenticated } from "./middlewares";
 import { QuerySchema } from "../types/querySchema";
 import { ZodError } from "zod";
-import { db } from "~/dbConnection";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
 import packageJson from "../../package.json";
+import { findMany } from "~/operations/findMany/index";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>
@@ -15,7 +15,7 @@ function safeJsonStringify(value: unknown): string {
 
 export function inconvo() {
   const router = Router();
-  // router.use(authenticated);
+  router.use(authenticated);
 
   router.get("/", (req: Request, res: Response) => {
     try {
@@ -43,6 +43,8 @@ export function inconvo() {
 
       if (operation === "aggregate") {
         response = await aggregate(parsedQuery);
+      } else if (operation === "findMany") {
+        response = await findMany(parsedQuery);
       } else {
         return res
           .status(400)

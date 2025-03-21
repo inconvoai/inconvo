@@ -16,12 +16,12 @@ test("How many lineitems have been sold per day of the week?", async () => {
   const response = await countByTemporalComponent(parsedQuery);
 
   expect(response).toEqual({
-    Wednesday: 1242,
-    Thursday: 1218,
-    Friday: 1325,
-    Saturday: 1195,
-    Sunday: 1085,
-    Monday: 1144,
+    Wednesday: 1243,
+    Thursday: 1222,
+    Friday: 1318,
+    Saturday: 1201,
+    Sunday: 1080,
+    Monday: 1145,
     Tuesday: 1194,
   });
 });

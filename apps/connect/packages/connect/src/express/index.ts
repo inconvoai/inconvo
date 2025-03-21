@@ -10,6 +10,7 @@ import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
 import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
 import { groupBy } from "~/operations/groupBy";
+import { findDistinct } from "~/operations/findDistinct";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>
@@ -59,6 +60,9 @@ export function inconvo() {
           break;
         case "countRelations":
           response = await countRelations(parsedQuery);
+          break;
+        case "findDistinct":
+          response = await findDistinct(parsedQuery);
           break;
         case "findMany":
           response = await findMany(parsedQuery);

@@ -1,0 +1,51 @@
+import { type Query } from "~/types/querySchema";
+import { getTableColumns, sql } from "drizzle-orm";
+import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { db } from "~/dbConnection";
+import assert from "assert";
+
+export async function findDistinct(query: Query) {
+  assert(query.operation === "findDistinct", "Invalid inconvo operation");
+  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+
+  const tables = await loadDrizzleSchema();
+  const dbTable = tables[table];
+  const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
+
+  const jsonSchemaForTable = jsonColumnSchema?.find(
+    (jsonCol) => jsonCol.tableName === table
+  );
+  const jsonCols = jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
+  const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
+  const tableAlias = db.$with(`${table}Alias`).as(
+    db
+      .select({
+        ...getTableColumns(tables[table]),
+        ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
+          acc[col] = sql
+            .raw(
+              `cast((${jsonColumnName}->>'${col}') as ${
+                jsonSchemaForTable?.jsonSchema.find((jCol) => jCol.name === col)
+                  ? "Text"
+                  : "Numeric"
+              })`
+            )
+            .as(col);
+          return acc;
+        }, {}),
+      })
+      .from(tables[table])
+      .where(drizzleWhere)
+  );
+
+  const response = await db
+    .with(tableAlias)
+    .selectDistinct({
+      [operationParameters.column]: tableAlias[operationParameters.column],
+    })
+    .from(tableAlias)
+    .where(drizzleWhere);
+
+  return response;
+}

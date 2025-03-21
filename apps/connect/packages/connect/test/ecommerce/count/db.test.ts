@@ -7,7 +7,7 @@ test("How many orders have we had?", async () => {
     whereAndArray: [],
     operation: "count",
     operationParameters: {
-      columns: ["unique_key"],
+      columns: ["_unique_key"],
     },
   };
 
@@ -15,6 +15,8 @@ test("How many orders have we had?", async () => {
   const response = await count(parsedQuery);
 
   expect(response).toEqual({
-    unique_key: 16144,
+    _count: {
+      _unique_key: 16144,
+    },
   });
 });

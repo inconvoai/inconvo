@@ -6,6 +6,8 @@ import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
 import packageJson from "../../package.json";
 import { findMany } from "~/operations/findMany/index";
+import { count } from "~/operations/count";
+import { countRelations } from "~/operations/countRelations";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>
@@ -43,8 +45,12 @@ export function inconvo() {
 
       if (operation === "aggregate") {
         response = await aggregate(parsedQuery);
+      } else if (operation === "count") {
+        response = await count(parsedQuery);
       } else if (operation === "findMany") {
         response = await findMany(parsedQuery);
+      } else if (operation === "countRelations") {
+        response = await countRelations(parsedQuery);
       } else {
         return res
           .status(400)

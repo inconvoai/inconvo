@@ -7,7 +7,7 @@ test("What was the order with the most line items?", async () => {
     whereAndArray: [],
     operation: "countRelations",
     operationParameters: {
-      columns: ["unique_key", "store_key"],
+      columns: ["_unique_key", "store_key"],
       relationsToCount: [
         {
           name: "fct_order_lineitem",
@@ -27,7 +27,7 @@ test("What was the order with the most line items?", async () => {
 
   expect(response).toEqual([
     {
-      unique_key: "5969239408944",
+      _unique_key: "5969239408944",
       store_key: "25824624728",
       _count: {
         fct_order_lineitem: 5,

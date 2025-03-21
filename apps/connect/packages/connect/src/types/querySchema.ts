@@ -240,20 +240,6 @@ const groupBySchema = z
   })
   .strict();
 
-const findManyBelowPercentageOfMedianSchema = z
-  .object({
-    ...baseSchema,
-    operation: z.literal("findManyBelowPercentageOfMedian"),
-    operationParameters: z
-      .object({
-        selectColumns: z.array(z.string()),
-        columnToCalculateMedian: z.string(),
-        belowPercentage: z.number(),
-      })
-      .strict(),
-  })
-  .strict();
-
 export const QuerySchema = z.discriminatedUnion("operation", [
   findManySchema,
   findDistinctSchema,
@@ -264,7 +250,6 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   aggregateByDateIntervalSchema,
   countByTemporalComponentSchema,
   averageDurationBetweenTwoDatesSchema,
-  findManyBelowPercentageOfMedianSchema,
 ]);
 
 export type Query = z.infer<typeof QuerySchema>;

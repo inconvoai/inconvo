@@ -1,16 +1,16 @@
 import { Request, Response, Router } from "express";
-import { authenticated } from "./middlewares";
-import { QuerySchema } from "../types/querySchema";
+import { authenticated } from "~/express/middlewares";
+import { QuerySchema } from "~/types/querySchema";
 import { ZodError } from "zod";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
-import packageJson from "../../package.json";
 import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
 import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
+import packageJson from "~/../../package.json";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>

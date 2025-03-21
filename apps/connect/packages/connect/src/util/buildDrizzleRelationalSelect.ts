@@ -1,7 +1,7 @@
 import assert from "assert";
-import * as drizzleTables from "../../drizzle/schema";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
-const tables: Record<string, any> = drizzleTables;
+const tables = loadDrizzleSchema();
 
 export function buildDrizzleRelationalSelect(
   table: string,

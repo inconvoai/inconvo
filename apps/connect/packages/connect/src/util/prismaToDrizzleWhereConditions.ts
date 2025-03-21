@@ -12,7 +12,7 @@ import {
   notExists,
   SQL,
 } from "drizzle-orm";
-import * as drizzleTables from "~/../drizzle/schema";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import type { WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 
@@ -20,7 +20,7 @@ import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
 // Types & Constants
 // -----------------------------------------------------------------------------
 
-const tables: Record<string, any> = drizzleTables;
+const tables = loadDrizzleSchema();
 
 type Table = Record<string, any>;
 type FilterObject = Record<string, any>;

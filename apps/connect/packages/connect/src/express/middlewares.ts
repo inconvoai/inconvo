@@ -1,13 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { generateHmac, generateMessage } from "~/util/hmac";
-import assert from "assert";
 
 export function authenticated(req: Request, res: Response, next: NextFunction) {
-  const SECRET_KEY = process.env.INCONVO_SECRET_KEY;
-  assert(SECRET_KEY, "Inconvo secret key is not set");
-  const INCONVO_DATABASE_URL = process.env.INCONVO_DATABASE_URL;
-  assert(INCONVO_DATABASE_URL, "Inconvo database URL is not set");
-
   const signature = req.headers["inconvo-signature"] as string | undefined;
   const timestamp = req.headers["inconvo-timestamp"] as string | undefined;
   const random = req.headers["inconvo-random"] as string | undefined;

@@ -41,7 +41,6 @@ export async function count(query: Query) {
     .as(db.select(selectQuery).from(tables[table]).where(drizzleWhere));
 
   const aggregateSelect = columnNames.reduce((acc, column) => {
-    console.log("column", column);
     const colSelect = {
       [`count_${column}`]:
         sql<number>`cast(count(${tmpTable[column]}) as Int)`.as(

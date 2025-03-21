@@ -1,14 +1,11 @@
-import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
-import assert from "assert";
-
-assert(process.env.INCONVO_DATABASE_URL, "INCONVO_DATABASE_URL is not set");
+import { env } from "~/env";
 
 export default defineConfig({
-  schema: "./drizzle/schema", // to test use"./packages/connect/drizzle/schema",
-  dialect: "postgresql",
+  schema: "./drizzle/schema",
+  dialect: env.DATABASE_DIALECT,
   dbCredentials: {
-    url: process.env.INCONVO_DATABASE_URL,
+    url: env.INCONVO_DATABASE_URL,
   },
   introspect: {
     casing: "preserve",

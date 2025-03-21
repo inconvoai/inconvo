@@ -1,15 +1,9 @@
-import assert from "assert";
 import { NextRequest, NextResponse } from "next/server";
 import { QuerySchema } from "~/types/querySchema";
 import { ZodError } from "zod";
 import { generateHmac, generateMessage } from "~/util/hmac";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate";
-
-const SECRET_KEY = process.env.INCONVO_SECRET_KEY;
-assert(SECRET_KEY, "Inconvo secret key is not set");
-const INCONVO_DATABASE_URL = process.env.INCONVO_DATABASE_URL;
-assert(INCONVO_DATABASE_URL, "Inconvo database URL is not set");
 
 async function handleGetRequest(request: NextRequest) {
   try {

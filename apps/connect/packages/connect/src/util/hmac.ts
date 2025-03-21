@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import assert from "assert";
+import { env } from "~/env";
 
 interface MessageInput {
   method: string;
@@ -12,8 +12,7 @@ interface MessageInput {
 export function generateHmac(message: string): string {
   const algorithm = "sha256";
   const encoding = "hex";
-  const secretKey = process.env.INCONVO_SECRET_KEY;
-  assert(secretKey, "Inconvo secret key is not set");
+  const secretKey = env.INCONVO_SECRET_KEY;
   const hmac = crypto.createHmac(algorithm, secretKey);
   hmac.update(message);
   const signature = hmac.digest(encoding);

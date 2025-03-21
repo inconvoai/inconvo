@@ -4,12 +4,8 @@ import { Logger } from "drizzle-orm";
 import postgres from "postgres";
 import { createPool, type Pool } from "mysql2/promise";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import assert from "assert";
-import "dotenv/config";
-/**
- * Cache the database connection in development. This avoids creating a new connection on every HMR
- * update.
- */
+import { env } from "~/env";
+
 const globalForDb = globalThis as unknown as {
   pgConn?: postgres.Sql;
   mysqlConn?: Pool;
@@ -20,31 +16,27 @@ class MyLogger implements Logger {
     console.log(`Query: ${query}`);
   }
 }
-assert(process.env.INCONVO_DATABASE_URL, "INCONVO_DATABASE_URL is not set");
-const isMysql = process.env.INCONVO_DATABASE_URL.startsWith("mysql");
-const isPostgres = process.env.INCONVO_DATABASE_URL.startsWith("postgres");
+
 const drizzleSchema = loadDrizzleSchema();
 
 let db: any;
 
-if (isMysql) {
+if (env.DATABASE_DIALECT === "mysql") {
   const mysqlConn =
-    globalForDb.mysqlConn ??
-    createPool({ uri: process.env.INCONVO_DATABASE_URL });
-  if (process.env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
+    globalForDb.mysqlConn ?? createPool({ uri: env.INCONVO_DATABASE_URL });
+  if (env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
   db = drizzleMysql(mysqlConn, {
     schema: drizzleSchema,
-    logger: new MyLogger(),
+    logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
     mode: "default",
   });
-} else if (isPostgres) {
-  const pgConn =
-    globalForDb.pgConn ?? postgres(process.env.INCONVO_DATABASE_URL);
-  if (process.env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
+} else if (env.DATABASE_DIALECT === "postgresql") {
+  const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
+  if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
 
   db = drizzlePostgres(pgConn, {
     schema: drizzleSchema,
-    logger: new MyLogger(),
+    logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
   });
 } else {
   throw new Error(

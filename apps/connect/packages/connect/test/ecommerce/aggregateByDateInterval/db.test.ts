@@ -18,17 +18,17 @@ test("How many lineitems were sold each month?", async () => {
   const response = await aggregateByDateInterval(parsedQuery);
 
   expect(response).toEqual({
-    "2024-09-01": { count: 226 },
-    "2024-10-01": { count: 491 },
-    "2024-11-01": { count: 1745 },
-    "2024-12-01": { count: 1913 },
-    "2025-01-01": { count: 624 },
-    "2025-02-01": { count: 610 },
-    "2025-03-01": { count: 511 },
-    "2025-04-01": { count: 421 },
-    "2025-05-01": { count: 453 },
-    "2025-06-01": { count: 416 },
-    "2025-07-01": { count: 646 },
-    "2025-08-01": { count: 347 },
+    "2024-09": { count: 226 },
+    "2024-10": { count: 491 },
+    "2024-11": { count: 1745 },
+    "2024-12": { count: 1913 },
+    "2025-01": { count: 624 },
+    "2025-02": { count: 610 },
+    "2025-03": { count: 511 },
+    "2025-04": { count: 421 },
+    "2025-05": { count: 453 },
+    "2025-06": { count: 417 },
+    "2025-07": { count: 646 },
+    "2025-08": { count: 346 },
   });
 });

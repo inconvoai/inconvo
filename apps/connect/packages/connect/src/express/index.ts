@@ -8,6 +8,8 @@ import packageJson from "../../package.json";
 import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
+import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { groupBy } from "~/operations/groupBy";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>
@@ -42,20 +44,30 @@ export function inconvo() {
       const { operation } = parsedQuery;
 
       let response;
-
-      if (operation === "aggregate") {
-        response = await aggregate(parsedQuery);
-      } else if (operation === "count") {
-        response = await count(parsedQuery);
-      } else if (operation === "findMany") {
-        response = await findMany(parsedQuery);
-      } else if (operation === "countRelations") {
-        response = await countRelations(parsedQuery);
-      } else {
-        return res
-          .status(400)
-          .setHeader("Content-Type", "application/json")
-          .send(safeJsonStringify({ error: "Invalid operation" }));
+      switch (operation) {
+        case "aggregate":
+          response = await aggregate(parsedQuery);
+          break;
+        case "aggregateByDateInterval":
+          response = await aggregateByDateInterval(parsedQuery);
+          break;
+        case "count":
+          response = await count(parsedQuery);
+          break;
+        case "countByTemporalComponent":
+          response = await count(parsedQuery);
+          break;
+        case "countRelations":
+          response = await countRelations(parsedQuery);
+          break;
+        case "findMany":
+          response = await findMany(parsedQuery);
+          break;
+        case "groupBy":
+          response = await groupBy(parsedQuery);
+          break;
+        default:
+          throw new Error("Invalid inconvo operation");
       }
 
       res.setHeader("Content-Type", "application/json");

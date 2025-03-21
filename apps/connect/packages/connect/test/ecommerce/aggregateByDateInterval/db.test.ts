@@ -1,4 +1,3 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
 
@@ -15,9 +14,8 @@ test("How many lineitems were sold each month?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregateByDateInterval(prisma, parsedQuery);
+  const response = await aggregateByDateInterval(parsedQuery);
 
   expect(response).toEqual({
     "2024-09-01": { count: 226 },

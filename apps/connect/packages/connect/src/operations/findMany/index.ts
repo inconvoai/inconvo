@@ -87,6 +87,7 @@ export async function findMany(query: Query) {
           })
           .from(tableSchema)
       );
+
     if (groupBy) {
       const groupedCte = db.$with(`cte${table}${index}${outerIndex}`).as(
         db
@@ -136,7 +137,6 @@ export async function findMany(query: Query) {
             )
           )
       );
-
     if (groupBy) {
       const groupedCte = db.$with(`cte${table}${index}${outerIndex}`).as(
         db
@@ -241,7 +241,7 @@ export async function findMany(query: Query) {
     query.operationParameters.columns[table] || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
     //@ts-expect-error
-    acc[column] = tableSchema[column];
+    acc[column] = getColumnFromTableSchema(tableSchema, column);
     return acc;
   }, {});
 

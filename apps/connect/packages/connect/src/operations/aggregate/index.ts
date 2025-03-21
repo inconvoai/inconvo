@@ -53,12 +53,17 @@ export async function aggregate(query: Query) {
     .where(drizzleWhere);
 
   return Object.keys(response[0]).reduce((acc: AggregateResult, key) => {
-    const [type, column] = key.split("_");
-    const resultKey = `_${type}` as keyof AggregateResult;
-    if (!acc[resultKey]) {
-      acc[resultKey] = {};
+    const aggregateType = Object.keys(aggregateFunctions).find((type) =>
+      key.startsWith(`${type}_`)
+    );
+    if (aggregateType) {
+      const column = key.substring(aggregateType.length + 1); // +1 for the underscore
+      const resultKey = `_${aggregateType}` as keyof AggregateResult;
+      if (!acc[resultKey]) {
+        acc[resultKey] = {};
+      }
+      (acc[resultKey] as Record<string, number>)[column] = response[0][key];
     }
-    (acc[resultKey] as Record<string, number>)[column] = response[0][key];
     return acc;
   }, {});
 }

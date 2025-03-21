@@ -1,4 +1,3 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 
@@ -32,9 +31,8 @@ test("What are my highest revenue generating products?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await groupBy(prisma, parsedQuery);
+  const response = await groupBy(parsedQuery);
 
   expect(response).toEqual([
     {

@@ -7,10 +7,10 @@ dotenv.config({ path: ".env.test" });
 
 const execPromise = promisify(exec);
 
-function getPrismaPath() {
+function getDrizzlePath() {
   try {
-    const prismaPath = require.resolve("prisma/package.json");
-    return path.resolve(prismaPath, "../../../");
+    const drizzleKit = require.resolve("drizzle-kit");
+    return path.resolve(drizzleKit, "../../../");
   } catch (e) {
     console.error("Prisma package not found");
     console.error(e);
@@ -18,41 +18,43 @@ function getPrismaPath() {
   return null;
 }
 
-function getPrismaSchemaPath(): string | null {
+function getSchemaPath() {
   try {
     const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../../prisma/schema");
+    return path.resolve(inconvoPath, "../../../drizzle.config");
   } catch (e) {
     console.error("Inconvo schema not found");
   }
   return null;
 }
 
-async function runPrismaCommand(
+async function runDrizzleCommand(
   command: string,
-  prismaPath: string,
+  drizzlePath: string,
   schemaPath: string
 ): Promise<void> {
   try {
-    await execPromise(`npx prisma ${command} --schema ${schemaPath}`, {
-      env: process.env,
-      cwd: prismaPath,
-    });
+    await execPromise(
+      `npx drizzle-kit ${command} --config=./packages/connect/drizzle.config.ts`,
+      {
+        env: process.env,
+        cwd: drizzlePath,
+      }
+    );
   } catch (error) {
-    throw new Error(`Failed to run prisma command: ${command}`);
+    throw new Error(`Failed to run command "${command}": ${error}`);
   }
 }
 
 module.exports = async () => {
   try {
-    const prismaPath = getPrismaPath();
-    const prismaSchemaPath = getPrismaSchemaPath();
-    if (!prismaPath || !prismaSchemaPath) {
-      console.error("Inconvo not found in the project");
+    const drizzlePath = getDrizzlePath();
+    const schemaPath = getSchemaPath();
+    if (!drizzlePath || !schemaPath) {
+      console.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-    await runPrismaCommand("db pull", prismaPath, prismaSchemaPath);
-    await runPrismaCommand("generate", prismaPath, prismaSchemaPath);
+    await runDrizzleCommand("pull", drizzlePath, schemaPath);
     console.log("Schema pulled successfully.");
   } catch (error) {
     console.error("An error occurred while syncing DB:", error);

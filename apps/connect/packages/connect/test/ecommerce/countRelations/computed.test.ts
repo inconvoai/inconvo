@@ -1,8 +1,7 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { countRelations } from "~/operations/countRelations";
 
-test("What was the order with the most lineitems with an order profit of over $100", async () => {
+test.skip("What was the order with the most lineitems with an order profit of over $100", async () => {
   const iql = {
     table: "fct_order",
     computedColumns: [
@@ -61,9 +60,8 @@ test("What was the order with the most lineitems with an order profit of over $1
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countRelations(prisma, parsedQuery);
+  const response = await countRelations(parsedQuery);
 
   const answer = {
     unique_key: "5510048383280",

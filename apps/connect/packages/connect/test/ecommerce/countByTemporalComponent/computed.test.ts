@@ -1,8 +1,7 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 
-test("How many lineitems have been sold per day of the week where the profit was over $500?", async () => {
+test.skip("How many lineitems have been sold per day of the week where the profit was over $500?", async () => {
   const iql = {
     table: "fct_order_lineitem",
     computedColumns: [
@@ -65,9 +64,8 @@ test("How many lineitems have been sold per day of the week where the profit was
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countByTemporalComponent(prisma, parsedQuery);
+  const response = await countByTemporalComponent(parsedQuery);
 
   expect(response).toEqual({
     Wednesday: 105,

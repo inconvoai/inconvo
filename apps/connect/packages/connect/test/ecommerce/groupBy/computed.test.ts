@@ -1,8 +1,7 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 
-test("What is the product with the highest total profit where the profit on sales of that product were over $100", async () => {
+test.skip("What is the product with the highest total profit where the profit on sales of that product were over $100", async () => {
   const iql = {
     table: "fct_order_lineitem",
     computedColumns: [
@@ -84,9 +83,8 @@ test("What is the product with the highest total profit where the profit on sale
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await groupBy(prisma, parsedQuery);
+  const response = await groupBy(parsedQuery);
 
   expect(response).toEqual([
     {

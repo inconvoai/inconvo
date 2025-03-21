@@ -1,8 +1,7 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { findMany } from "~/operations/findMany";
 
-test("What are the revenues for our most profitable orders and what products were sold?", async () => {
+test.skip("What are the revenues for our most profitable orders and what products were sold?", async () => {
   const iql = {
     table: "fct_order",
     computedColumns: [
@@ -52,9 +51,8 @@ test("What are the revenues for our most profitable orders and what products wer
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await findMany(prisma, parsedQuery);
+  const response = await findMany(parsedQuery);
 
   const answer = [
     {

@@ -1,4 +1,3 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { countRelations } from "~/operations/countRelations";
 
@@ -23,9 +22,8 @@ test("What was the order with the most line items?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countRelations(prisma, parsedQuery);
+  const response = await countRelations(parsedQuery);
 
   expect(response).toEqual([
     {

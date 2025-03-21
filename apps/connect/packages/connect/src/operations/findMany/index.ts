@@ -131,7 +131,6 @@ export async function findMany(query: Query) {
           .leftJoin(
             previousTable,
             eq(
-              // @ts-expect-error
               getColumnFromTableSchema(tableSchema, previousTableLinks[1]),
               previousTable[previousTableLinks[0]]
             )

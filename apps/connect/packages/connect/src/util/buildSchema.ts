@@ -11,27 +11,24 @@ import {
 } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
-function getColumnType(column: any): string {
-  const columnType = column["columnType"].toLowerCase();
+function getColumnType(column: Column): string {
+  const columnType = column.columnType.toLocaleLowerCase();
   if (columnType.includes("date")) {
     return "DateTime";
   } else if (columnType.includes("timestamp")) {
     return "DateTime";
   }
-
-  return column["dataType"];
+  return column.dataType;
 }
 
 function getTableColumnNames(table: Table) {
-  //@ts-expect-error
-  const columns = table[Table.Symbol.Columns];
-
+  // @ts-expect-error
+  const columns = table[Table.Symbol.Columns] as typeof table._.columns;
   const columnNamesWithTypes = Object.entries(columns).map(
     ([columnName, columnObj]) => {
       const column = columns[columnName];
       const columnType = getColumnType(column);
       return {
-        // @ts-expect-error
         name: columnObj.name,
         type: columnType,
       };
@@ -90,7 +87,8 @@ export function buildSchema(): SchemaResponse {
 
   const tablesArr = Object.values(tmpTables);
 
-  const tables: SchemaResponse["tables"] = tablesArr as SchemaResponse["tables"];
+  const tables: SchemaResponse["tables"] =
+    tablesArr as SchemaResponse["tables"];
   const schema: SchemaResponse = { tables };
 
   return schema;

@@ -10,7 +10,7 @@ export function loadDrizzleSchema(): Record<string, any> {
   return drizzleSchema;
 }
 
-// export async function loadDrizzleTables() {
+// export async function loadDrizzleSchemaDynamic() {
 //   try {
 //     const schema = `../../drizzle/schema.ts`;
 //     const relations = `../../drizzle/relations.ts`;

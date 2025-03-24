@@ -55,7 +55,7 @@ export async function countByTemporalComponent(query: Query) {
 
   const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
 
-  let dbQuery = db
+  const dbQuery = db
     .select({
       temporal_component: temporalExpression.as("temporal_component"),
       count: count(),

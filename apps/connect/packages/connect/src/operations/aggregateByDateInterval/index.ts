@@ -83,7 +83,7 @@ export async function aggregateByDateInterval(query: Query) {
       break;
   }
 
-  let dbQuery = db
+  const dbQuery = db
     .select({
       date_interval: intervalExpression.as("date_interval"),
       aggregation_value: aggregationFunction.as("aggregation_value"),

@@ -3,10 +3,8 @@ import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
 import { count, sql, avg, min, max, sum } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { db } from "~/dbConnection";
+import { env } from "~/env";
 import assert from "assert";
-
-// Ensure database dialect is detected correctly
-const dbDialect = "postgres";
 
 export async function aggregateByDateInterval(query: Query) {
   assert(
@@ -27,8 +25,7 @@ export async function aggregateByDateInterval(query: Query) {
   }
 
   let intervalExpression;
-  // @ts-expect-error
-  if (dbDialect === "mysql") {
+  if (env.DATABASE_DIALECT === "mysql") {
     switch (interval) {
       case "day":
         intervalExpression = sql`DATE_FORMAT(${dateColumn}, '%Y-%m-%d')`;
@@ -43,7 +40,7 @@ export async function aggregateByDateInterval(query: Query) {
         intervalExpression = sql`YEAR(${dateColumn})`;
         break;
     }
-  } else if (dbDialect === "postgres") {
+  } else if (env.DATABASE_DIALECT === "postgresql") {
     switch (interval) {
       case "day":
         intervalExpression = sql`to_char(${dateColumn}::date, 'YYYY-MM-DD')`;
@@ -65,7 +62,6 @@ export async function aggregateByDateInterval(query: Query) {
   }
 
   const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
-
   const aggregateColumn = tables[table][operationParameters.aggregateColumn];
 
   let aggregationFunction;

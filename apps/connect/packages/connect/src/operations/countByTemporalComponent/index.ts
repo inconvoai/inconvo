@@ -4,11 +4,9 @@ import { count, sql } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { db } from "~/dbConnection";
 import assert from "assert";
+import { env } from "~/env";
 
 type TemporalComponent = "Day" | "Month";
-
-//TODO: fix this
-const dbDialect = "postgres";
 
 export async function countByTemporalComponent(query: Query) {
   assert(
@@ -27,9 +25,7 @@ export async function countByTemporalComponent(query: Query) {
   }
 
   let temporalExpression;
-  // TODO: fix this
-  // @ts-expect-error
-  if (dbDialect === "mysql") {
+  if (env.DATABASE_DIALECT === "mysql") {
     switch (operationParameters.component) {
       case "Day":
         temporalExpression = sql`trim(DATE_FORMAT(${dateColumn}, '%W'))`;
@@ -40,7 +36,7 @@ export async function countByTemporalComponent(query: Query) {
       default:
         throw new Error("Invalid temporal component. Must be 'Day' or 'Month'");
     }
-  } else {
+  } else if (env.DATABASE_DIALECT === "postgresql") {
     switch (operationParameters.component) {
       case "Day":
         temporalExpression = sql`trim(to_char(${dateColumn}::date, 'Day'))`;
@@ -51,6 +47,10 @@ export async function countByTemporalComponent(query: Query) {
       default:
         throw new Error("Invalid temporal component. Must be 'Day' or 'Month'");
     }
+  } else {
+    throw new Error(
+      "Unsupported database provider. URL must start with 'mysql' or 'postgres'"
+    );
   }
 
   const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);

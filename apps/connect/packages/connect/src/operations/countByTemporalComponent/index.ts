@@ -1,14 +1,13 @@
 import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { count, sql } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import assert from "assert";
 import { env } from "~/env";
 
 type TemporalComponent = "Day" | "Month";
 
-export async function countByTemporalComponent(query: Query) {
+export async function countByTemporalComponent(db: any, query: Query) {
   assert(
     query.operation === "countByTemporalComponent",
     "Invalid inconvo operation"
@@ -53,7 +52,11 @@ export async function countByTemporalComponent(query: Query) {
     );
   }
 
-  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const dbQuery = db
     .select({

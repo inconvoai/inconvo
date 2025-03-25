@@ -1,25 +1,27 @@
-import * as dSchema from "~/../drizzle/schema";
-import * as dRelations from "~/../drizzle/relations";
+import path from "path";
 
-const drizzleSchema = {
-  ...dSchema,
-  ...dRelations,
-};
+export async function loadDrizzleSchema(): Promise<Record<string, any>> {
+  try {
+    const basePath = "../../drizzle";
 
-export function loadDrizzleSchema(): Record<string, any> {
-  return drizzleSchema;
+    const schemaJsPath = path.join(basePath, "schema.js");
+    const relationsJsPath = path.join(basePath, "relations.js");
+
+    const schemaModule = await import(schemaJsPath);
+    const relationsModule = await import(relationsJsPath);
+
+    // Extract the actual exports, handling both default and named exports
+    const schema = schemaModule.default || schemaModule;
+    const relations = relationsModule.default || relationsModule;
+
+    const tablesModule = {
+      ...schema,
+      ...relations,
+    };
+
+    return tablesModule as Record<string, any>;
+  } catch (error) {
+    console.error("Failed to load Drizzle schema:", error);
+    throw error;
+  }
 }
-
-// export async function loadDrizzleSchemaDynamic() {
-//   try {
-//     const schema = `../../drizzle/schema.ts`;
-//     const relations = `../../drizzle/relations.ts`;
-//     const schemaModule = await import(schema);
-//     const relationsModule = await import(relations);
-//     const tablesModule = { ...schemaModule, ...relationsModule };
-//     return tablesModule as Record<string, any>;
-//   } catch (error) {
-//     console.error("Failed to load Drizzle tables:", error);
-//     throw error;
-//   }
-// }

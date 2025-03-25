@@ -1,13 +1,12 @@
 import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { asc, desc, eq, getTableColumns, sql, Table } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
+import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import assert from "assert";
 
-export async function countRelations(query: Query) {
+export async function countRelations(db: any, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
@@ -40,7 +39,11 @@ export async function countRelations(query: Query) {
 
   // FIXME: there is an issue here if you try to filter on the relations
   // i.e https://www.prisma.io/docs/orm/prisma-client/queries/relation-queries#filter-on-absence-of--to-many-records
-  const drizzleWhere = parsePrismaWhere(tableAlias, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   function getTablePrimaryKey(table: Table) {
     const { columns } = getTableConfig(table);

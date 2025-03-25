@@ -1,12 +1,11 @@
 import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { count, sql, avg, min, max, sum } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import { env } from "~/env";
 import assert from "assert";
 
-export async function aggregateByDateInterval(query: Query) {
+export async function aggregateByDateInterval(db: any, query: Query) {
   assert(
     query.operation === "aggregateByDateInterval",
     "Invalid inconvo operation"
@@ -60,8 +59,11 @@ export async function aggregateByDateInterval(query: Query) {
       "Unsupported database provider. URL must start with 'mysql' or 'postgres'"
     );
   }
-
-  const drizzleWhere = parsePrismaWhere(tables[table], table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
   const aggregateColumn = tables[table][operationParameters.aggregateColumn];
 
   let aggregationFunction;

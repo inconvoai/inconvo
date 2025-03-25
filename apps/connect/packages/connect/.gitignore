@@ -61,5 +61,6 @@ prisma/schema/introspected.prisma
 
 
 drizzle/*.sql
+drizzle/*.js
 drizzle/meta/
 

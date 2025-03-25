@@ -1,14 +1,13 @@
 import assert from "assert";
 import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { asc, desc, eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
-import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
+import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
-import { getColumnFromTableSchema } from "~/util/getColumnFromTableSchema";
+import { getColumnFromTableSchema } from "~/operations/utils/getColumnFromTableSchema";
 
-export async function findMany(query: Query) {
+export async function findMany(db: any, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
   const { columns, orderBy, limit } = operationParameters;
@@ -234,7 +233,11 @@ export async function findMany(query: Query) {
   const tableSchema: AnyPgTable | WithSubquery =
     tableAliasMapper[query.table] || tables[query.table];
 
-  const drizzleWhere = parsePrismaWhere(tableSchema, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns[table] || []

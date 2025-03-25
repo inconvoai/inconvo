@@ -63,8 +63,8 @@ function buildTableRelations(relations: Relations) {
   return schemaRelations;
 }
 
-export function buildSchema(): SchemaResponse {
-  const drizzleSchema = loadDrizzleSchema();
+export async function buildSchema(): Promise<SchemaResponse> {
+  const drizzleSchema = await loadDrizzleSchema();
 
   const tableNamesMap: Record<string, string> = {};
   const tmpTables: Record<string, any> = {};
@@ -82,6 +82,8 @@ export function buildSchema(): SchemaResponse {
       ) as unknown as Relations;
       const tableRelations = buildTableRelations(relations);
       tmpTables[tableName]["relations"] = tableRelations;
+    } else {
+      console.log("Not a table or relation", key, value);
     }
   }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { exec } = require("child_process");
+const { execSync } = require("child_process");
 const path = require("path");
 const dotenv = require("dotenv");
 
@@ -9,97 +9,70 @@ console.log("User project dir", userProjectDir);
 // Load the .env file
 dotenv.config({ path: path.join(userProjectDir, ".env") });
 
-function getPrismaPath() {
+function getDrizzlePath() {
   try {
-    const prismaPath = require.resolve("prisma/package.json");
-    return path.resolve(prismaPath, "../../../");
+    const drizzleKit = require.resolve("drizzle-kit");
+    return path.resolve(drizzleKit, "../../../packages/connect");
   } catch (e) {
-    console.error("Prisma package not found");
+    console.error("Drizzle kit package not found");
     console.error(e);
   }
   return null;
 }
 
-function getPrismaSchemaPath() {
+function runDrizzleCommand(command, drizzlePath) {
   try {
-    const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../../prisma/schema");
-  } catch (e) {}
-  return null;
-}
-
-function runPrismaCommand(command, prismaPath, schemaPath) {
-  return new Promise((resolve, reject) => {
-    exec(
-      `npx prisma ${command} --schema ${schemaPath}`,
-      { env: process.env, cwd: prismaPath },
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-        resolve();
-      }
-    );
-  });
-}
-
-function getDrizzleSchemaPath() {
-  try {
-    const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../../drizzle/schema.ts");
-  } catch (e) {}
-  return null;
-}
-function getDrizzleSchemaJsPath() {
-  try {
-    const inconvoPath = require.resolve("@ten-dev/inconvo/express");
-    return path.resolve(inconvoPath, "../../../drizzle");
-  } catch (e) {}
-  return null;
-}
-
-function compileDrizzleSchema() {
-  const tsPath = getDrizzleSchemaPath();
-  const jsPath = getDrizzleSchemaJsPath();
-  if (process.env.DRIZZLE !== "TRUE") {
-    console.log("Skipping drizzle schema compilation");
-    // make a empty schema file
-    const fs = require("fs");
-    const emptySchema = `export const schema = {};`;
-    const emptySchemaPath = path.join(jsPath, "schema.js");
-    fs.writeFileSync(emptySchemaPath, emptySchema);
-    console.log("Empty drizzle schema created at", emptySchemaPath);
-    return Promise.resolve();
+    console.log(`Running: npx drizzle-kit ${command} in ${drizzlePath}`);
+    return execSync(`npx drizzle-kit ${command}`, {
+      env: process.env,
+      cwd: drizzlePath,
+      stdio: "inherit",
+    });
+  } catch (error) {
+    throw new Error(`Failed to run command "${command}": ${error}`);
   }
-  console.log("Compiling drizzle schema", tsPath, jsPath);
-  return new Promise((resolve, reject) => {
-    exec(
-      `npx tsc ${tsPath} --outDir ${jsPath} --skipLibCheck `,
-      { env: process.env, cwd: userProjectDir },
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-        resolve();
+}
+
+function compileSchemas(drizzlePath) {
+  try {
+    console.log("Compiling Drizzle schemas to JavaScript...");
+    const drizzleDir = path.join(drizzlePath, "drizzle");
+    execSync(
+      `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
+        drizzleDir,
+        "relations.ts"
+      )} --skipLibCheck --outDir ${drizzleDir}`,
+      {
+        stdio: "inherit",
       }
     );
-  });
+    console.log("Schema compilation completed successfully.");
+    return true;
+  } catch (error) {
+    console.error("Failed to compile schemas:", error);
+    return false;
+  }
 }
 
 (async () => {
   try {
-    const prismaPath = getPrismaPath();
-    const prismaSchemaPath = getPrismaSchemaPath();
-    console.log("Prisma schema path", prismaSchemaPath);
-    if (!prismaPath || !prismaSchemaPath) {
-      console.log(prismaPath, prismaSchemaPath);
-      console.error("Inconvo not found in the project");
+    const drizzlePath = getDrizzlePath();
+    if (!drizzlePath) {
+      console.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-    await runPrismaCommand("db pull", prismaPath, prismaSchemaPath);
-    await runPrismaCommand("generate", prismaPath, prismaSchemaPath);
+
+    // Run drizzle-kit pull to generate the schema
+    runDrizzleCommand("pull", drizzlePath);
     console.log("Schema pulled successfully.");
-    await compileDrizzleSchema();
+
+    // Compile the TypeScript schemas to JavaScript
+    const compiled = compileSchemas(drizzlePath);
+    if (!compiled) {
+      console.warn(
+        "Schema compilation failed. The TypeScript schemas will still be available."
+      );
+    }
   } catch (error) {
     console.error("An error occurred while syncing DB:", error);
     process.exit(1);

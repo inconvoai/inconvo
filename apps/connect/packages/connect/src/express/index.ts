@@ -8,8 +8,10 @@ import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
 import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
+import { getDb } from "~/dbConnection";
 import packageJson from "~/../../package.json";
 
 function safeJsonStringify(value: unknown): string {
@@ -18,13 +20,13 @@ function safeJsonStringify(value: unknown): string {
   );
 }
 
-export function inconvo() {
+export async function inconvo() {
   const router = Router();
-  router.use(authenticated);
+  // router.use(authenticated);
 
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     try {
-      const schema = buildSchema();
+      const schema = await buildSchema();
       res.setHeader("Content-Type", "application/json");
       res.send(safeJsonStringify(schema));
     } catch (error) {
@@ -43,32 +45,33 @@ export function inconvo() {
     try {
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;
+      const db = await getDb();
 
       let response;
       switch (operation) {
         case "aggregate":
-          response = await aggregate(parsedQuery);
+          response = await aggregate(db, parsedQuery);
           break;
         case "aggregateByDateInterval":
-          response = await aggregateByDateInterval(parsedQuery);
+          response = await aggregateByDateInterval(db, parsedQuery);
           break;
         case "count":
-          response = await count(parsedQuery);
+          response = await count(db, parsedQuery);
           break;
         case "countByTemporalComponent":
-          response = await count(parsedQuery);
+          response = await countByTemporalComponent(db, parsedQuery);
           break;
         case "countRelations":
-          response = await countRelations(parsedQuery);
+          response = await countRelations(db, parsedQuery);
           break;
         case "findDistinct":
-          response = await findDistinct(parsedQuery);
+          response = await findDistinct(db, parsedQuery);
           break;
         case "findMany":
-          response = await findMany(parsedQuery);
+          response = await findMany(db, parsedQuery);
           break;
         case "groupBy":
-          response = await groupBy(parsedQuery);
+          response = await groupBy(db, parsedQuery);
           break;
         default:
           throw new Error("Invalid inconvo operation");

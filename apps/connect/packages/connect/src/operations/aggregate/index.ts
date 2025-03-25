@@ -1,8 +1,7 @@
 import { type Query } from "~/types/querySchema";
 import { avg, min, sql, sum, max, count } from "drizzle-orm";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import assert from "assert";
 
 type AggregateTypes = "avg" | "sum" | "min" | "max" | "median" | "count";
@@ -15,13 +14,17 @@ type AggregateResult = {
   _count?: Record<string, number>;
 };
 
-export async function aggregate(query: Query) {
+export async function aggregate(db: any, query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters } = query;
 
   const tables = await loadDrizzleSchema();
   const dbTable = tables[table];
-  const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const aggregateSelect: Record<string, any> = {};
   const aggregateFunctions: Record<AggregateTypes, (column: string) => any> = {

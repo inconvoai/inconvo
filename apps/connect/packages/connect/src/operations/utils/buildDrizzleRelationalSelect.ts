@@ -1,7 +1,7 @@
 import assert from "assert";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
-const tables = loadDrizzleSchema();
+const tables = await loadDrizzleSchema();
 
 export function buildDrizzleRelationalSelect(
   table: string,

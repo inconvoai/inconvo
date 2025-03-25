@@ -1,17 +1,19 @@
 import { type Query } from "~/types/querySchema";
 import { getTableColumns, sql } from "drizzle-orm";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import assert from "assert";
 
-export async function findDistinct(query: Query) {
+export async function findDistinct(db: any, query: Query) {
   assert(query.operation === "findDistinct", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
   const tables = await loadDrizzleSchema();
-  const dbTable = tables[table];
-  const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const jsonSchemaForTable = jsonColumnSchema?.find(
     (jsonCol) => jsonCol.tableName === table

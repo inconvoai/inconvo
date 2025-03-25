@@ -1,17 +1,20 @@
 import { type Query } from "~/types/querySchema";
 import { sql } from "drizzle-orm";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
-import { db } from "~/dbConnection";
 
-export async function count(query: Query) {
+export async function count(db: any, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
   const tables = await loadDrizzleSchema();
   const dbTable = tables[table];
-  const drizzleWhere = parsePrismaWhere(dbTable, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const columnNames = operationParameters.columns;
 

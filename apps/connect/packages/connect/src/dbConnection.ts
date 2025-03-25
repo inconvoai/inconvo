@@ -9,6 +9,7 @@ import { env } from "~/env";
 const globalForDb = globalThis as unknown as {
   pgConn?: postgres.Sql;
   mysqlConn?: Pool;
+  db?: any;
 };
 
 class MyLogger implements Logger {
@@ -17,30 +18,35 @@ class MyLogger implements Logger {
   }
 }
 
-const drizzleSchema = loadDrizzleSchema();
+export async function getDb() {
+  const drizzleSchema = await loadDrizzleSchema();
 
-let db: any;
+  let db: any;
 
-if (env.DATABASE_DIALECT === "mysql") {
-  const mysqlConn =
-    globalForDb.mysqlConn ?? createPool({ uri: env.INCONVO_DATABASE_URL });
-  if (env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
-  db = drizzleMysql(mysqlConn, {
-    schema: drizzleSchema,
-    logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
-    mode: "default",
-  });
-} else if (env.DATABASE_DIALECT === "postgresql") {
-  const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
-  if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
-  db = drizzlePostgres(pgConn, {
-    schema: drizzleSchema,
-    logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
-  });
-} else {
-  throw new Error(
-    "Unsupported database provider. URL must start with 'mysql' or 'postgres'"
-  );
+  if (env.DATABASE_DIALECT === "mysql") {
+    const mysqlConn =
+      globalForDb.mysqlConn ?? createPool({ uri: env.INCONVO_DATABASE_URL });
+    if (env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
+    db = drizzleMysql(mysqlConn, {
+      schema: drizzleSchema,
+      logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
+      mode: "default",
+    });
+  } else if (env.DATABASE_DIALECT === "postgresql") {
+    const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
+    if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
+    db = drizzlePostgres(pgConn, {
+      schema: drizzleSchema,
+      logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
+    });
+  } else {
+    throw new Error(
+      "Unsupported database provider. URL must start with 'mysql' or 'postgres'"
+    );
+  }
+
+  // Cache the db instance
+  globalForDb.db = db;
+
+  return db;
 }
-
-export { db };

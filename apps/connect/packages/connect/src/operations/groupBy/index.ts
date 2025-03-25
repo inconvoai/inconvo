@@ -12,14 +12,13 @@ import {
   sum,
   WithSubquery,
 } from "drizzle-orm";
-import { parsePrismaWhere } from "~/util/prismaToDrizzleWhereConditions";
-import { findRelationsBetweenTables } from "~/util/findRelationsBetweenTables";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
+import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { AnyPgTable } from "drizzle-orm/pg-core";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { db } from "~/dbConnection";
 import assert from "assert";
 
-export async function groupBy(query: Query) {
+export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
@@ -139,7 +138,11 @@ export async function groupBy(query: Query) {
     ? tableAliasMapper[joinTable] ?? tables[joinTable]
     : undefined;
 
-  const drizzleWhere = parsePrismaWhere(tableAlias, table, whereAndArray);
+  const drizzleWhere = parsePrismaWhere({
+    tableSchemas: tables,
+    tableName: table,
+    where: whereAndArray,
+  });
 
   const dbQuery = db
     .with(tableAlias, ...tableAliases)

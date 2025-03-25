@@ -30,7 +30,6 @@
   },
   "files": [
     "dist",
-    "prisma",
     "drizzle"
   ],
   "author": "",

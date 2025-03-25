@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { generateHmac, generateMessage } from "~/util/hmac";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate";
+import { getDb } from "~/dbConnection";
 
 async function handleGetRequest(request: NextRequest) {
   try {
@@ -84,9 +85,10 @@ async function handlePostRequest(request: NextRequest) {
 
     const parsedQuery = QuerySchema.parse(body);
     const { operation } = parsedQuery;
+    const db = getDb();
 
     if (operation === "aggregate") {
-      const response = await aggregate(parsedQuery);
+      const response = await aggregate(db, parsedQuery);
       return NextResponse.json(response, { status: 200 });
     }
 

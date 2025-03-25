@@ -1,5 +1,6 @@
 import { getTableConfig, AnyPgTable } from "drizzle-orm/pg-core";
 
+// TODO: This should use relations instead of foreign keys
 export function findRelationsBetweenTables(
   tableA: AnyPgTable,
   tableB: AnyPgTable

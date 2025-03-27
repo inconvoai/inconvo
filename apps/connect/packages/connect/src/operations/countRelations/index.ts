@@ -1,128 +1,174 @@
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { asc, desc, eq, getTableColumns, sql, Table } from "drizzle-orm";
-import { getTableConfig } from "drizzle-orm/pg-core";
-import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
+import { asc, desc, eq, Relation, sql } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
+import { SchemaResponse } from "~/types/types";
+import { buildSchema } from "~/util/buildSchema";
+import {
+  getRelationsForTable,
+  getTablePrimaryKey,
+} from "~/operations/utils/drizzleSchemaHelpers";
+
+function getJoinTargetTableName(
+  startTableName: string,
+  relationName: string,
+  schema: SchemaResponse
+) {
+  const tableSchema = schema.tables.find(
+    (table) => table.name === startTableName
+  );
+  assert(tableSchema, `Table ${startTableName} not found in schema`);
+  const relation = tableSchema?.relations?.find(
+    (relation) => relation.name === relationName
+  );
+  assert(
+    relation,
+    `Relation ${relationName} not found in table ${startTableName}`
+  );
+  return relation.targetTable;
+}
+
+function getDistinctColumn(
+  tables: Record<string, any>,
+  tableName: string,
+  distinctColumn: string | null
+) {
+  const primaryKey = getTablePrimaryKey(tables[tableName]);
+  return distinctColumn
+    ? tables[tableName][distinctColumn]
+    : tables[tableName][primaryKey];
+}
+
+function findKeysFromRelation(
+  sourceTable: string,
+  relationName: string,
+  drizzleTables: Record<string, any>
+) {
+  const sourceTableRelations = getRelationsForTable(sourceTable, drizzleTables);
+  let relationOfInterest: Relation | null = null;
+  for (const [relationKey, relationValue] of Object.entries(
+    sourceTableRelations
+  )) {
+    if (relationValue.fieldName === relationName) {
+      relationOfInterest = relationValue;
+      break;
+    }
+  }
+  if (!relationOfInterest) {
+    throw new Error(
+      `Relation ${relationName} not found in table ${sourceTable}`
+    );
+  }
+  const targetTableName = relationOfInterest.referencedTableName;
+  const dbRelationName = relationOfInterest.relationName;
+  const targetTableRelations = getRelationsForTable(
+    targetTableName,
+    drizzleTables
+  );
+  for (const [relationKey, relationValue] of Object.entries(
+    targetTableRelations
+  )) {
+    if (dbRelationName && relationValue.relationName === dbRelationName) {
+      return {
+        relationTableKey: relationValue.config.fields[0].name,
+        sourceTableKey: relationValue.config.references[0].name,
+        targetTableName: targetTableName,
+      };
+    } else if (relationValue.fieldName === sourceTable) {
+      return {
+        relationTableKey: relationValue.config.fields[0].name,
+        sourceTableKey: relationValue.config.references[0].name,
+        targetTableName: targetTableName,
+      };
+    }
+  }
+  throw new Error(
+    `Relation ${relationName} not found in table ${targetTableName}`
+  );
+}
 
 export async function countRelations(db: any, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const { table, whereAndArray, operationParameters } = query;
 
   const tables = await loadDrizzleSchema();
+  const schema = await buildSchema();
 
-  const jsonSchemaForTable = jsonColumnSchema?.find(
-    (jsonCol) => jsonCol.tableName === table
-  );
-  const jsonCols = jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
-  const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
-  const tableAlias = db.$with(`${table}Alias`).as(
-    db
-      .select({
-        ...getTableColumns(tables[table]),
-        ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
-          acc[col] = sql
-            .raw(
-              `cast((${jsonColumnName}->>'${col}') as ${
-                jsonSchemaForTable?.jsonSchema.find((jCol) => jCol.name === col)
-                  ? "Text"
-                  : "Numeric"
-              })`
-            )
-            .as(col);
-          return acc;
-        }, {}),
-      })
-      .from(tables[table])
-  );
+  const relationNameToJoinTableMap: Record<string, string> = {};
+  for (const { name } of operationParameters.relationsToCount) {
+    const joinTableName = getJoinTargetTableName(table, name, schema);
+    relationNameToJoinTableMap[name] = joinTableName;
+  }
 
-  // FIXME: there is an issue here if you try to filter on the relations
-  // i.e https://www.prisma.io/docs/orm/prisma-client/queries/relation-queries#filter-on-absence-of--to-many-records
   const drizzleWhere = parsePrismaWhere({
     tableSchemas: tables,
     tableName: table,
     where: whereAndArray,
   });
 
-  function getTablePrimaryKey(table: Table) {
-    const { columns } = getTableConfig(table);
-    for (const column of columns) {
-      if (column.primary) {
-        return column.name;
-      }
-    }
-    throw new Error("Table does not have a primary key");
-  }
-
   const relationsToCount =
-    operationParameters.relationsToCount?.map((table) => {
-      const primaryKey = getTablePrimaryKey(tables[table.name]);
-      // Use the distinct column if specified, otherwise use the primary key
-      const distinctColumn = table.distinct
-        ? tables[table.name][table.distinct]
-        : tables[table.name][primaryKey];
-
-      return sql`${table.name}::text,  COUNT(DISTINCT ${distinctColumn})::numeric`;
+    operationParameters.relationsToCount?.map((relation) => {
+      const distinctColumn = getDistinctColumn(
+        tables,
+        relationNameToJoinTableMap[relation.name],
+        relation.distinct
+      );
+      return sql`${relation.name}::text, COUNT(DISTINCT ${distinctColumn})::numeric`;
     }) || [];
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    acc[column] = tableAlias[column];
+    acc[column] = tables[table][column];
     return acc;
   }, {});
 
   const dbQuery = db
-    .with(tableAlias)
     .select({
       ...rootSelect,
       _count: sql<number>`JSON_BUILD_OBJECT${relationsToCount}`.as("_count"),
     })
-    .from(tableAlias)
+    .from(tables[table])
     .where(drizzleWhere);
 
-  for (const joinTable of operationParameters.relationsToCount) {
-    const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(
-      tables[table],
-      tables[joinTable.name]
-    );
+  for (const relation of operationParameters.relationsToCount || []) {
+    const { targetTableName, sourceTableKey, relationTableKey } =
+      findKeysFromRelation(table, relation.name, tables);
     dbQuery.leftJoin(
-      tables[joinTable.name],
-      eq(tables[joinTable.name][relatedTableKey], tableAlias[currentTableKey])
+      tables[targetTableName],
+      eq(
+        tables[targetTableName][relationTableKey],
+        tables[table][sourceTableKey]
+      )
     );
   }
 
-  const groupByColumns = operationParameters.columns.map(
-    (col) => tableAlias[col]
+  const groupByColumns = (operationParameters.columns || []).map(
+    (col: string) => tables[table][col]
   );
 
   dbQuery.groupBy(...groupByColumns);
 
   if (operationParameters.orderBy) {
-    const relationName = operationParameters.orderBy.relation;
-
-    // Create a direct SQL expression to get the count for the specific relation
+    const { relation: relationName, direction } = operationParameters.orderBy;
     const matchingRelation = operationParameters.relationsToCount?.find(
-      (rel) => rel.name === relationName
+      (rel: any) => rel.name === relationName
     );
 
     if (matchingRelation) {
-      const primaryKey = getTablePrimaryKey(tables[relationName]);
-      // Use the distinct column if specified, otherwise use the primary key
-      const distinctColumn = matchingRelation.distinct
-        ? tables[relationName][matchingRelation.distinct]
-        : tables[relationName][primaryKey];
-
+      const distinctColumn = getDistinctColumn(
+        tables,
+        relationNameToJoinTableMap[relationName],
+        matchingRelation.distinct
+      );
       const countExpression = sql`COUNT(DISTINCT ${distinctColumn})`;
-
-      if (operationParameters.orderBy.direction === "desc") {
-        dbQuery.orderBy(desc(countExpression));
-      } else {
-        dbQuery.orderBy(asc(countExpression));
-      }
+      dbQuery.orderBy(
+        direction === "desc" ? desc(countExpression) : asc(countExpression)
+      );
     }
   }
+
   if (operationParameters.limit) {
     dbQuery.limit(operationParameters.limit);
   }

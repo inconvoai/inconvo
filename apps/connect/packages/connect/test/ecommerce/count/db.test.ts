@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { count } from "~/operations/count";
+import { getDb } from "~/dbConnection";
 
 test("How many orders have we had?", async () => {
   const iql = {
@@ -12,7 +13,8 @@ test("How many orders have we had?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await count(parsedQuery);
+  const db = await getDb();
+  const response = await count(db, parsedQuery);
 
   expect(response).toEqual({
     _count: {

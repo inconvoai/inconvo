@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { getDb } from "~/dbConnection";
 
 test("How many lineitems were sold each month?", async () => {
   const iql = {
@@ -15,7 +16,8 @@ test("How many lineitems were sold each month?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregateByDateInterval(parsedQuery);
+  const db = await getDb();
+  const response = await aggregateByDateInterval(db, parsedQuery);
 
   expect(response).toEqual({
     "2024-09": { count: 226 },

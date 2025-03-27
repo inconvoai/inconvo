@@ -78,7 +78,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
       const dbName = getTableUniqueName(value.table);
       const tableName = tableNamesMap[dbName];
       const relations = value.config(
-        createTableRelationsHelpers(drizzleSchema[tableName])
+        createTableRelationsHelpers(value.table)
       ) as unknown as Relations;
       const tableRelations = buildTableRelations(relations);
       tmpTables[tableName]["relations"] = tableRelations;

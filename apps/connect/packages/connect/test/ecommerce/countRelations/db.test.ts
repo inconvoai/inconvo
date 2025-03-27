@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { countRelations } from "~/operations/countRelations";
+import { getDb } from "~/dbConnection";
 
 test("What was the order with the most line items?", async () => {
   const iql = {
@@ -23,7 +24,8 @@ test("What was the order with the most line items?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countRelations(parsedQuery);
+  const db = await getDb();
+  const response = await countRelations(db, parsedQuery);
 
   expect(response).toEqual([
     {

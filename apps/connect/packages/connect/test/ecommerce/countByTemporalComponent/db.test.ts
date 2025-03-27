@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
+import { getDb } from "~/dbConnection";
 
 test("How many lineitems have been sold per day of the week?", async () => {
   const iql = {
@@ -13,7 +14,8 @@ test("How many lineitems have been sold per day of the week?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countByTemporalComponent(parsedQuery);
+  const db = await getDb();
+  const response = await countByTemporalComponent(db, parsedQuery);
 
   expect(response).toEqual({
     Wednesday: 1243,

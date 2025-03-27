@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { aggregate } from "~/operations/aggregate";
+import { getDb } from "~/dbConnection";
 
 test("What is the most gross revenue we have made on an order?", async () => {
   const iql = {
@@ -17,7 +18,8 @@ test("What is the most gross revenue we have made on an order?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregate(parsedQuery);
+  const db = await getDb();
+  const response = await aggregate(db, parsedQuery);
 
   expect(response).toEqual({
     _avg: {
@@ -60,7 +62,8 @@ test("What is the most gross revenue we made on an order which was priced over $
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregate(parsedQuery);
+  const db = await getDb();
+  const response = await aggregate(db, parsedQuery);
 
   expect(response).toEqual({
     _avg: {

@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { findDistinct } from "~/operations/findDistinct";
+import { getDb } from "~/dbConnection";
 
 test("Find Unique Channel Keys for an order", async () => {
   const iql = {
@@ -12,7 +13,8 @@ test("Find Unique Channel Keys for an order", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await findDistinct(parsedQuery);
+  const db = await getDb();
+  const response = await findDistinct(db, parsedQuery);
 
   expect(response).toEqual([
     { CHANNEL_KEY: 103 },

@@ -1,5 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { findMany } from "~/operations/findMany/index";
+import { getDb } from "~/dbConnection";
 
 test("Which order has generated the most revenue?", async () => {
   const iql = {
@@ -20,7 +21,8 @@ test("Which order has generated the most revenue?", async () => {
   };
 
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await findMany(parsedQuery);
+  const db = await getDb();
+  const response = await findMany(db, parsedQuery);
 
   expect(response).toEqual([
     {

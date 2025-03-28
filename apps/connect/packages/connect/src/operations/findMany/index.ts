@@ -1,9 +1,16 @@
 import assert from "assert";
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { asc, desc, eq, getTableColumns, sql, WithSubquery } from "drizzle-orm";
+import {
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  sql,
+  Table,
+  WithSubquery,
+} from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
-import { AnyPgTable } from "drizzle-orm/pg-core";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getColumnFromTableSchema } from "~/operations/utils/getColumnFromTableSchema";
 
@@ -230,7 +237,7 @@ export async function findMany(db: any, query: Query) {
     }
   }
 
-  const tableSchema: AnyPgTable | WithSubquery =
+  const tableSchema: Table | WithSubquery =
     tableAliasMapper[query.table] || tables[query.table];
 
   const drizzleWhere = parsePrismaWhere({

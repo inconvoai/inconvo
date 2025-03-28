@@ -9,7 +9,6 @@ export async function count(db: any, query: Query) {
   const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
 
   const tables = await loadDrizzleSchema();
-  const dbTable = tables[table];
   const drizzleWhere = parsePrismaWhere({
     tableSchemas: tables,
     tableName: table,

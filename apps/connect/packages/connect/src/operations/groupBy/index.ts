@@ -10,11 +10,11 @@ import {
   min,
   sql,
   sum,
+  Table,
   WithSubquery,
 } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
-import { AnyPgTable } from "drizzle-orm/pg-core";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
 
@@ -134,7 +134,7 @@ export async function groupBy(db: any, query: Query) {
     ? joinEntry
     : [undefined, undefined];
 
-  const joinTableAlias: AnyPgTable | WithSubquery | undefined = joinTable
+  const joinTableAlias: Table | WithSubquery | undefined = joinTable
     ? tableAliasMapper[joinTable] ?? tables[joinTable]
     : undefined;
 

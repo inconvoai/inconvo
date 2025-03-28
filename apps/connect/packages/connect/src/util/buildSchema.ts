@@ -17,6 +17,8 @@ function getColumnType(column: Column): string {
     return "DateTime";
   } else if (columnType.includes("timestamp")) {
     return "DateTime";
+  } else if (columnType.includes("decimal")) {
+    return "number";
   }
   return column.dataType;
 }

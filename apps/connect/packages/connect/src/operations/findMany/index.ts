@@ -204,7 +204,7 @@ export async function findMany(db: any, query: Query) {
           tables
         );
 
-        const [currentTableKey, relatedTableKey, groupBy] =
+        const [relatedTableKey, currentTableKey, groupBy] =
           findRelationsBetweenTables(
             relatedTableName,
             tableName,

@@ -15,6 +15,11 @@ import {
 } from "drizzle-orm";
 import type { WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
+import {
+  getRelatedTableNameFromPath,
+  getRelationsForTable,
+} from "./drizzleSchemaHelpers";
+import { re } from "mathjs";
 
 // -----------------------------------------------------------------------------
 // Types & Constants
@@ -89,20 +94,27 @@ function parseToManyRelationFilter({
 }): SQL {
   const [operator, _nestedCondition] = Object.entries(filterObj)[0];
 
-  // TODO: Fix relation name as second params should be the target table name
-  const [currentKey, relatedKey] = findRelationsBetweenTables(
+  const relatedTableName = getRelatedTableNameFromPath(
+    [currentTableName, relationName],
+    tableSchemas
+  );
+
+  const [currentKey, relatedKey, groupBy] = findRelationsBetweenTables(
     currentTableName,
-    relationName,
+    relatedTableName,
     relationName,
     tableSchemas
   );
 
+  console.log(currentTableName, currentKey, groupBy);
+  console.log(relatedTableName, relatedKey, groupBy);
+
   switch (operator) {
     case "none": {
       const baseSubquery = sql`
-        SELECT 1 FROM ${tableSchemas[relationName]}
-        WHERE ${tableSchemas[relationName][relatedKey]} = ${currentTable[currentKey]}
-        AND ${tableSchemas[relationName][relatedKey]} IS NOT NULL`;
+        SELECT 1 FROM ${tableSchemas[relatedTableName]}
+        WHERE ${tableSchemas[relatedTableName][relatedKey]} = ${currentTable[currentKey]}
+        AND ${tableSchemas[relatedTableName][relatedKey]} IS NOT NULL`;
 
       // TODO: If there's a nested condition, apply it to the subquery
       // ATM nested conditions are not supported

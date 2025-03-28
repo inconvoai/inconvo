@@ -1,5 +1,6 @@
 import { Column } from "drizzle-orm";
 import { getRelationsForTable } from "./drizzleSchemaHelpers";
+
 export function findRelationsBetweenTables(
   sourceTableName: string,
   targetTableName: string,
@@ -19,7 +20,7 @@ export function findRelationsBetweenTables(
   for (const [key, value] of Object.entries(sourceTableRelations)) {
     if (value.fieldName === relationName) {
       if (!value.config) {
-        continue;
+        break;
       }
       return [
         value?.config?.fields?.map((field: Column) => field.name)[0] ??
@@ -38,8 +39,8 @@ export function findRelationsBetweenTables(
       value.fieldName === sourceTableName
     ) {
       return [
-        value?.config?.fields?.map((field: Column) => field.name)[0],
         value?.config?.references?.map((field: Column) => field.name)[0],
+        value?.config?.fields?.map((field: Column) => field.name)[0],
         true,
       ];
     }

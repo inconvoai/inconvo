@@ -22,7 +22,7 @@ function safeJsonStringify(value: unknown): string {
 
 export async function inconvo() {
   const router = Router();
-  // router.use(authenticated);
+  router.use(authenticated);
 
   router.get("/", async (req: Request, res: Response) => {
     try {

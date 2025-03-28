@@ -13,6 +13,7 @@ import {
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getColumnFromTableSchema } from "~/operations/utils/getColumnFromTableSchema";
+import { getRelatedTableNameFromPath } from "../utils/drizzleSchemaHelpers";
 
 export async function findMany(db: any, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
@@ -68,6 +69,7 @@ export async function findMany(db: any, query: Query) {
     tableAliasMapper[table] = tableAlias;
   }
 
+  // todo: rename
   const needCtes =
     Object.keys(columns).filter((table) => table !== query.table).length > 0;
 
@@ -180,20 +182,41 @@ export async function findMany(db: any, query: Query) {
     for (const [outerIndex, tablePath] of dedupedTablePaths.entries()) {
       jsonCtes = [];
       tableLinks = [];
-      const reverseTablePath = tablePath.reverse();
-      for (const [index, table] of reverseTablePath.entries()) {
-        if (table === query.table) {
+      const reverseTablePath = tablePath.slice().reverse();
+      for (const [index, tableRelationName] of reverseTablePath.entries()) {
+        if (tableRelationName === query.table) {
           continue;
         }
 
-        const tableSchema = tableAliasMapper[table] || tables[table];
-        const relatedTable = tablePath[index + 1];
+        const pathToTableName = tablePath.slice(
+          0,
+          tablePath.indexOf(tableRelationName) + 1
+        );
+        const tableName = getRelatedTableNameFromPath(pathToTableName, tables);
+
+        const pathToRelatedTable = tablePath.slice(
+          0,
+          tablePath.indexOf(tableRelationName)
+        );
+
+        const relatedTableName = getRelatedTableNameFromPath(
+          pathToRelatedTable,
+          tables
+        );
+
         const [currentTableKey, relatedTableKey, groupBy] =
-          findRelationsBetweenTables(tables[table], tables[relatedTable]);
+          findRelationsBetweenTables(
+            relatedTableName,
+            tableName,
+            tableRelationName,
+            tables
+          );
+
         tableLinks.push([currentTableKey, relatedTableKey]);
 
+        const tableSchema = tableAliasMapper[tableName] || tables[tableName];
         const jsonFields =
-          selectColsPerTable[table]?.map(
+          selectColsPerTable[tableRelationName]?.map(
             (col) =>
               //@ts-expect-error
               sql`${col}::text, ${getColumnFromTableSchema(tableSchema, col)}`
@@ -203,7 +226,7 @@ export async function findMany(db: any, query: Query) {
           const ctes = createInitialCte(
             index,
             outerIndex,
-            table,
+            tableName,
             tableSchema,
             currentTableKey,
             jsonFields,
@@ -213,7 +236,7 @@ export async function findMany(db: any, query: Query) {
         } else {
           const previousTableLinks = tableLinks[index - 1];
           const previousTable = jsonCtes[jsonCtes.length - 1];
-          const previousTableName = tablePath[index - 1];
+          const previousTableName = tablePath.toReversed()[index - 1];
           const extendedJsonFields = jsonFields.concat(
             //@ts-expect-error
             sql`${previousTableName}::text, ${previousTable["json_data"]}`
@@ -221,7 +244,7 @@ export async function findMany(db: any, query: Query) {
           const ctes = createSubsequentCte(
             index,
             outerIndex,
-            table,
+            tableName,
             tableSchema,
             currentTableKey,
             extendedJsonFields,
@@ -232,6 +255,7 @@ export async function findMany(db: any, query: Query) {
           jsonCtes.push(...ctes);
         }
       }
+
       nestedJsonCtes.push(jsonCtes);
       outerTableLinks.push(tableLinks);
     }
@@ -262,7 +286,7 @@ export async function findMany(db: any, query: Query) {
         (acc: Record<string, any>, tablePath, index) => {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
-          const tableName = tablePath.reverse()[1];
+          const tableName = tablePath.toReversed()[1];
           acc[tableName] = sql`${sql.raw(`\"${tableCte._.alias}\".`)}${
             //@ts-expect-error
             tableCte["json_data"]

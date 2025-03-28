@@ -89,10 +89,12 @@ function parseToManyRelationFilter({
 }): SQL {
   const [operator, _nestedCondition] = Object.entries(filterObj)[0];
 
-  // TODO: Update after updating findRelationsBetweenTables
+  // TODO: Fix relation name as second params should be the target table name
   const [currentKey, relatedKey] = findRelationsBetweenTables(
-    tableSchemas[currentTableName],
-    tableSchemas[relationName]
+    currentTableName,
+    relationName,
+    relationName,
+    tableSchemas
   );
 
   switch (operator) {

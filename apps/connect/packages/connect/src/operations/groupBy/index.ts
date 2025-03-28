@@ -184,8 +184,10 @@ export async function groupBy(db: any, query: Query) {
 
   if (joinTable) {
     const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(
-      tables[table],
-      tables[joinTable]
+      table,
+      joinTable,
+      joinTable,
+      tables
     );
     dbQuery.leftJoin(
       joinTableAlias,

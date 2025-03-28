@@ -1,34 +1,51 @@
-import { getTableConfig, AnyPgTable } from "drizzle-orm/pg-core";
-
-// TODO: This should use relations instead of foreign keys
+import { Column } from "drizzle-orm";
+import { getRelationsForTable } from "./drizzleSchemaHelpers";
 export function findRelationsBetweenTables(
-  tableA: AnyPgTable,
-  tableB: AnyPgTable
+  sourceTableName: string,
+  targetTableName: string,
+  relationName: string,
+  drizzleTables: Record<string, any>
 ): [string, string, boolean] {
-  const configA = getTableConfig(tableA);
-  const configB = getTableConfig(tableB);
+  const sourceTableRelations = getRelationsForTable(
+    sourceTableName,
+    drizzleTables
+  );
+  const targetTableRelations = getRelationsForTable(
+    targetTableName,
+    drizzleTables
+  );
 
-  // 1) Check if tableA references tableB via foreignKeys
-  for (const fk of configA.foreignKeys) {
-    if (!fk) continue;
-
-    if (fk.reference().foreignTable === tableB) {
-      const localCol = fk.reference().columns.map((col) => col.name);
-      const foreignCol = fk.reference().foreignColumns.map((col) => col.name);
-      return [localCol[0], foreignCol[0], true];
+  // 1) Check if tableA references tableB
+  for (const [key, value] of Object.entries(sourceTableRelations)) {
+    if (value.fieldName === relationName) {
+      if (!value.config) {
+        continue;
+      }
+      return [
+        value?.config?.fields?.map((field: Column) => field.name)[0] ??
+          undefined,
+        value?.config?.references?.map((field: Column) => field.name)[0] ??
+          undefined,
+        false,
+      ];
     }
   }
 
-  // 2) Otherwise, check if tableB references tableA
-  for (const fk of configB.foreignKeys) {
-    if (!fk) continue;
-
-    if (fk.reference().foreignTable === tableA) {
-      const localCol = fk.reference().columns.map((col) => col.name);
-      const foreignCol = fk.reference().foreignColumns.map((col) => col.name);
-      return [foreignCol[0], localCol[0], false];
+  // Check if tableB references tableA
+  for (const [key, value] of Object.entries(targetTableRelations)) {
+    if (
+      value.fieldName === relationName ||
+      value.fieldName === sourceTableName
+    ) {
+      return [
+        value?.config?.fields?.map((field: Column) => field.name)[0],
+        value?.config?.references?.map((field: Column) => field.name)[0],
+        true,
+      ];
     }
   }
 
-  throw new Error(`Relation between tables not found ${tableA}, ${tableB}`);
+  throw new Error(
+    `Could not findRelationsBetweenTables ${sourceTableName}, ${targetTableName}`
+  );
 }

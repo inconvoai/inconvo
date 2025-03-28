@@ -11,12 +11,12 @@ test("What was the order with the most line items?", async () => {
       columns: ["_unique_key", "store_key"],
       relationsToCount: [
         {
-          name: "fct_order_lineitem",
+          name: "fct_order_lineitems",
           distinct: null,
         },
       ],
       orderBy: {
-        relation: "fct_order_lineitem",
+        relation: "fct_order_lineitems",
         direction: "desc",
       },
       limit: 1,
@@ -32,7 +32,7 @@ test("What was the order with the most line items?", async () => {
       _unique_key: "5969239408944",
       store_key: "25824624728",
       _count: {
-        fct_order_lineitem: 5,
+        fct_order_lineitems: 5,
       },
     },
   ]);

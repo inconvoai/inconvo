@@ -10,7 +10,7 @@ test("Which order has generated the most revenue?", async () => {
     operationParameters: {
       columns: {
         fct_order: ["_unique_key", "ORDER_PRODUCT_GROSS_REVENUE"],
-        "fct_order.fct_order_lineitem.dim_product": ["PRODUCT_NAME"],
+        "fct_order.fct_order_lineitems.dim_product": ["PRODUCT_NAME"],
       },
       orderBy: {
         column: "ORDER_PRODUCT_GROSS_REVENUE",
@@ -28,7 +28,7 @@ test("Which order has generated the most revenue?", async () => {
     {
       _unique_key: "5942455828784",
       ORDER_PRODUCT_GROSS_REVENUE: 1449,
-      fct_order_lineitem: [
+      fct_order_lineitems: [
         {
           dim_product: {
             PRODUCT_NAME: "Giraffe Toy",

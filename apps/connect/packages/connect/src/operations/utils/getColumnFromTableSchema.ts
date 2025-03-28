@@ -1,4 +1,4 @@
-import { Table } from "drizzle-orm";
+import { getTableName, Table } from "drizzle-orm";
 
 export function getColumnFromTableSchema(
   tableSchema: Table,
@@ -15,6 +15,6 @@ export function getColumnFromTableSchema(
     }
   }
   throw new Error(
-    `Column ${columnName} not found in table ${tableSchema._.name}`
+    `Column ${columnName} not found in table ${getTableName(tableSchema)}`
   );
 }

@@ -6,8 +6,8 @@ import assert from "assert";
 import { SchemaResponse } from "~/types/types";
 import { buildSchema } from "~/util/buildSchema";
 import {
+  getAUniqueKeyInTable,
   getRelationsForTable,
-  getTablePrimaryKey,
 } from "~/operations/utils/drizzleSchemaHelpers";
 
 function getJoinTargetTableName(
@@ -34,10 +34,11 @@ function getDistinctColumn(
   tableName: string,
   distinctColumn: string | null
 ) {
-  const primaryKey = getTablePrimaryKey(tables[tableName]);
-  return distinctColumn
-    ? tables[tableName][distinctColumn]
-    : tables[tableName][primaryKey];
+  if (distinctColumn) {
+    return tables[tableName][distinctColumn];
+  }
+  const primaryKey = getAUniqueKeyInTable(tables[tableName]);
+  return tables[tableName][primaryKey];
 }
 
 function findKeysFromRelation(

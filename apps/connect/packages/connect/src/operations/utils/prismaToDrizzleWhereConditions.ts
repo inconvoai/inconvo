@@ -15,10 +15,7 @@ import {
 } from "drizzle-orm";
 import type { WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
-import {
-  getRelatedTableNameFromPath,
-  getRelationsForTable,
-} from "./drizzleSchemaHelpers";
+import { getRelatedTableNameFromPath } from "./drizzleSchemaHelpers";
 import { re } from "mathjs";
 
 // -----------------------------------------------------------------------------
@@ -51,17 +48,17 @@ function parseDateOperator(
 ): SQL {
   switch (operator) {
     case "equals":
-      return sql`${table[columnName]} = ${value}::timestamp`;
+      return eq(table[columnName], value);
     case "gt":
-      return sql`${table[columnName]} > ${value}::timestamp`;
+      return gt(table[columnName], value);
     case "gte":
-      return sql`${table[columnName]} >= ${value}::timestamp`;
+      return gte(table[columnName], value);
     case "lt":
-      return sql`${table[columnName]} < ${value}::timestamp`;
+      return lt(table[columnName], value);
     case "lte":
-      return sql`${table[columnName]} <= ${value}::timestamp`;
+      return lte(table[columnName], value);
     case "not":
-      return sql`${table[columnName]} != ${value}::timestamp`;
+      return ne(table[columnName], value);
     default:
       throw new Error(
         `Unsupported date operator "${operator}" on "${columnName}". ` +
@@ -105,9 +102,6 @@ function parseToManyRelationFilter({
     relationName,
     tableSchemas
   );
-
-  console.log(currentTableName, currentKey, groupBy);
-  console.log(relatedTableName, relatedKey, groupBy);
 
   switch (operator) {
     case "none": {

@@ -47,7 +47,11 @@ export async function findDistinct(db: any, query: Query) {
       [operationParameters.column]: tableAlias[operationParameters.column],
     })
     .from(tableAlias)
-    .where(drizzleWhere);
+    .limit(250);
+
+  if (response.length > 249) {
+    throw new Error("Find Distinct limit hit at 250");
+  }
 
   return response;
 }

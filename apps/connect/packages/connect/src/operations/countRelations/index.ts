@@ -37,8 +37,8 @@ function getDistinctColumn(
   if (distinctColumn) {
     return tables[tableName][distinctColumn];
   }
-  const primaryKey = getAUniqueKeyInTable(tables[tableName]);
-  return tables[tableName][primaryKey];
+  const uniqueKey = getAUniqueKeyInTable(tables[tableName]);
+  return tables[tableName][uniqueKey];
 }
 
 function findKeysFromRelation(

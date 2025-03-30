@@ -31,7 +31,7 @@ export function getColumnsForTables(table: Table) {
 export function getAUniqueKeyInTable(table: Table) {
   const columns = getColumnsForTables(table);
   for (const [key, value] of Object.entries(columns)) {
-    if (value.isUnique || value.primary) {
+    if (value.isUnique || value.primary || value.name === "id") {
       return value.name;
     }
   }

@@ -1,5 +1,5 @@
 import { type Query } from "~/types/querySchema";
-import { sql } from "drizzle-orm";
+import { sql, count as dCount } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
@@ -44,10 +44,7 @@ export async function count(db: any, query: Query) {
 
   const aggregateSelect = columnNames.reduce((acc, column) => {
     const colSelect = {
-      [`count_${column}`]:
-        sql<number>`cast(count(${tmpTable[column]}) as Int)`.as(
-          `count_${column}`
-        ),
+      [`count_${column}`]: dCount(tmpTable[column]).as(`count_${column}`),
     };
     return { ...acc, ...colSelect };
   }, {});

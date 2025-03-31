@@ -286,10 +286,8 @@ export async function findMany(db: any, query: Query) {
           const tableCte =
             nestedJsonCtes[index][nestedJsonCtes[index].length - 1];
           const tableName = tablePath.toReversed()[1];
-          acc[tableName] = sql`${sql.raw(`\"${tableCte._.alias}\".`)}${
-            //@ts-expect-error
-            tableCte["json_data"]
-          }`.as(tableName);
+          // @ts-expect-error
+          acc[tableName] = sql`${tableCte["json_data"]}`.as(tableName);
           return acc;
         },
         {}

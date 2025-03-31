@@ -105,9 +105,7 @@ export async function findMany(db: any, query: Query) {
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
-            json_data: sql`COALESCE${jsonAggregate(cte.json_data)}, '[]'`.as(
-              "json_data"
-            ),
+            json_data: jsonAggregate(cte.json_data).as("json_data"),
           })
           .from(cte)
           .groupBy(cte[currentTableKey])
@@ -153,9 +151,7 @@ export async function findMany(db: any, query: Query) {
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
-            json_data: sql`COALESCE${jsonAggregate(cte.json_data)}, '[]'`.as(
-              "json_data"
-            ),
+            json_data: jsonAggregate(cte.json_data).as("json_data"),
           })
           .from(cte)
           .groupBy(cte[currentTableKey])
@@ -225,7 +221,6 @@ export async function findMany(db: any, query: Query) {
             const columnParam = getColumnFromTableSchema(tableSchema, col);
             return [col, columnParam];
           }) ?? [];
-
         if (index === 0) {
           const ctes = createInitialCte(
             index,
@@ -243,7 +238,7 @@ export async function findMany(db: any, query: Query) {
           const previousTableName = tablePath.toReversed()[index - 1];
           const extendedJsonFields = jsonFields.concat(
             //@ts-expect-error
-            sql`${previousTableName}::text, ${previousTable["json_data"]}`
+            [[previousTableName, previousTable["json_data"]]]
           );
           const ctes = createSubsequentCte(
             index,

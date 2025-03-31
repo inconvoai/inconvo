@@ -1,6 +1,6 @@
 import { type Query } from "~/types/querySchema";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { asc, desc, eq, Relation, sql } from "drizzle-orm";
+import { asc, desc, eq, Relation, sql, countDistinct } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
 import { SchemaResponse } from "~/types/types";
@@ -9,6 +9,7 @@ import {
   getAUniqueKeyInTable,
   getRelationsForTable,
 } from "~/operations/utils/drizzleSchemaHelpers";
+import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 
 function getJoinTargetTableName(
   startTableName: string,
@@ -108,15 +109,15 @@ export async function countRelations(db: any, query: Query) {
     where: whereAndArray,
   });
 
-  const relationsToCount =
+  const relationsToCount: [string, unknown][] =
     operationParameters.relationsToCount?.map((relation) => {
       const distinctColumn = getDistinctColumn(
         tables,
         relationNameToJoinTableMap[relation.name],
         relation.distinct
       );
-      return sql`${relation.name}::text, COUNT(DISTINCT ${distinctColumn})::numeric`;
-    }) || [];
+      return [relation.name, countDistinct(distinctColumn)];
+    });
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns || []
@@ -128,7 +129,7 @@ export async function countRelations(db: any, query: Query) {
   const dbQuery = db
     .select({
       ...rootSelect,
-      _count: sql<number>`JSON_BUILD_OBJECT${relationsToCount}`.as("_count"),
+      _count: buildJsonObjectSelect(relationsToCount),
     })
     .from(tables[table])
     .where(drizzleWhere);

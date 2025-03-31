@@ -95,31 +95,19 @@ export async function groupBy(db: any, query: Query) {
     tableAliasMapper[table] = tableAlias;
   }
 
-  const countJsonFields: [string, SQL<number>][] =
+  const countJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.count?.columns.map((col) => [
       col,
       count(tableAlias[col]),
-    ]) || [];
-  const minJsonFields: [string, SQL<number>][] =
-    operationParameters.min?.columns.map((col) => [
-      col,
-      min(tableAlias[col]),
-    ]) || [];
-  const maxJsonFields: [string, SQL<number>][] =
-    operationParameters.max?.columns.map((col) => [
-      col,
-      max(tableAlias[col]),
-    ]) || [];
-  const sumJsonFields: [string, SQL<string | null>][] =
-    operationParameters.sum?.columns.map((col) => [
-      col,
-      sum(tableAlias[col]),
-    ]) || [];
-  const avgJsonFields: [string, SQL<string | null>][] =
-    operationParameters.avg?.columns.map((col) => [
-      col,
-      avg(tableAlias[col]),
-    ]) || [];
+    ]);
+  const minJsonFields: [string, SQL<number | null>][] | undefined =
+    operationParameters.min?.columns.map((col) => [col, min(tableAlias[col])]);
+  const maxJsonFields: [string, SQL<number | null>][] | undefined =
+    operationParameters.max?.columns.map((col) => [col, max(tableAlias[col])]);
+  const sumJsonFields: [string, SQL<string | null>][] | undefined =
+    operationParameters.sum?.columns.map((col) => [col, sum(tableAlias[col])]);
+  const avgJsonFields: [string, SQL<string | null>][] | undefined =
+    operationParameters.avg?.columns.map((col) => [col, avg(tableAlias[col])]);
 
   const selectFields: Record<string, any> = {};
 

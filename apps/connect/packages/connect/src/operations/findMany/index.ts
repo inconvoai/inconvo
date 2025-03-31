@@ -14,6 +14,10 @@ import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetw
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getColumnFromTableSchema } from "~/operations/utils/getColumnFromTableSchema";
 import { getRelatedTableNameFromPath } from "../utils/drizzleSchemaHelpers";
+import {
+  buildJsonObjectSelect,
+  jsonAggregate,
+} from "../utils/jsonBuilderHelpers";
 
 export async function findMany(db: any, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
@@ -79,7 +83,7 @@ export async function findMany(db: any, query: Query) {
     table: string,
     tableSchema: any,
     currentTableKey: string,
-    jsonFields: any[],
+    jsonFields: [string, unknown][],
     groupBy: boolean
   ) {
     const cte = db
@@ -91,7 +95,7 @@ export async function findMany(db: any, query: Query) {
               tableSchema,
               currentTableKey
             ),
-            json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+            json_data: buildJsonObjectSelect(jsonFields).as("json_data"),
           })
           .from(tableSchema)
       );
@@ -101,7 +105,7 @@ export async function findMany(db: any, query: Query) {
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
-            json_data: sql`COALESCE(json_agg(${cte["json_data"]}), '[]')`.as(
+            json_data: sql`COALESCE${jsonAggregate(cte.json_data)}, '[]'`.as(
               "json_data"
             ),
           })
@@ -119,7 +123,7 @@ export async function findMany(db: any, query: Query) {
     table: string,
     tableSchema: any,
     currentTableKey: string,
-    jsonFields: any[],
+    jsonFields: [string, unknown][],
     previousTable: any,
     previousTableLinks: string[],
     groupBy: boolean
@@ -133,7 +137,7 @@ export async function findMany(db: any, query: Query) {
               tableSchema,
               currentTableKey
             ),
-            json_data: sql`json_build_object${jsonFields}`.as("json_data"),
+            json_data: buildJsonObjectSelect(jsonFields).as("json_data"),
           })
           .from(tableSchema)
           .leftJoin(
@@ -149,7 +153,7 @@ export async function findMany(db: any, query: Query) {
         db
           .select({
             [currentTableKey]: cte[currentTableKey],
-            json_data: sql`COALESCE(json_agg(${cte["json_data"]}), '[]')`.as(
+            json_data: sql`COALESCE${jsonAggregate(cte.json_data)}, '[]'`.as(
               "json_data"
             ),
           })
@@ -215,12 +219,12 @@ export async function findMany(db: any, query: Query) {
         tableLinks.push([currentTableKey, relatedTableKey]);
 
         const tableSchema = tableAliasMapper[tableName] || tables[tableName];
-        const jsonFields =
-          selectColsPerTable[tableRelationName]?.map(
-            (col) =>
-              //@ts-expect-error
-              sql`${col}::text, ${getColumnFromTableSchema(tableSchema, col)}`
-          ) || [];
+        const jsonFields: [string, unknown][] =
+          selectColsPerTable[tableRelationName]?.map((col) => {
+            // @ts-expect-error
+            const columnParam = getColumnFromTableSchema(tableSchema, col);
+            return [col, columnParam];
+          }) ?? [];
 
         if (index === 0) {
           const ctes = createInitialCte(

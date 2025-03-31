@@ -8,6 +8,7 @@ import {
   getTableColumns,
   max,
   min,
+  SQL,
   sql,
   sum,
   Table,
@@ -16,6 +17,7 @@ import {
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 import assert from "assert";
 
 export async function groupBy(db: any, query: Query) {
@@ -93,38 +95,48 @@ export async function groupBy(db: any, query: Query) {
     tableAliasMapper[table] = tableAlias;
   }
 
-  const countJsonFields = operationParameters.count?.columns.map(
-    (col) => sql`${col}::text, ${count(tableAlias[col])}`
-  );
-  const minJsonFields = operationParameters.min?.columns.map(
-    (col) => sql`${col}::text, ${min(tableAlias[col])}`
-  );
-  const maxJsonFields = operationParameters.max?.columns.map(
-    (col) => sql`${col}::text, ${max(tableAlias[col])}`
-  );
-  const sumJsonFields = operationParameters.sum?.columns.map(
-    (col) => sql`${col}::text,${sum(tableAlias[col])}`
-  );
-  const avgJsonFields = operationParameters.avg?.columns.map(
-    (col) => sql`${col}::text,${avg(tableAlias[col])}`
-  );
+  const countJsonFields: [string, SQL<number>][] =
+    operationParameters.count?.columns.map((col) => [
+      col,
+      count(tableAlias[col]),
+    ]) || [];
+  const minJsonFields: [string, SQL<number>][] =
+    operationParameters.min?.columns.map((col) => [
+      col,
+      min(tableAlias[col]),
+    ]) || [];
+  const maxJsonFields: [string, SQL<number>][] =
+    operationParameters.max?.columns.map((col) => [
+      col,
+      max(tableAlias[col]),
+    ]) || [];
+  const sumJsonFields: [string, SQL<string | null>][] =
+    operationParameters.sum?.columns.map((col) => [
+      col,
+      sum(tableAlias[col]),
+    ]) || [];
+  const avgJsonFields: [string, SQL<string | null>][] =
+    operationParameters.avg?.columns.map((col) => [
+      col,
+      avg(tableAlias[col]),
+    ]) || [];
 
   const selectFields: Record<string, any> = {};
 
   if (countJsonFields) {
-    selectFields["_count"] = sql`json_build_object${countJsonFields}`;
+    selectFields["_count"] = buildJsonObjectSelect(countJsonFields);
   }
   if (minJsonFields) {
-    selectFields["_min"] = sql`json_build_object${minJsonFields}`;
+    selectFields["_min"] = buildJsonObjectSelect(minJsonFields);
   }
   if (maxJsonFields) {
-    selectFields["_max"] = sql`json_build_object${maxJsonFields}`;
+    selectFields["_max"] = buildJsonObjectSelect(maxJsonFields);
   }
   if (sumJsonFields) {
-    selectFields["_sum"] = sql`json_build_object${sumJsonFields}`;
+    selectFields["_sum"] = buildJsonObjectSelect(sumJsonFields);
   }
   if (avgJsonFields) {
-    selectFields["_avg"] = sql`json_build_object${avgJsonFields}`;
+    selectFields["_avg"] = buildJsonObjectSelect(avgJsonFields);
   }
 
   const joinEntry = Object.entries(

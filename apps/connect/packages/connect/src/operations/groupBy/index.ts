@@ -1,19 +1,5 @@
 import { type Query } from "~/types/querySchema";
-import {
-  asc,
-  avg,
-  count,
-  desc,
-  eq,
-  getTableColumns,
-  max,
-  min,
-  SQL,
-  sql,
-  sum,
-  Table,
-  WithSubquery,
-} from "drizzle-orm";
+import { asc, avg, count, desc, eq, max, min, SQL, sum } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
@@ -22,92 +8,35 @@ import assert from "assert";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const { table, whereAndArray, operationParameters } = query;
 
   const tables = await loadDrizzleSchema();
-
-  const jsonSchemaForTable = jsonColumnSchema?.find(
-    (jsonCol) => jsonCol.tableName === table
-  );
-  const jsonCols = jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
-  const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
-
-  const tableAlias = db.$with(`${table}Alias`).as(
-    db
-      .select({
-        ...getTableColumns(tables[table]),
-        ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
-          acc[col] = sql
-            .raw(
-              `cast((${jsonColumnName}->>'${col}') as ${
-                jsonSchemaForTable?.jsonSchema.find((jCol) => jCol.name === col)
-                  ?.type === "String"
-                  ? "Text"
-                  : "Numeric"
-              })`
-            )
-            .as(col);
-          return acc;
-        }, {}),
-      })
-      .from(tables[table])
-  );
-
-  const tableAliasMapper: Record<string, WithSubquery> = {};
-  const tableAliases: WithSubquery[] = [];
-  const tablesToAlias =
-    jsonColumnSchema
-      ?.map((jsonCol) => jsonCol.tableName)
-      .filter((t) => t !== table) || [];
-  for (const table of tablesToAlias) {
-    const jsonSchemaForTable = jsonColumnSchema?.find(
-      (jsonCol) => jsonCol.tableName === table
-    );
-    const jsonCols =
-      jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
-    if (jsonCols.length === 0) {
-      continue;
-    }
-    const jsonColumnName = jsonSchemaForTable?.jsonColumnName;
-
-    const tableAlias = db.$with(`${table}Alias`).as(
-      db
-        .select({
-          ...getTableColumns(tables[table]),
-          ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
-            acc[col] = sql
-              .raw(
-                `cast((${jsonColumnName}->>'${col}') as ${
-                  jsonSchemaForTable?.jsonSchema.find(
-                    (jCol) => jCol.name === col
-                  )?.type === "String"
-                    ? "Text"
-                    : "Numeric"
-                })`
-              )
-              .as(col);
-            return acc;
-          }, {}),
-        })
-        .from(tables[table])
-    );
-    tableAliases.push(tableAlias);
-    tableAliasMapper[table] = tableAlias;
-  }
 
   const countJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.count?.columns.map((col) => [
       col,
-      count(tableAlias[col]),
+      count(tables[table][col]),
     ]);
   const minJsonFields: [string, SQL<number | null>][] | undefined =
-    operationParameters.min?.columns.map((col) => [col, min(tableAlias[col])]);
+    operationParameters.min?.columns.map((col) => [
+      col,
+      min(tables[table][col]),
+    ]);
   const maxJsonFields: [string, SQL<number | null>][] | undefined =
-    operationParameters.max?.columns.map((col) => [col, max(tableAlias[col])]);
+    operationParameters.max?.columns.map((col) => [
+      col,
+      max(tables[table][col]),
+    ]);
   const sumJsonFields: [string, SQL<string | null>][] | undefined =
-    operationParameters.sum?.columns.map((col) => [col, sum(tableAlias[col])]);
+    operationParameters.sum?.columns.map((col) => [
+      col,
+      sum(tables[table][col]),
+    ]);
   const avgJsonFields: [string, SQL<string | null>][] | undefined =
-    operationParameters.avg?.columns.map((col) => [col, avg(tableAlias[col])]);
+    operationParameters.avg?.columns.map((col) => [
+      col,
+      avg(tables[table][col]),
+    ]);
 
   const selectFields: Record<string, any> = {};
 
@@ -134,10 +63,6 @@ export async function groupBy(db: any, query: Query) {
     ? joinEntry
     : [undefined, undefined];
 
-  const joinTableAlias: Table | WithSubquery | undefined = joinTable
-    ? tableAliasMapper[joinTable] ?? tables[joinTable]
-    : undefined;
-
   const drizzleWhere = parsePrismaWhere({
     tableSchemas: tables,
     tableName: table,
@@ -145,23 +70,20 @@ export async function groupBy(db: any, query: Query) {
   });
 
   const dbQuery = db
-    .with(tableAlias, ...tableAliases)
     .select({
       [operationParameters.groupBy[0].column]:
-        tableAlias[operationParameters.groupBy[0].column],
+        tables[table][operationParameters.groupBy[0].column],
       ...selectFields,
-      // @ts-expect-error - We dont know the columns of joinTableAlias
-      ...(joinTable ? { [joinColumn]: joinTableAlias[joinColumn] } : {}),
+      ...(joinTable ? { [joinColumn]: tables[joinTable][joinColumn] } : {}),
     })
-    .from(tableAlias)
+    .from(tables[table])
     .groupBy(
-      tableAlias[operationParameters.groupBy[0].column],
-      // @ts-expect-error - We dont know the columns of joinTableAlias
-      ...(joinTable ? [joinTableAlias[joinColumn]] : [])
+      tables[table][operationParameters.groupBy[0].column],
+      ...(joinTable ? [tables[joinTable][joinColumn]] : [])
     )
     .where(drizzleWhere)
     .orderBy(() => {
-      const column = tableAlias[operationParameters.orderBy.column];
+      const column = tables[table][operationParameters.orderBy.column];
       const direction =
         operationParameters.orderBy.direction === "asc" ? asc : desc;
 
@@ -190,9 +112,8 @@ export async function groupBy(db: any, query: Query) {
       tables
     );
     dbQuery.leftJoin(
-      joinTableAlias,
-      // @ts-expect-error - We dont know the columns of joinTableAlias
-      eq(tableAlias[currentTableKey], joinTableAlias[relatedTableKey])
+      tables[joinTable],
+      eq(tables[table][currentTableKey], tables[joinTable][relatedTableKey])
     );
   }
 

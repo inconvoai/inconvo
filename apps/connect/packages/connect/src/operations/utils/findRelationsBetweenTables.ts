@@ -36,7 +36,7 @@ export function findRelationsBetweenTables(
   for (const [key, value] of Object.entries(targetTableRelations)) {
     if (
       value.fieldName === relationName ||
-      value.fieldName === sourceTableName
+      value.referencedTableName === sourceTableName
     ) {
       return [
         value?.config?.references?.map((field: Column) => field.name)[0],

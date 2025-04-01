@@ -18,7 +18,7 @@ export function jsonAggregate(jsonObject: any) {
   if (env.DATABASE_DIALECT === "postgresql") {
     return sql`COALESCE(json_agg(${jsonObject}), '[]')`;
   } else if (env.DATABASE_DIALECT === "mysql") {
-    return sql`COALESCE(json_arrayagg(${jsonObject}), '[]')`;
+    return sql`COALESCE(json_arrayagg(${jsonObject}), CAST('[]' AS JSON))`;
   }
   throw new Error(`Unsupported database dialect: ${env.DATABASE_DIALECT}`);
 }

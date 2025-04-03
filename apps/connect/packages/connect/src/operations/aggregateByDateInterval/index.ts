@@ -17,11 +17,10 @@ export async function aggregateByDateInterval(db: any, query: Query) {
   const tables = await loadDrizzleSchema();
   const dateColumn = tables[table][operationParameters.dateColumn];
 
-  if (!dateColumn) {
-    throw new Error(
-      `Column ${operationParameters.dateColumn} not found in table ${table}`
-    );
-  }
+  assert(
+    dateColumn,
+    `Date Column ${operationParameters.dateColumn} not found in table ${table}`
+  );
 
   let intervalExpression;
   if (env.DATABASE_DIALECT === "mysql") {
@@ -59,11 +58,13 @@ export async function aggregateByDateInterval(db: any, query: Query) {
       "Unsupported database provider. URL must start with 'mysql' or 'postgres'"
     );
   }
+
   const drizzleWhere = parsePrismaWhere({
     tableSchemas: tables,
     tableName: table,
     where: whereAndArray,
   });
+
   const aggregateColumn = tables[table][operationParameters.aggregateColumn];
 
   let aggregationFunction;

@@ -25,16 +25,20 @@ export async function countRelations(db: any, query: Query) {
         tables
       );
 
+      const countColumnName = relation.distinct
+        ? `distinct${relation.name}Count`
+        : `${relation.name}Count`;
+
       const cte = db.$with(`${relation.name}_count`).as(
         db
           .select({
             [relationTableKey]: tables[targetTableName][relationTableKey],
-            [`${relation.name}Count`]: relation.distinct
+            [countColumnName]: relation.distinct
               ? countDistinct(tables[targetTableName][relation.distinct]).as(
-                  `distinct${relation.name}Count`
+                  countColumnName
                 )
               : count(tables[targetTableName][relationTableKey]).as(
-                  `${relation.name}Count`
+                  countColumnName
                 ),
           })
           .from(tables[targetTableName])
@@ -44,9 +48,7 @@ export async function countRelations(db: any, query: Query) {
       return [
         cte,
         relation.name,
-        relation.distinct
-          ? `distinct${relation.name}Count`
-          : `${relation.name}Count`,
+        countColumnName,
         targetTableName,
         sourceTableKey,
         relationTableKey,

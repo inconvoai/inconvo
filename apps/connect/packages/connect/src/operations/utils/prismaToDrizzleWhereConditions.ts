@@ -16,7 +16,6 @@ import {
 import type { WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { getRelatedTableNameFromPath } from "./drizzleSchemaHelpers";
-import { re } from "mathjs";
 
 // -----------------------------------------------------------------------------
 // Types & Constants

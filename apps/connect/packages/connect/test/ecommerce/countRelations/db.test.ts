@@ -31,9 +31,7 @@ test("What was the order with the most line items?", async () => {
     {
       _unique_key: "5969239408944",
       store_key: "25824624728",
-      _count: {
-        fct_order_lineitems: 5,
-      },
+      fct_order_lineitemsCount: 5,
     },
   ]);
 }, 10000);

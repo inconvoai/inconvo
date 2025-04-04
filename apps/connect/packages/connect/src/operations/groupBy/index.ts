@@ -5,6 +5,7 @@ import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetw
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 import assert from "assert";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
@@ -15,27 +16,62 @@ export async function groupBy(db: any, query: Query) {
   const countJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.count?.columns.map((col) => [
       col,
-      count(drizzleSchema[table][col]),
+      count(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
     ]);
   const minJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.min?.columns.map((col) => [
       col,
-      min(drizzleSchema[table][col]),
+      min(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
     ]);
   const maxJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.max?.columns.map((col) => [
       col,
-      max(drizzleSchema[table][col]),
+      max(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
     ]);
   const sumJsonFields: [string, SQL<string | null>][] | undefined =
     operationParameters.sum?.columns.map((col) => [
       col,
-      sum(drizzleSchema[table][col]),
+      sum(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
     ]);
   const avgJsonFields: [string, SQL<string | null>][] | undefined =
     operationParameters.avg?.columns.map((col) => [
       col,
-      avg(drizzleSchema[table][col]),
+      avg(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
     ]);
 
   const selectFields: Record<string, any> = {};
@@ -87,7 +123,12 @@ export async function groupBy(db: any, query: Query) {
       })
     )
     .orderBy(() => {
-      const column = drizzleSchema[table][operationParameters.orderBy.column];
+      const column = getColumnFromTable({
+        columnName: operationParameters.orderBy.column,
+        tableName: table,
+        drizzleSchema,
+        computedColumns,
+      });
       const direction =
         operationParameters.orderBy.direction === "asc" ? asc : desc;
 

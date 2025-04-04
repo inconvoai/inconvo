@@ -1,80 +1,75 @@
-test.skip("Make Computed Columns Work", async () => {});
-// import { QuerySchema } from "~/types/querySchema";
-// import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
+import { QuerySchema } from "~/types/querySchema";
+import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
+import { getDb } from "~/dbConnection";
 
-// test.skip("How many lineitems have been sold per day of the week where the profit was over $500?", async () => {
-//   const iql = {
-//     table: "fct_order_lineitem",
-//     computedColumns: [
-//       {
-//         name: "profit",
-//         ast: {
-//           mathjs: "OperatorNode",
-//           op: "*",
-//           fn: "multiply",
-//           args: [
-//             {
-//               mathjs: "SymbolNode",
-//               name: "num_orders",
-//             },
-//             {
-//               mathjs: "ParenthesisNode",
-//               content: {
-//                 mathjs: "OperatorNode",
-//                 op: "+",
-//                 fn: "add",
-//                 args: [
-//                   {
-//                     mathjs: "OperatorNode",
-//                     op: "+",
-//                     fn: "add",
-//                     args: [
-//                       {
-//                         mathjs: "SymbolNode",
-//                         name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-//                       },
-//                       {
-//                         mathjs: "SymbolNode",
-//                         name: "ORDER_LINEITEM_PRODUCT_TAX",
-//                       },
-//                     ],
-//                   },
-//                   {
-//                     mathjs: "SymbolNode",
-//                     name: "ORDER_LINEITEM_PRODUCT_COGS",
-//                   },
-//                 ],
-//               },
-//             },
-//           ],
-//         },
-//         type: "Decimal",
-//       },
-//     ],
-//     whereAndArray: [
-//       {
-//         profit: {
-//           gt: 500,
-//         },
-//       },
-//     ],
-//     operation: "countByTemporalComponent",
-//     operationParameters: {
-//       component: "Day",
-//       dateColumn: "ORDER_TIMESTAMP",
-//     },
-//   };
+test("How many lineitems have been sold per day of the week where the profit was over $500?", async () => {
+  const iql = {
+    table: "fct_order_lineitem",
+    computedColumns: [
+      {
+        name: "profit_",
+        expression: {
+          type: "operation",
+          operator: "*",
+          operands: [
+            {
+              type: "column",
+              name: "num_orders",
+            },
+            {
+              type: "operation",
+              operator: "+",
+              operands: [
+                {
+                  type: "operation",
+                  operator: "+",
+                  operands: [
+                    {
+                      type: "column",
+                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
+                    },
+                    {
+                      type: "column",
+                      name: "ORDER_LINEITEM_PRODUCT_TAX",
+                    },
+                  ],
+                },
+                {
+                  type: "column",
+                  name: "ORDER_LINEITEM_PRODUCT_COGS",
+                },
+              ],
+            },
+          ],
+        },
+        type: "number",
+      },
+    ],
+    whereAndArray: [
+      {
+        profit_: {
+          gt: 500,
+        },
+      },
+    ],
+    operation: "countByTemporalComponent",
+    operationParameters: {
+      component: "Day",
+      dateColumn: "ORDER_TIMESTAMP",
+    },
+  };
 
-//   const parsedQuery = QuerySchema.parse(iql);
-//   const response = await countByTemporalComponent(parsedQuery);
+  const parsedQuery = QuerySchema.parse(iql);
+  const db = await getDb();
+  const response = await countByTemporalComponent(db, parsedQuery);
 
-//   expect(response).toEqual({
-//     Wednesday: 105,
-//     Thursday: 120,
-//     Sunday: 92,
-//     Tuesday: 101,
-//     Friday: 121,
-//     Saturday: 98,
-//     Monday: 63,
-//   });
-// });
+  expect(response).toEqual({
+    Wednesday: 105,
+    Thursday: 123,
+    Sunday: 92,
+    Tuesday: 100,
+    Friday: 118,
+    Saturday: 99,
+    Monday: 63,
+  });
+});

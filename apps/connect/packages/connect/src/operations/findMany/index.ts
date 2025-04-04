@@ -152,7 +152,6 @@ export async function findMany(db: any, query: Query) {
           .leftJoin(
             previousTable,
             eq(
-              // @ts-expect-error
               getColumnFromTable({
                 columnName: previousTableLinks[1],
                 tableName: table,
@@ -334,7 +333,6 @@ export async function findMany(db: any, query: Query) {
       dbQuery.leftJoin(
         tableCte,
         eq(
-          // @ts-expect-error
           getColumnFromTable({
             columnName: finalLink[1],
             tableName: query.table,

@@ -1,6 +1,7 @@
-import { Column, getTableName, Table } from "drizzle-orm";
+import { getTableName } from "drizzle-orm";
 import { ComputedColumn } from "~/types/querySchema";
 import { generateComputedColumnAsSQL } from "./generateCopmutedColumnSql";
+import { tryCatchSync } from "~/util/tryCatch";
 
 interface GetColumnFromTableParams {
   columnName: string;
@@ -16,14 +17,9 @@ export function getColumnFromTable({
   computedColumns,
 }: GetColumnFromTableParams) {
   const tableSchema = drizzleSchema[tableName];
-  const columns = tableSchema[
-    // @ts-expect-error
-    Table.Symbol.Columns
-  ] as Column[];
-  for (const [key, value] of Object.entries(columns)) {
-    if (value.name === columnName) {
-      return value;
-    }
+
+  if (tableSchema[columnName]) {
+    return tableSchema[columnName];
   }
 
   if (computedColumns) {
@@ -41,4 +37,17 @@ export function getColumnFromTable({
   throw new Error(
     `Column ${columnName} not found in table ${getTableName(tableSchema)}`
   );
+}
+
+export function getColumnFromCTE({
+  columnName,
+  cte,
+}: {
+  columnName: string;
+  cte: any;
+}) {
+  const { data: column } = tryCatchSync(() => cte[columnName]);
+  if (column) {
+    return column;
+  }
 }

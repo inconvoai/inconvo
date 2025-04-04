@@ -3,40 +3,27 @@ import { sql, count as dCount } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
+import {
+  getColumnFromCTE,
+  getColumnFromTable,
+} from "../utils/getColumnFromTable";
 
 export async function count(db: any, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
-  const {
-    table,
-    whereAndArray,
-    operationParameters,
-    jsonColumnSchema,
-    computedColumns,
-  } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
   const drizzleSchema = await loadDrizzleSchema();
 
   const columnNames = operationParameters.columns;
 
-  const jsonSchemaForTable = jsonColumnSchema?.find(
-    (jsonCol) => jsonCol.tableName === table
-  );
-
   const selectQuery: Record<string, any> = {};
   for (const name of columnNames) {
-    const jsonData = jsonSchemaForTable?.jsonSchema.find(
-      (x) => x.name === name
-    );
-    if (drizzleSchema[table][name]) {
-      selectQuery[name] = drizzleSchema[table][name];
-    } else if (jsonData) {
-      const castType = jsonData.type === "number" ? "Numeric" : "Text";
-      selectQuery[name] = sql
-        .raw(
-          `cast((${jsonSchemaForTable?.jsonColumnName}->>'${name}') as ${castType})`
-        )
-        .as(name);
-    }
+    selectQuery[name] = sql`${getColumnFromTable({
+      columnName: name,
+      tableName: table,
+      drizzleSchema,
+      computedColumns,
+    })}`.as(name);
   }
 
   const tmpTable = db.$with("tmpTable").as(
@@ -56,7 +43,9 @@ export async function count(db: any, query: Query) {
 
   const aggregateSelect = columnNames.reduce((acc, column) => {
     const colSelect = {
-      [`count_${column}`]: dCount(tmpTable[column]).as(`count_${column}`),
+      [`count_${column}`]: dCount(
+        getColumnFromCTE({ cte: tmpTable, columnName: column })
+      ).as(`count_${column}`),
     };
     return { ...acc, ...colSelect };
   }, {});

@@ -4,6 +4,7 @@ import { eq, count, sql, desc, asc, countDistinct } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getRelatedTableNameFromPath } from "~/operations/utils/drizzleSchemaHelpers";
 import { findRelationsBetweenTables } from "../utils/findRelationsBetweenTables";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
 
 export async function countRelations(db: any, query: Query) {
@@ -59,7 +60,12 @@ export async function countRelations(db: any, query: Query) {
   const baseTableColumns: { [key: string]: any } = (
     query.operationParameters.columns || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    acc[column] = drizzleSchema[table][column];
+    acc[column] = sql`${getColumnFromTable({
+      columnName: column,
+      tableName: table,
+      drizzleSchema,
+      computedColumns,
+    })}`.as(column);
     return acc;
   }, {});
 
@@ -112,7 +118,6 @@ export async function countRelations(db: any, query: Query) {
 
   if (operationParameters.orderBy) {
     dbQuery.orderBy((allCols: any) => {
-      // Redundant check, needed for typescript
       assert(operationParameters.orderBy, "Order by is required");
       const { relation: relationName, direction } = operationParameters.orderBy;
       const countColumn = relationCountQueries.find((relationCountQuery) =>

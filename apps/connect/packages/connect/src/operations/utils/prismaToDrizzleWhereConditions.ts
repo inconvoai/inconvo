@@ -118,13 +118,22 @@ function parseColumnFilter({
       continue;
     }
 
-    // Otherwise, handle standard drizzle-orm comparisons
-    const column = getColumnFromTable({
-      columnName,
-      tableName,
-      drizzleSchema,
-      computedColumns,
-    }) as SQL;
+    let column: SQL | undefined;
+    for (const [key, value] of Object.entries(columns)) {
+      if (key === columnName) {
+        column = value;
+        break;
+      }
+    }
+    if (!column) {
+      column = getColumnFromTable({
+        columnName,
+        tableName,
+        drizzleSchema,
+        computedColumns,
+      }) as SQL;
+    }
+
     switch (operator) {
       case "equals":
         subExpressions.push(eq(column, value));

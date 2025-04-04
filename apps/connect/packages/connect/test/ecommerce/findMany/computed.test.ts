@@ -1,119 +1,104 @@
-test.skip("Make Computed Columns Work", async () => {});
-// import { QuerySchema } from "~/types/querySchema";
-// import { findMany } from "~/operations/findMany";
+import { QuerySchema } from "~/types/querySchema";
+import { findMany } from "~/operations/findMany";
+import { getDb } from "~/dbConnection";
 
-// test.skip("What are the revenues for our most profitable orders and what products were sold?", async () => {
-//   const iql = {
-//     table: "fct_order",
-//     computedColumns: [
-//       {
-//         name: "profit",
-//         ast: {
-//           mathjs: "OperatorNode",
-//           op: "+",
-//           fn: "add",
-//           args: [
-//             {
-//               mathjs: "OperatorNode",
-//               op: "+",
-//               fn: "add",
-//               args: [
-//                 {
-//                   mathjs: "SymbolNode",
-//                   name: "ORDER_PRODUCT_GROSS_REVENUE",
-//                 },
-//                 {
-//                   mathjs: "SymbolNode",
-//                   name: "ORDER_PRODUCT_TAX",
-//                 },
-//               ],
-//             },
-//             {
-//               mathjs: "SymbolNode",
-//               name: "ORDER_PRODUCT_COGS",
-//             },
-//           ],
-//         },
-//         type: "Decimal",
-//       },
-//     ],
-//     whereAndArray: [],
-//     operation: "findMany",
-//     operationParameters: {
-//       columns: {
-//         fct_order: ["ORDER_PRODUCT_GROSS_REVENUE"],
-//         "fct_order.fct_order_lineitem.dim_product": ["PRODUCT_NAME"],
-//       },
-//       orderBy: {
-//         column: "profit",
-//         direction: "desc",
-//       },
-//       limit: 5,
-//     },
-//   };
+test("What are the revenues for our most profitable orders and what products were sold?", async () => {
+  const iql = {
+    table: "fct_order",
+    computedColumns: [
+      {
+        name: "profit_",
+        expression: {
+          type: "operation",
+          operator: "+",
+          operands: [
+            {
+              type: "operation",
+              operator: "+",
+              operands: [
+                {
+                  type: "column",
+                  name: "ORDER_PRODUCT_GROSS_REVENUE",
+                },
+                {
+                  type: "column",
+                  name: "ORDER_PRODUCT_TAX",
+                },
+              ],
+            },
+            {
+              type: "column",
+              name: "ORDER_PRODUCT_COGS",
+            },
+          ],
+        },
+        type: "number",
+      },
+    ],
+    whereAndArray: [],
+    operation: "findMany",
+    operationParameters: {
+      columns: {
+        fct_order: ["ORDER_PRODUCT_GROSS_REVENUE", "profit_"],
+        "fct_order.fct_order_lineitems.dim_product": ["PRODUCT_NAME"],
+      },
+      orderBy: {
+        column: "profit_",
+        direction: "desc",
+      },
+      limit: 5,
+    },
+  };
 
-//   const parsedQuery = QuerySchema.parse(iql);
-//   const response = await findMany(parsedQuery);
+  const parsedQuery = QuerySchema.parse(iql);
+  const db = await getDb();
+  const response = await findMany(db, parsedQuery);
 
-//   const answer = [
-//     {
-//       ORDER_PRODUCT_GROSS_REVENUE: 1449,
-//       fct_order_lineitem: [
-//         {
-//           dim_product: {
-//             PRODUCT_NAME: "Giraffe Toy",
-//           },
-//         },
-//       ],
-//       profit: 967,
-//     },
-//     {
-//       ORDER_PRODUCT_GROSS_REVENUE: 683,
-//       fct_order_lineitem: [
-//         {
-//           dim_product: {
-//             PRODUCT_NAME: "Giraffe Toy",
-//           },
-//         },
-//       ],
-//       profit: 532,
-//     },
-//     {
-//       ORDER_PRODUCT_GROSS_REVENUE: 1078,
-//       fct_order_lineitem: [],
-//       profit: 497,
-//     },
-//     {
-//       ORDER_PRODUCT_GROSS_REVENUE: 682,
-//       fct_order_lineitem: [
-//         {
-//           dim_product: {
-//             PRODUCT_NAME: "Rope and Ball Toy",
-//           },
-//         },
-//       ],
-//       profit: 476,
-//     },
-//     {
-//       ORDER_PRODUCT_GROSS_REVENUE: 580,
-//       fct_order_lineitem: [],
-//       profit: 454,
-//     },
-//   ];
+  const answer = [
+    {
+      ORDER_PRODUCT_GROSS_REVENUE: 1449,
+      fct_order_lineitems: [
+        {
+          dim_product: {
+            PRODUCT_NAME: "Giraffe Toy",
+          },
+        },
+      ],
+      profit_: 967,
+    },
+    {
+      ORDER_PRODUCT_GROSS_REVENUE: 683,
+      fct_order_lineitems: [
+        {
+          dim_product: {
+            PRODUCT_NAME: "Giraffe Toy",
+          },
+        },
+      ],
+      profit_: 532,
+    },
+    {
+      ORDER_PRODUCT_GROSS_REVENUE: 1078,
+      fct_order_lineitems: null,
+      profit_: 497,
+    },
+    {
+      ORDER_PRODUCT_GROSS_REVENUE: 682,
+      fct_order_lineitems: [
+        {
+          dim_product: {
+            PRODUCT_NAME: "Rope and Ball Toy",
+          },
+        },
+      ],
+      profit_: 476,
+    },
+    {
+      ORDER_PRODUCT_GROSS_REVENUE: 580,
+      fct_order_lineitems: null,
+      profit_: 454,
+    },
+  ];
 
-//   const keysToCompare = Object.keys(answer[0]);
-//   const filteredResponse = response.map(
-//     (item: { [s: string]: unknown } | ArrayLike<unknown>) =>
-//       Object.fromEntries(
-//         Object.entries(item).filter(([key]) => keysToCompare.includes(key))
-//       )
-//   );
-
-//   const filteredAnswer = answer.map((item) =>
-//     Object.fromEntries(
-//       Object.entries(item).filter(([key]) => keysToCompare.includes(key))
-//     )
-//   );
-
-//   expect(filteredResponse).toEqual(filteredAnswer);
-// });
+  expect(response).toEqual(answer);
+});

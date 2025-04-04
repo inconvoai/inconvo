@@ -4,8 +4,8 @@ import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditi
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
-import assert from "assert";
 import { getColumnFromTable } from "../utils/getColumnFromTable";
+import assert from "assert";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");

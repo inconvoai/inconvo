@@ -357,8 +357,27 @@ export async function findMany(db: any, query: Query) {
           }
         }
       }
+      if (orderBy.direction === "desc") {
+        return desc(
+          getColumnFromTable({
+            columnName: orderBy.column,
+            tableName: query.table,
+            drizzleSchema,
+            computedColumns,
+          })
+        );
+      }
+      return asc(
+        getColumnFromTable({
+          columnName: orderBy.column,
+          tableName: query.table,
+          drizzleSchema,
+          computedColumns,
+        })
+      );
     });
   }
+
   if (limit) dbQuery.limit(limit);
 
   const response = await dbQuery;

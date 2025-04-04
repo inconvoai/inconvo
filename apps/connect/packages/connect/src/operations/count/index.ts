@@ -6,14 +6,15 @@ import assert from "assert";
 
 export async function count(db: any, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const {
+    table,
+    whereAndArray,
+    operationParameters,
+    jsonColumnSchema,
+    computedColumns,
+  } = query;
 
-  const tables = await loadDrizzleSchema();
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
+  const drizzleSchema = await loadDrizzleSchema();
 
   const columnNames = operationParameters.columns;
 
@@ -26,8 +27,8 @@ export async function count(db: any, query: Query) {
     const jsonData = jsonSchemaForTable?.jsonSchema.find(
       (x) => x.name === name
     );
-    if (tables[table][name]) {
-      selectQuery[name] = tables[table][name];
+    if (drizzleSchema[table][name]) {
+      selectQuery[name] = drizzleSchema[table][name];
     } else if (jsonData) {
       const castType = jsonData.type === "number" ? "Numeric" : "Text";
       selectQuery[name] = sql
@@ -38,9 +39,20 @@ export async function count(db: any, query: Query) {
     }
   }
 
-  const tmpTable = db
-    .$with("tmpTable")
-    .as(db.select(selectQuery).from(tables[table]).where(drizzleWhere));
+  const tmpTable = db.$with("tmpTable").as(
+    db
+      .select(selectQuery)
+      .from(drizzleSchema[table])
+      .where((columns: Record<string, unknown>) =>
+        parsePrismaWhere({
+          drizzleSchema,
+          tableName: table,
+          where: whereAndArray,
+          columns,
+          computedColumns: computedColumns,
+        })
+      )
+  );
 
   const aggregateSelect = columnNames.reduce((acc, column) => {
     const colSelect = {

@@ -11,11 +11,11 @@ export async function aggregateByDateInterval(db: any, query: Query) {
     "Invalid inconvo operation"
   );
 
-  const { table, whereAndArray, operationParameters } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
   const { interval, aggregationType } = operationParameters;
 
-  const tables = await loadDrizzleSchema();
-  const dateColumn = tables[table][operationParameters.dateColumn];
+  const drizzleSchema = await loadDrizzleSchema();
+  const dateColumn = drizzleSchema[table][operationParameters.dateColumn];
 
   assert(
     dateColumn,
@@ -59,13 +59,8 @@ export async function aggregateByDateInterval(db: any, query: Query) {
     );
   }
 
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
-
-  const aggregateColumn = tables[table][operationParameters.aggregateColumn];
+  const aggregateColumn =
+    drizzleSchema[table][operationParameters.aggregateColumn];
 
   let aggregationFunction;
   switch (aggregationType) {
@@ -91,8 +86,16 @@ export async function aggregateByDateInterval(db: any, query: Query) {
       date_interval: intervalExpression.as("date_interval"),
       aggregation_value: aggregationFunction.as("aggregation_value"),
     })
-    .from(tables[table])
-    .where(drizzleWhere)
+    .from(drizzleSchema[table])
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    )
     .groupBy(intervalExpression)
     .orderBy(intervalExpression);
 

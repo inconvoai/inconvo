@@ -8,34 +8,34 @@ import assert from "assert";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const tables = await loadDrizzleSchema();
+  const drizzleSchema = await loadDrizzleSchema();
 
   const countJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.count?.columns.map((col) => [
       col,
-      count(tables[table][col]),
+      count(drizzleSchema[table][col]),
     ]);
   const minJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.min?.columns.map((col) => [
       col,
-      min(tables[table][col]),
+      min(drizzleSchema[table][col]),
     ]);
   const maxJsonFields: [string, SQL<number | null>][] | undefined =
     operationParameters.max?.columns.map((col) => [
       col,
-      max(tables[table][col]),
+      max(drizzleSchema[table][col]),
     ]);
   const sumJsonFields: [string, SQL<string | null>][] | undefined =
     operationParameters.sum?.columns.map((col) => [
       col,
-      sum(tables[table][col]),
+      sum(drizzleSchema[table][col]),
     ]);
   const avgJsonFields: [string, SQL<string | null>][] | undefined =
     operationParameters.avg?.columns.map((col) => [
       col,
-      avg(tables[table][col]),
+      avg(drizzleSchema[table][col]),
     ]);
 
   const selectFields: Record<string, any> = {};
@@ -63,27 +63,31 @@ export async function groupBy(db: any, query: Query) {
     ? joinEntry
     : [undefined, undefined];
 
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
-
   const dbQuery = db
     .select({
       [operationParameters.groupBy[0].column]:
-        tables[table][operationParameters.groupBy[0].column],
+        drizzleSchema[table][operationParameters.groupBy[0].column],
       ...selectFields,
-      ...(joinTable ? { [joinColumn]: tables[joinTable][joinColumn] } : {}),
+      ...(joinTable
+        ? { [joinColumn]: drizzleSchema[joinTable][joinColumn] }
+        : {}),
     })
-    .from(tables[table])
+    .from(drizzleSchema[table])
     .groupBy(
-      tables[table][operationParameters.groupBy[0].column],
-      ...(joinTable ? [tables[joinTable][joinColumn]] : [])
+      drizzleSchema[table][operationParameters.groupBy[0].column],
+      ...(joinTable ? [drizzleSchema[joinTable][joinColumn]] : [])
     )
-    .where(drizzleWhere)
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    )
     .orderBy(() => {
-      const column = tables[table][operationParameters.orderBy.column];
+      const column = drizzleSchema[table][operationParameters.orderBy.column];
       const direction =
         operationParameters.orderBy.direction === "asc" ? asc : desc;
 
@@ -109,11 +113,14 @@ export async function groupBy(db: any, query: Query) {
       table,
       joinTable,
       joinTable,
-      tables
+      drizzleSchema
     );
     dbQuery.leftJoin(
-      tables[joinTable],
-      eq(tables[table][currentTableKey], tables[joinTable][relatedTableKey])
+      drizzleSchema[joinTable],
+      eq(
+        drizzleSchema[table][currentTableKey],
+        drizzleSchema[joinTable][relatedTableKey]
+      )
     );
   }
 

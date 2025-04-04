@@ -1,7 +1,8 @@
 import { type Query } from "~/types/querySchema";
-import { avg, min, sql, sum, max, count } from "drizzle-orm";
+import { avg, min, sql, sum, max, count, SQL } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
 
 type AggregateTypes = "avg" | "sum" | "min" | "max" | "median" | "count";
@@ -16,29 +17,75 @@ type AggregateResult = {
 
 export async function aggregate(db: any, query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters } = query;
+  const {
+    table: tableName,
+    whereAndArray,
+    operationParameters,
+    computedColumns,
+  } = query;
 
-  const tables = await loadDrizzleSchema();
-  const dbTable = tables[table];
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
+  const drizzleSchema = await loadDrizzleSchema();
 
-  const aggregateSelect: Record<string, any> = {};
   const aggregateFunctions: Record<AggregateTypes, (column: string) => any> = {
-    avg: (column) => avg(dbTable[column]).as(`avg_${column}`),
-    sum: (column) => sum(dbTable[column]).as(`sum_${column}`),
-    min: (column) => min(dbTable[column]).as(`min_${column}`),
-    max: (column) => max(dbTable[column]).as(`max_${column}`),
-    count: (column) => count(dbTable[column]).as(`count_${column}`),
+    avg: (column) =>
+      avg(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`avg_${column}`),
+    sum: (column) =>
+      sum(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`sum_${column}`),
+    min: (column) =>
+      min(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`min_${column}`),
+    max: (column) =>
+      max(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`max_${column}`),
+    count: (column) =>
+      count(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`count_${column}`),
     median: (column) =>
-      sql<number>`cast(percentile_cont(0.5) within group (order by ${dbTable[column]}) as Numeric)`
+      sql<number>`cast(percentile_cont(0.5) within group (order by ${getColumnFromTable(
+        {
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        }
+      )}) as Numeric)`
         .mapWith(Number)
         .as(`median_${column}`),
   };
 
+  const aggregateSelect: Record<string, any> = {};
   Object.entries(operationParameters)
     .filter(([_, value]) => Array.isArray(value) && value !== null)
     .forEach(([type, columns]) => {
@@ -52,8 +99,16 @@ export async function aggregate(db: any, query: Query) {
 
   const response = await db
     .select(aggregateSelect)
-    .from(tables[table])
-    .where(drizzleWhere);
+    .from(drizzleSchema[tableName])
+    .where((columns: Record<string, SQL>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        columns,
+        tableName,
+        where: whereAndArray,
+        computedColumns,
+      })
+    );
 
   return Object.keys(response[0]).reduce((acc: AggregateResult, key) => {
     const aggregateType = Object.keys(aggregateFunctions).find((type) =>

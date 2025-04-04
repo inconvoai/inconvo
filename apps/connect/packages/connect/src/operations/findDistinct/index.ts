@@ -6,14 +6,15 @@ import assert from "assert";
 
 export async function findDistinct(db: any, query: Query) {
   assert(query.operation === "findDistinct", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const {
+    table,
+    whereAndArray,
+    operationParameters,
+    jsonColumnSchema,
+    computedColumns,
+  } = query;
 
-  const tables = await loadDrizzleSchema();
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
+  const drizzleSchema = await loadDrizzleSchema();
 
   const jsonSchemaForTable = jsonColumnSchema?.find(
     (jsonCol) => jsonCol.tableName === table
@@ -23,7 +24,7 @@ export async function findDistinct(db: any, query: Query) {
   const tableAlias = db.$with(`${table}Alias`).as(
     db
       .select({
-        ...getTableColumns(tables[table]),
+        ...getTableColumns(drizzleSchema[table]),
         ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
           acc[col] = sql
             .raw(
@@ -37,8 +38,16 @@ export async function findDistinct(db: any, query: Query) {
           return acc;
         }, {}),
       })
-      .from(tables[table])
-      .where(drizzleWhere)
+      .from(drizzleSchema[table])
+      .where((columns: Record<string, unknown>) =>
+        parsePrismaWhere({
+          drizzleSchema,
+          tableName: table,
+          where: whereAndArray,
+          columns,
+          computedColumns: computedColumns,
+        })
+      )
   );
 
   const response = await db

@@ -25,40 +25,43 @@ const QueryWhereAndArraySchema = z.array(
 );
 export type WhereConditions = z.infer<typeof QueryWhereAndArraySchema>;
 
-const ConstantNodeSchema = z.object({
-  mathjs: z.literal("ConstantNode"),
-  value: z.union([z.number(), z.string(), z.boolean()]),
-  valueType: z.string().optional(),
-});
+const SQLOperatorSchema = z.union([
+  z.literal("+"),
+  z.literal("-"),
+  z.literal("*"),
+  z.literal("/"),
+  z.literal("%"),
+]);
 
-const SymbolNodeSchema = z.object({
-  mathjs: z.literal("SymbolNode"),
+const SQLColumnReferenceSchema = z.object({
+  type: z.literal("column"),
   name: z.string(),
 });
 
-const OperatorNodeSchema = z.object({
-  mathjs: z.literal("OperatorNode"),
-  op: z.string(),
-  fn: z.string(),
-  args: z.array(z.lazy(() => MathsjsAstSchema)),
+const SQLValueSchema = z.object({
+  type: z.literal("value"),
+  value: z.number(),
 });
 
-const ParenthesisNodeSchema = z.object({
-  mathjs: z.literal("ParenthesisNode"),
-  content: z.lazy(() => MathsjsAstSchema),
-});
-
-const MathsjsAstSchema: z.ZodTypeAny = z.discriminatedUnion("mathjs", [
-  ConstantNodeSchema,
-  SymbolNodeSchema,
-  OperatorNodeSchema,
-  ParenthesisNodeSchema,
-]);
+const SQLExpressionSchema: z.ZodTypeAny = z.lazy(() =>
+  z.discriminatedUnion("type", [
+    SQLColumnReferenceSchema,
+    SQLValueSchema,
+    z.object({
+      type: z.literal("operation"),
+      operator: SQLOperatorSchema,
+      operands: z.array(SQLExpressionSchema),
+    }),
+    z.object({
+      type: z.literal("brackets"),
+      expression: SQLExpressionSchema,
+    }),
+  ])
+);
 
 const computedColumnSchema = z.object({
   name: z.string(),
-  ast: MathsjsAstSchema,
-  type: z.string(),
+  expression: SQLExpressionSchema,
 });
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;

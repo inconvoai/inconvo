@@ -6,13 +6,14 @@ import {
   desc,
   eq,
   getTableColumns,
+  SQL,
   sql,
   Table,
   WithSubquery,
 } from "drizzle-orm";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { getColumnFromTableSchema } from "~/operations/utils/getColumnFromTableSchema";
+import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
 import { getRelatedTableNameFromPath } from "../utils/drizzleSchemaHelpers";
 import {
   buildJsonObjectSelect,
@@ -21,10 +22,16 @@ import {
 
 export async function findMany(db: any, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const {
+    table,
+    whereAndArray,
+    operationParameters,
+    jsonColumnSchema,
+    computedColumns,
+  } = query;
   const { columns, orderBy, limit } = operationParameters;
 
-  const tables = await loadDrizzleSchema();
+  const drizzleSchema = await loadDrizzleSchema();
 
   const selectColsPerTable: Record<string, string[] | null> = {};
   Object.entries(columns).forEach(([tableRelations, value]) => {
@@ -51,7 +58,7 @@ export async function findMany(db: any, query: Query) {
     const tableAlias = db.$with(`${table}Alias`).as(
       db
         .select({
-          ...getTableColumns(tables[table]),
+          ...getTableColumns(drizzleSchema[table]),
           ...jsonCols.reduce((acc: Record<string, unknown>, col) => {
             acc[col] = sql
               .raw(
@@ -67,7 +74,7 @@ export async function findMany(db: any, query: Query) {
             return acc;
           }, {}),
         })
-        .from(tables[table])
+        .from(drizzleSchema[table])
     );
     tableAliases.push(tableAlias);
     tableAliasMapper[table] = tableAlias;
@@ -91,10 +98,12 @@ export async function findMany(db: any, query: Query) {
       .as(
         db
           .select({
-            [currentTableKey]: getColumnFromTableSchema(
-              tableSchema,
-              currentTableKey
-            ),
+            [currentTableKey]: getColumnFromTable({
+              columnName: currentTableKey,
+              tableName: table,
+              drizzleSchema,
+              computedColumns: computedColumns,
+            }),
             json_data: buildJsonObjectSelect(jsonFields).as("json_data"),
           })
           .from(tableSchema)
@@ -131,17 +140,25 @@ export async function findMany(db: any, query: Query) {
       .as(
         db
           .select({
-            [currentTableKey]: getColumnFromTableSchema(
-              tableSchema,
-              currentTableKey
-            ),
+            [currentTableKey]: getColumnFromTable({
+              columnName: currentTableKey,
+              tableName: table,
+              drizzleSchema,
+              computedColumns,
+            }),
             json_data: buildJsonObjectSelect(jsonFields).as("json_data"),
           })
           .from(tableSchema)
           .leftJoin(
             previousTable,
             eq(
-              getColumnFromTableSchema(tableSchema, previousTableLinks[1]),
+              // @ts-expect-error
+              getColumnFromTable({
+                columnName: previousTableLinks[1],
+                tableName: table,
+                drizzleSchema,
+                computedColumns,
+              }),
               previousTable[previousTableLinks[0]]
             )
           )
@@ -192,7 +209,10 @@ export async function findMany(db: any, query: Query) {
           0,
           tablePath.indexOf(tableRelationName) + 1
         );
-        const tableName = getRelatedTableNameFromPath(pathToTableName, tables);
+        const tableName = getRelatedTableNameFromPath(
+          pathToTableName,
+          drizzleSchema
+        );
 
         const pathToRelatedTable = tablePath.slice(
           0,
@@ -201,7 +221,7 @@ export async function findMany(db: any, query: Query) {
 
         const relatedTableName = getRelatedTableNameFromPath(
           pathToRelatedTable,
-          tables
+          drizzleSchema
         );
 
         const [relatedTableKey, currentTableKey, groupBy] =
@@ -209,16 +229,21 @@ export async function findMany(db: any, query: Query) {
             relatedTableName,
             tableName,
             tableRelationName,
-            tables
+            drizzleSchema
           );
 
         tableLinks.push([currentTableKey, relatedTableKey]);
 
-        const tableSchema = tableAliasMapper[tableName] || tables[tableName];
+        const tableSchema =
+          tableAliasMapper[tableName] || drizzleSchema[tableName];
         const jsonFields: [string, unknown][] =
           selectColsPerTable[tableRelationName]?.map((col) => {
-            // @ts-expect-error
-            const columnParam = getColumnFromTableSchema(tableSchema, col);
+            const columnParam = getColumnFromTable({
+              columnName: col,
+              tableName: tableName,
+              drizzleSchema,
+              computedColumns,
+            });
             return [col, columnParam];
           }) ?? [];
         if (index === 0) {
@@ -261,19 +286,17 @@ export async function findMany(db: any, query: Query) {
   }
 
   const tableSchema: Table | WithSubquery =
-    tableAliasMapper[query.table] || tables[query.table];
-
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
+    tableAliasMapper[query.table] || drizzleSchema[query.table];
 
   const rootSelect: { [key: string]: any } = (
     query.operationParameters.columns[table] || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    //@ts-expect-error
-    acc[column] = getColumnFromTableSchema(tableSchema, column);
+    acc[column] = getColumnFromTable({
+      columnName: column,
+      tableName: query.table,
+      drizzleSchema,
+      computedColumns,
+    });
     return acc;
   }, {});
 
@@ -293,7 +316,15 @@ export async function findMany(db: any, query: Query) {
       ),
     })
     .from(tableSchema)
-    .where(drizzleWhere);
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    );
 
   if (needCtes) {
     nestedJsonCtes.forEach((ctes, index) => {
@@ -304,7 +335,12 @@ export async function findMany(db: any, query: Query) {
         tableCte,
         eq(
           // @ts-expect-error
-          getColumnFromTableSchema(tableSchema, finalLink[1]),
+          getColumnFromTable({
+            columnName: finalLink[1],
+            tableName: query.table,
+            drizzleSchema,
+            computedColumns,
+          }),
           // @ts-expect-error
           tableCte[finalLink[0]]
         )
@@ -312,16 +348,20 @@ export async function findMany(db: any, query: Query) {
     });
   }
 
-  if (limit) dbQuery.limit(limit);
   if (orderBy) {
-    dbQuery.orderBy(
-      orderBy.direction === "asc"
-        ? // @ts-expect-error
-          asc(getColumnFromTableSchema(tableSchema, orderBy.column))
-        : // @ts-expect-error
-          desc(getColumnFromTableSchema(tableSchema, orderBy.column))
-    );
+    dbQuery.orderBy((allCols: Record<string, SQL>) => {
+      for (const [key, value] of Object.entries(allCols)) {
+        if (key === orderBy.column) {
+          if (orderBy.direction === "desc") {
+            return desc(value);
+          } else if (orderBy.direction === "asc") {
+            return asc(value);
+          }
+        }
+      }
+    });
   }
+  if (limit) dbQuery.limit(limit);
 
   const response = await dbQuery;
   return response;

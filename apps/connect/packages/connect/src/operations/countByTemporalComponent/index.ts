@@ -12,10 +12,10 @@ export async function countByTemporalComponent(db: any, query: Query) {
     query.operation === "countByTemporalComponent",
     "Invalid inconvo operation"
   );
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const tables = await loadDrizzleSchema();
-  const dateColumn = tables[table][operationParameters.dateColumn];
+  const drizzleSchema = await loadDrizzleSchema();
+  const dateColumn = drizzleSchema[table][operationParameters.dateColumn];
 
   if (!dateColumn) {
     throw new Error(
@@ -52,19 +52,21 @@ export async function countByTemporalComponent(db: any, query: Query) {
     );
   }
 
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
-
   const dbQuery = db
     .select({
       temporal_component: temporalExpression.as("temporal_component"),
       count: count(),
     })
-    .from(tables[table])
-    .where(drizzleWhere)
+    .from(drizzleSchema[table])
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    )
     .groupBy(temporalExpression);
 
   const results = await dbQuery;

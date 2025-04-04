@@ -8,21 +8,21 @@ import assert from "assert";
 
 export async function countRelations(db: any, query: Query) {
   assert(query.operation === "countRelations", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const tables = await loadDrizzleSchema();
+  const drizzleSchema = await loadDrizzleSchema();
 
   const relationCountQueries: [any, string, string, string, string, string][] =
     operationParameters.relationsToCount.map((relation) => {
       const targetTableName = getRelatedTableNameFromPath(
         [table, relation.name],
-        tables
+        drizzleSchema
       );
       const [sourceTableKey, relationTableKey] = findRelationsBetweenTables(
         table,
         targetTableName,
         relation.name,
-        tables
+        drizzleSchema
       );
 
       const countColumnName = relation.distinct
@@ -32,17 +32,18 @@ export async function countRelations(db: any, query: Query) {
       const cte = db.$with(`${relation.name}_count`).as(
         db
           .select({
-            [relationTableKey]: tables[targetTableName][relationTableKey],
+            [relationTableKey]:
+              drizzleSchema[targetTableName][relationTableKey],
             [countColumnName]: relation.distinct
-              ? countDistinct(tables[targetTableName][relation.distinct]).as(
-                  countColumnName
-                )
-              : count(tables[targetTableName][relationTableKey]).as(
+              ? countDistinct(
+                  drizzleSchema[targetTableName][relation.distinct]
+                ).as(countColumnName)
+              : count(drizzleSchema[targetTableName][relationTableKey]).as(
                   countColumnName
                 ),
           })
-          .from(tables[targetTableName])
-          .groupBy(tables[targetTableName][relationTableKey])
+          .from(drizzleSchema[targetTableName])
+          .groupBy(drizzleSchema[targetTableName][relationTableKey])
       );
 
       return [
@@ -55,16 +56,10 @@ export async function countRelations(db: any, query: Query) {
       ];
     });
 
-  const drizzleWhere = parsePrismaWhere({
-    tableSchemas: tables,
-    tableName: table,
-    where: whereAndArray,
-  });
-
   const baseTableColumns: { [key: string]: any } = (
     query.operationParameters.columns || []
   ).reduce((acc: { [key: string]: any }, column: string) => {
-    acc[column] = tables[table][column];
+    acc[column] = drizzleSchema[table][column];
     return acc;
   }, {});
 
@@ -89,8 +84,16 @@ export async function countRelations(db: any, query: Query) {
       ...baseTableColumns,
       ...relationCountColumns,
     })
-    .from(tables[table])
-    .where(drizzleWhere);
+    .from(drizzleSchema[table])
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    );
 
   for (const relationCountMapping of relationCountQueries || []) {
     const [
@@ -103,7 +106,7 @@ export async function countRelations(db: any, query: Query) {
     ] = relationCountMapping;
     dbQuery.leftJoin(
       cte,
-      eq(cte[relationTableKey], tables[table][sourceTableKey])
+      eq(cte[relationTableKey], drizzleSchema[table][sourceTableKey])
     );
   }
 

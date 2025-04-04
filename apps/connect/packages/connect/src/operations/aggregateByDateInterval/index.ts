@@ -4,6 +4,7 @@ import { count, sql, avg, min, max, sum } from "drizzle-orm";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { env } from "~/env";
 import assert from "assert";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 
 export async function aggregateByDateInterval(db: any, query: Query) {
   assert(
@@ -59,8 +60,12 @@ export async function aggregateByDateInterval(db: any, query: Query) {
     );
   }
 
-  const aggregateColumn =
-    drizzleSchema[table][operationParameters.aggregateColumn];
+  const aggregateColumn = getColumnFromTable({
+    columnName: operationParameters.aggregateColumn,
+    tableName: table,
+    drizzleSchema,
+    computedColumns,
+  });
 
   let aggregationFunction;
   switch (aggregationType) {

@@ -1,99 +1,80 @@
-test.skip("Make Computed Columns Work", async () => {});
-// import { QuerySchema } from "~/types/querySchema";
-// import { groupBy } from "~/operations/groupBy";
+import { QuerySchema } from "~/types/querySchema";
+import { findDistinct } from "~/operations/findDistinct";
+import { getDb } from "~/dbConnection";
 
-// test.skip("What is the product with the highest total profit where the profit on sales of that product were over $100", async () => {
-//   const iql = {
-//     table: "fct_order_lineitem",
-//     computedColumns: [
-//       {
-//         name: "profit",
-//         ast: {
-//           mathjs: "OperatorNode",
-//           op: "*",
-//           fn: "multiply",
-//           args: [
-//             {
-//               mathjs: "SymbolNode",
-//               name: "num_orders",
-//             },
-//             {
-//               mathjs: "ParenthesisNode",
-//               content: {
-//                 mathjs: "OperatorNode",
-//                 op: "+",
-//                 fn: "add",
-//                 args: [
-//                   {
-//                     mathjs: "OperatorNode",
-//                     op: "+",
-//                     fn: "add",
-//                     args: [
-//                       {
-//                         mathjs: "SymbolNode",
-//                         name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-//                       },
-//                       {
-//                         mathjs: "SymbolNode",
-//                         name: "ORDER_LINEITEM_PRODUCT_TAX",
-//                       },
-//                     ],
-//                   },
-//                   {
-//                     mathjs: "SymbolNode",
-//                     name: "ORDER_LINEITEM_PRODUCT_COGS",
-//                   },
-//                 ],
-//               },
-//             },
-//           ],
-//         },
-//         type: "Decimal",
-//       },
-//     ],
-//     whereAndArray: [
-//       {
-//         profit: {
-//           gt: 100,
-//         },
-//       },
-//     ],
-//     operation: "groupBy",
-//     operationParameters: {
-//       groupBy: [
-//         {
-//           column: "product_key",
-//           join: {
-//             dim_product: "PRODUCT_NAME",
-//           },
-//         },
-//       ],
-//       count: null,
-//       sum: {
-//         columns: ["profit"],
-//       },
-//       avg: null,
-//       min: null,
-//       max: null,
-//       orderBy: {
-//         function: "sum",
-//         column: "profit",
-//         direction: "desc",
-//       },
-//       limit: 1,
-//     },
-//   };
+test("Find Unique Channel Keys for an order where profit is greater than 200", async () => {
+  const iql = {
+    table: "fct_order",
+    computedColumns: [
+      {
+        name: "profit_",
+        expression: {
+          type: "operation",
+          operator: "+",
+          operands: [
+            {
+              type: "operation",
+              operator: "+",
+              operands: [
+                {
+                  type: "column",
+                  name: "ORDER_PRODUCT_GROSS_REVENUE",
+                },
+                {
+                  type: "column",
+                  name: "ORDER_PRODUCT_TAX",
+                },
+              ],
+            },
+            {
+              type: "column",
+              name: "ORDER_PRODUCT_COGS",
+            },
+          ],
+        },
+        type: "number",
+      },
+    ],
+    whereAndArray: [
+      {
+        profit_: {
+          gt: 200,
+        },
+      },
+    ],
+    operation: "findDistinct",
+    operationParameters: {
+      column: "CHANNEL_KEY",
+    },
+  };
 
-//   const parsedQuery = QuerySchema.parse(iql);
-//   const response = await groupBy(parsedQuery);
+  const parsedQuery = QuerySchema.parse(iql);
+  const db = await getDb();
+  const response = await findDistinct(db, parsedQuery);
 
-//   expect(response).toEqual([
-//     {
-//       product_key: "shopify_31443282067544",
-//       _sum: {
-//         profit: 205770.5833333336,
-//       },
-//       PRODUCT_NAME: "Tiger Toy",
-//     },
-//   ]);
-// });
+  expect(response.length).toBeLessThanOrEqual(250);
+  expect(response.length).toBe(20);
+
+  expect(response).toEqual([
+    { CHANNEL_KEY: 101 },
+    { CHANNEL_KEY: 1000 },
+    { CHANNEL_KEY: 302 },
+    { CHANNEL_KEY: 1303 },
+    { CHANNEL_KEY: 102 },
+    { CHANNEL_KEY: 1411 },
+    { CHANNEL_KEY: 901 },
+    { CHANNEL_KEY: 202 },
+    { CHANNEL_KEY: 1 },
+    { CHANNEL_KEY: 402 },
+    { CHANNEL_KEY: 1100 },
+    { CHANNEL_KEY: 404 },
+    { CHANNEL_KEY: 1404 },
+    { CHANNEL_KEY: 900 },
+    { CHANNEL_KEY: 702 },
+    { CHANNEL_KEY: 703 },
+    { CHANNEL_KEY: 1400 },
+    { CHANNEL_KEY: 1101 },
+    { CHANNEL_KEY: 1304 },
+    { CHANNEL_KEY: 103 },
+  ]);
+});

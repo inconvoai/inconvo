@@ -32,6 +32,24 @@ async function runDrizzleCommand(
   }
 }
 
+async function compileSchemas(drizzlePath: string): Promise<boolean> {
+  try {
+    console.log("Compiling Drizzle schemas to JavaScript...");
+    const drizzleDir = path.join(drizzlePath, "drizzle");
+    await execPromise(
+      `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
+        drizzleDir,
+        "relations.ts"
+      )} --skipLibCheck --outDir ${drizzleDir}`
+    );
+    console.log("Schema compilation completed successfully.");
+    return true;
+  } catch (error) {
+    console.error("Failed to compile schemas:", error);
+    return false;
+  }
+}
+
 module.exports = async () => {
   try {
     const drizzlePath = getDrizzlePath();
@@ -40,6 +58,7 @@ module.exports = async () => {
       process.exit(1);
     }
     await runDrizzleCommand("pull", drizzlePath);
+    await compileSchemas(drizzlePath);
     console.log("Schema pulled successfully.");
   } catch (error) {
     console.error("An error occurred while syncing DB:", error);

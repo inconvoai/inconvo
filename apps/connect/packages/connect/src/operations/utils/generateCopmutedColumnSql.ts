@@ -14,9 +14,8 @@ export function generateComputedColumnAsSQL(
       return sql`${expression.value}`.mapWith(Number);
     case "operation": {
       // Recursively convert each operand.
-      const operandSQLs = expression.operands.map(
-        (operand: ComputedColumn["expression"]["operands"]) =>
-          generateComputedColumnAsSQL(operand, tableName, drizzleSchema)
+      const operandSQLs = expression.operands.map((operand) =>
+        generateComputedColumnAsSQL(operand, tableName, drizzleSchema)
       );
       // Join operands with the operator and wrap in parentheses.
       return sql`(${sql.join(

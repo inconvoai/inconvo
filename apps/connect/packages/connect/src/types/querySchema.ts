@@ -25,7 +25,45 @@ const QueryWhereAndArraySchema = z.array(
 );
 export type WhereConditions = z.infer<typeof QueryWhereAndArraySchema>;
 
-const SQLOperatorSchema = z.union([
+export type SQLOperator = "+" | "-" | "*" | "/" | "%";
+
+export type SQLColumnReference = {
+  type: "column";
+  name: string;
+};
+
+export type SQLValue = {
+  type: "value";
+  value: number;
+};
+
+export type SQLOperation = {
+  type: "operation";
+  operator: SQLOperator;
+  operands: SQLComputedColumnAst[];
+};
+
+export type SQLBrackets = {
+  type: "brackets";
+  expression: SQLComputedColumnAst;
+};
+
+export type SQLComputedColumnAst =
+  | SQLColumnReference
+  | SQLValue
+  | SQLOperation
+  | SQLBrackets;
+
+const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> = z.lazy(() =>
+  z.union([
+    SQLColumnReferenceSchema,
+    SQLValueSchema,
+    SQLOperationSchema,
+    SQLBracketsSchema,
+  ])
+);
+
+const SQLOperatorSchema: z.ZodType<SQLOperator> = z.union([
   z.literal("+"),
   z.literal("-"),
   z.literal("*"),
@@ -33,35 +71,30 @@ const SQLOperatorSchema = z.union([
   z.literal("%"),
 ]);
 
-const SQLColumnReferenceSchema = z.object({
+const SQLColumnReferenceSchema: z.ZodType<SQLColumnReference> = z.object({
   type: z.literal("column"),
   name: z.string(),
 });
 
-const SQLValueSchema = z.object({
+const SQLValueSchema: z.ZodType<SQLValue> = z.object({
   type: z.literal("value"),
   value: z.number(),
 });
 
-const SQLExpressionSchema: z.ZodTypeAny = z.lazy(() =>
-  z.discriminatedUnion("type", [
-    SQLColumnReferenceSchema,
-    SQLValueSchema,
-    z.object({
-      type: z.literal("operation"),
-      operator: SQLOperatorSchema,
-      operands: z.array(SQLExpressionSchema),
-    }),
-    z.object({
-      type: z.literal("brackets"),
-      expression: SQLExpressionSchema,
-    }),
-  ])
-);
+const SQLOperationSchema: z.ZodType<SQLOperation> = z.object({
+  type: z.literal("operation"),
+  operator: SQLOperatorSchema,
+  operands: z.array(SQLComputedColumnAstSchema),
+});
+
+const SQLBracketsSchema: z.ZodType<SQLBrackets> = z.object({
+  type: z.literal("brackets"),
+  expression: SQLComputedColumnAstSchema,
+});
 
 const computedColumnSchema = z.object({
   name: z.string(),
-  expression: SQLExpressionSchema,
+  expression: SQLComputedColumnAstSchema,
 });
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;

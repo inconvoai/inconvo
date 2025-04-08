@@ -10,8 +10,7 @@ export function generateComputedColumnAsSQL(
     case "column":
       return sql`${drizzleSchema[tableName][expression.name]}`.mapWith(Number);
     case "value":
-      // The value is injected as a SQL parameter.
-      return sql`${expression.value}`.mapWith(Number);
+      return sql.raw(`${expression.value}`).mapWith(Number);
     case "operation": {
       // Recursively convert each operand.
       const operandSQLs = expression.operands.map((operand) =>

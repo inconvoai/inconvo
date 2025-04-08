@@ -33,11 +33,7 @@ export async function getDb() {
       mode: "default",
     });
   } else if (env.DATABASE_DIALECT === "postgresql") {
-    const pgConn =
-      globalForDb.pgConn ??
-      postgres(env.INCONVO_DATABASE_URL, {
-        ssl: { rejectUnauthorized: false },
-      });
+    const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
     if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
     db = drizzlePostgres(pgConn, {
       schema: drizzleSchema,

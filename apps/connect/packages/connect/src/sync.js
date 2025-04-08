@@ -22,7 +22,8 @@ function getDrizzlePath() {
 
 function runDrizzleCommand(command, drizzlePath) {
   try {
-    return execSync(`npx drizzle-kit ${command}`, {
+    const configPath = path.join(drizzlePath, "drizzle.config.js");
+    return execSync(`npx drizzle-kit ${command} --config=${configPath}`, {
       env: process.env,
       cwd: drizzlePath,
       stdio: "inherit",
@@ -60,7 +61,7 @@ function compileSchemas(drizzlePath) {
       console.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-
+    console.log("Drizzle path", drizzlePath);
     // Run drizzle-kit pull to generate the schema
     runDrizzleCommand("pull", drizzlePath);
     console.log("Schema pulled successfully.");

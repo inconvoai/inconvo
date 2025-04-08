@@ -25,6 +25,7 @@
     "@mantine/core": "^7.17.2",
     "@mantine/form": "^7.17.2",
     "@mantine/hooks": "^7.17.2",
+    "@monaco-editor/react": "^4.7.0",
     "@prisma/adapter-pg": "^6.5.0",
     "@prisma/client": "^6.5.0",
     "@propelauth/node": "^2.1.31",

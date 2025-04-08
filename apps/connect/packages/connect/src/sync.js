@@ -11,11 +11,8 @@ dotenv.config({ path: path.join(userProjectDir, ".env") });
 
 function getDrizzlePath() {
   try {
-    const drizzleKit = require.resolve("drizzle-kit");
-    if (process.env.NODE_ENV === "production") {
-      return path.resolve(drizzleKit, "../../../");
-    }
-    return path.resolve(drizzleKit, "../../../packages/connect");
+    const drizzleKit = require.resolve("@ten-dev/inconvo/express");
+    return path.resolve(drizzleKit, "../../../");
   } catch (e) {
     console.error("Drizzle kit package not found");
     console.error(e);
@@ -25,7 +22,6 @@ function getDrizzlePath() {
 
 function runDrizzleCommand(command, drizzlePath) {
   try {
-    console.log(`Running: npx drizzle-kit ${command} in ${drizzlePath}`);
     return execSync(`npx drizzle-kit ${command}`, {
       env: process.env,
       cwd: drizzlePath,
@@ -39,7 +35,7 @@ function runDrizzleCommand(command, drizzlePath) {
 function compileSchemas(drizzlePath) {
   try {
     console.log("Compiling Drizzle schemas to JavaScript...");
-    const drizzleDir = path.join(drizzlePath, "drizzle");
+    const drizzleDir = path.join(drizzlePath, "../drizzle");
     execSync(
       `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
         drizzleDir,
@@ -68,8 +64,7 @@ function compileSchemas(drizzlePath) {
     // Run drizzle-kit pull to generate the schema
     runDrizzleCommand("pull", drizzlePath);
     console.log("Schema pulled successfully.");
-
-    // Compile the TypeScript schemas to JavaScript
+    console.log("Compiling TypeScript schemas...");
     const compiled = compileSchemas(drizzlePath);
     if (!compiled) {
       console.warn(

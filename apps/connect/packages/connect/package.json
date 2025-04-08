@@ -1,6 +1,6 @@
 {
   "name": "@ten-dev/inconvo",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
@@ -20,12 +20,12 @@
   },
   "exports": {
     "./express": {
-      "require": "./dist/express/index.js",
-      "import": "./dist/express/index.js"
+      "require": "./dist/src/express/index.js",
+      "import": "./dist/src/express/index.js"
     },
     "./next": {
-      "require": "./dist/next/index.js",
-      "import": "./dist/next/index.js"
+      "require": "./dist/src/next/index.js",
+      "import": "./dist/src/next/index.js"
     }
   },
   "files": [
@@ -61,7 +61,8 @@
     "entry": [
       "src/express/index.ts",
       "src/next/index.ts",
-      "src/server/index.ts"
+      "src/server/index.ts",
+      "drizzle.config.ts"
     ],
     "minify": true,
     "bundle": true,
@@ -70,6 +71,6 @@
     "dts": true,
     "css": true,
     "outDir": "dist",
-    "onSuccess": "cp src/sync.js dist/sync.js && cp drizzle.config.js dist/drizzle.config.js"
+    "onSuccess": "cp src/sync.js dist/sync.js"
   }
 }

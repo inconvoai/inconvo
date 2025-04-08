@@ -2,7 +2,7 @@ import path from "path";
 
 export async function loadDrizzleSchema(): Promise<Record<string, any>> {
   try {
-    const basePath = "../../drizzle";
+    const basePath = "../../../drizzle";
 
     const schemaJsPath = path.join(basePath, "schema.js");
     const relationsJsPath = path.join(basePath, "relations.js");

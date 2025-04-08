@@ -1,19 +1,18 @@
 import { Request, Response, Router } from "express";
-import { authenticated } from "./middlewares";
-import { QuerySchema } from "../types/querySchema";
+import { authenticated } from "~/express/middlewares";
+import { QuerySchema } from "~/types/querySchema";
 import { ZodError } from "zod";
-import { getPrismaClient } from "../prismaClient";
-import { count } from "~/operations/count/index";
-import { groupBy } from "~/operations/groupBy";
-import { findMany } from "~/operations/findMany";
-import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
-import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
-import { averageDurationBetweenTwoDates } from "~/operations/averageDurationBetweenTwoDates";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate/index";
-import { countRelations } from "~/operations/countRelations/index";
-import { findDistinct } from "~/operations/findDistinct/index";
-import packageJson from "../../package.json";
+import { findMany } from "~/operations/findMany/index";
+import { count } from "~/operations/count";
+import { countRelations } from "~/operations/countRelations";
+import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
+import { groupBy } from "~/operations/groupBy";
+import { findDistinct } from "~/operations/findDistinct";
+import { getDb } from "~/dbConnection";
+import packageJson from "~/../../package.json";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) =>
@@ -21,13 +20,13 @@ function safeJsonStringify(value: unknown): string {
   );
 }
 
-export function inconvo() {
+export async function inconvo() {
   const router = Router();
   router.use(authenticated);
 
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     try {
-      const schema = buildSchema();
+      const schema = await buildSchema();
       res.setHeader("Content-Type", "application/json");
       res.send(safeJsonStringify(schema));
     } catch (error) {
@@ -44,35 +43,38 @@ export function inconvo() {
 
   router.post("/", async (req: Request, res: Response) => {
     try {
-      const prisma = getPrismaClient();
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;
+      const db = await getDb();
 
       let response;
-
-      if (operation === "findMany") {
-        response = await findMany(prisma, parsedQuery);
-      } else if (operation === "findDistinct") {
-        response = await findDistinct(prisma, parsedQuery);
-      } else if (operation === "count") {
-        response = await count(prisma, parsedQuery);
-      } else if (operation === "countRelations") {
-        response = await countRelations(prisma, parsedQuery);
-      } else if (operation === "aggregate") {
-        response = await aggregate(prisma, parsedQuery);
-      } else if (operation === "groupBy") {
-        response = await groupBy(prisma, parsedQuery);
-      } else if (operation === "aggregateByDateInterval") {
-        response = await aggregateByDateInterval(prisma, parsedQuery);
-      } else if (operation === "countByTemporalComponent") {
-        response = await countByTemporalComponent(prisma, parsedQuery);
-      } else if (operation === "averageDurationBetweenTwoDates") {
-        response = await averageDurationBetweenTwoDates(prisma, parsedQuery);
-      } else {
-        return res
-          .status(400)
-          .setHeader("Content-Type", "application/json")
-          .send(safeJsonStringify({ error: "Invalid operation" }));
+      switch (operation) {
+        case "aggregate":
+          response = await aggregate(db, parsedQuery);
+          break;
+        case "aggregateByDateInterval":
+          response = await aggregateByDateInterval(db, parsedQuery);
+          break;
+        case "count":
+          response = await count(db, parsedQuery);
+          break;
+        case "countByTemporalComponent":
+          response = await countByTemporalComponent(db, parsedQuery);
+          break;
+        case "countRelations":
+          response = await countRelations(db, parsedQuery);
+          break;
+        case "findDistinct":
+          response = await findDistinct(db, parsedQuery);
+          break;
+        case "findMany":
+          response = await findMany(db, parsedQuery);
+          break;
+        case "groupBy":
+          response = await groupBy(db, parsedQuery);
+          break;
+        default:
+          throw new Error("Invalid inconvo operation");
       }
 
       res.setHeader("Content-Type", "application/json");

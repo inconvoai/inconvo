@@ -1,74 +1,71 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { count } from "~/operations/count";
+import { getDb } from "~/dbConnection";
 
 test("How many lineitems are there with a profit of over $800", async () => {
   const iql = {
     table: "fct_order_lineitem",
     computedColumns: [
       {
-        name: "profit",
-        ast: {
-          mathjs: "OperatorNode",
-          op: "*",
-          fn: "multiply",
-          args: [
+        name: "profit_",
+        expression: {
+          type: "operation",
+          operator: "*",
+          operands: [
             {
-              mathjs: "SymbolNode",
+              type: "column",
               name: "num_orders",
             },
             {
-              mathjs: "ParenthesisNode",
-              content: {
-                mathjs: "OperatorNode",
-                op: "+",
-                fn: "add",
-                args: [
-                  {
-                    mathjs: "OperatorNode",
-                    op: "+",
-                    fn: "add",
-                    args: [
-                      {
-                        mathjs: "SymbolNode",
-                        name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                      },
-                      {
-                        mathjs: "SymbolNode",
-                        name: "ORDER_LINEITEM_PRODUCT_TAX",
-                      },
-                    ],
-                  },
-                  {
-                    mathjs: "SymbolNode",
-                    name: "ORDER_LINEITEM_PRODUCT_COGS",
-                  },
-                ],
-              },
+              type: "operation",
+              operator: "+",
+              operands: [
+                {
+                  type: "operation",
+                  operator: "+",
+                  operands: [
+                    {
+                      type: "column",
+                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
+                    },
+                    {
+                      type: "column",
+                      name: "ORDER_LINEITEM_PRODUCT_TAX",
+                    },
+                  ],
+                },
+                {
+                  type: "column",
+                  name: "ORDER_LINEITEM_PRODUCT_COGS",
+                },
+              ],
             },
           ],
         },
-        type: "Decimal",
+        type: "number",
       },
     ],
     whereAndArray: [
       {
-        profit: {
+        profit_: {
           gt: 800,
         },
       },
     ],
     operation: "count",
     operationParameters: {
-      columns: ["unique_key"],
+      columns: ["_unique_key", "profit_"],
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await count(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await count(db, parsedQuery);
 
   expect(response).toEqual({
-    unique_key: 18,
+    _count: {
+      _unique_key: 18,
+      profit_: 18,
+    },
   });
 });

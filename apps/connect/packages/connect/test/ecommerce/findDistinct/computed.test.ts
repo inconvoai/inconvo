@@ -1,8 +1,8 @@
 import { QuerySchema } from "~/types/querySchema";
-import { countRelations } from "~/operations/countRelations";
+import { findDistinct } from "~/operations/findDistinct";
 import { getDb } from "~/dbConnection";
 
-test("What was the order with the most lineitems with an order profit of over $100", async () => {
+test("Find Unique Channel Keys for an order where profit is greater than 200", async () => {
   const iql = {
     table: "fct_order",
     computedColumns: [
@@ -38,39 +38,43 @@ test("What was the order with the most lineitems with an order profit of over $1
     whereAndArray: [
       {
         profit_: {
-          gt: 100,
+          gt: 200,
         },
       },
     ],
-    operation: "countRelations",
+    operation: "findDistinct",
     operationParameters: {
-      columns: ["_unique_key", "store_key", "profit_"],
-      relationsToCount: [
-        {
-          name: "fct_order_lineitems",
-          distinct: null,
-        },
-      ],
-      orderBy: {
-        relation: "fct_order_lineitems",
-        direction: "desc",
-      },
-      limit: 1,
+      column: "CHANNEL_KEY",
     },
   };
 
   const parsedQuery = QuerySchema.parse(iql);
   const db = await getDb();
-  const response = await countRelations(db, parsedQuery);
+  const response = await findDistinct(db, parsedQuery);
 
-  const answer = [
-    {
-      _unique_key: "5484008702256",
-      store_key: "25824624728",
-      fct_order_lineitemsCount: 3,
-      profit_: 163,
-    },
-  ];
+  expect(response.length).toBeLessThanOrEqual(250);
+  expect(response.length).toBe(20);
 
-  expect(response).toEqual(answer);
-}, 10000);
+  expect(response).toEqual([
+    { CHANNEL_KEY: 101 },
+    { CHANNEL_KEY: 1000 },
+    { CHANNEL_KEY: 302 },
+    { CHANNEL_KEY: 1303 },
+    { CHANNEL_KEY: 102 },
+    { CHANNEL_KEY: 1411 },
+    { CHANNEL_KEY: 901 },
+    { CHANNEL_KEY: 202 },
+    { CHANNEL_KEY: 1 },
+    { CHANNEL_KEY: 402 },
+    { CHANNEL_KEY: 1100 },
+    { CHANNEL_KEY: 404 },
+    { CHANNEL_KEY: 1404 },
+    { CHANNEL_KEY: 900 },
+    { CHANNEL_KEY: 702 },
+    { CHANNEL_KEY: 703 },
+    { CHANNEL_KEY: 1400 },
+    { CHANNEL_KEY: 1101 },
+    { CHANNEL_KEY: 1304 },
+    { CHANNEL_KEY: 103 },
+  ]);
+});

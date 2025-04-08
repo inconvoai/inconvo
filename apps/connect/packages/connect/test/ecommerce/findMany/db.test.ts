@@ -1,6 +1,6 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { findMany } from "~/operations/findMany/index";
+import { getDb } from "~/dbConnection";
 
 test("Which order has generated the most revenue?", async () => {
   const iql = {
@@ -9,8 +9,8 @@ test("Which order has generated the most revenue?", async () => {
     operation: "findMany",
     operationParameters: {
       columns: {
-        fct_order: ["unique_key", "ORDER_PRODUCT_GROSS_REVENUE"],
-        "fct_order.fct_order_lineitem.dim_product": ["PRODUCT_NAME"],
+        fct_order: ["_unique_key", "ORDER_PRODUCT_GROSS_REVENUE"],
+        "fct_order.fct_order_lineitems.dim_product": ["PRODUCT_NAME"],
       },
       orderBy: {
         column: "ORDER_PRODUCT_GROSS_REVENUE",
@@ -20,15 +20,15 @@ test("Which order has generated the most revenue?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await findMany(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await findMany(db, parsedQuery);
 
   expect(response).toEqual([
     {
-      unique_key: "5942455828784",
+      _unique_key: "5942455828784",
       ORDER_PRODUCT_GROSS_REVENUE: 1449,
-      fct_order_lineitem: [
+      fct_order_lineitems: [
         {
           dim_product: {
             PRODUCT_NAME: "Giraffe Toy",

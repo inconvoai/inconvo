@@ -1,6 +1,6 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { countRelations } from "~/operations/countRelations";
+import { getDb } from "~/dbConnection";
 
 test("What was the order with the most line items?", async () => {
   const iql = {
@@ -8,32 +8,30 @@ test("What was the order with the most line items?", async () => {
     whereAndArray: [],
     operation: "countRelations",
     operationParameters: {
-      columns: ["unique_key", "store_key"],
+      columns: ["_unique_key", "store_key"],
       relationsToCount: [
         {
-          name: "fct_order_lineitem",
+          name: "fct_order_lineitems",
           distinct: null,
         },
       ],
       orderBy: {
-        relation: "fct_order_lineitem",
+        relation: "fct_order_lineitems",
         direction: "desc",
       },
       limit: 1,
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await countRelations(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await countRelations(db, parsedQuery);
 
   expect(response).toEqual([
     {
-      unique_key: "5969239408944",
+      _unique_key: "5969239408944",
       store_key: "25824624728",
-      _count: {
-        fct_order_lineitem: 5,
-      },
+      fct_order_lineitemsCount: 5,
     },
   ]);
 }, 10000);

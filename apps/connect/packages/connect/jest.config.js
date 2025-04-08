@@ -8,4 +8,5 @@ module.exports = {
     "^.+.tsx?$": ["ts-jest", {}],
   },
   globalSetup: "<rootDir>/jest.global-setup.ts",
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
 };

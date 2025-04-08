@@ -1,6 +1,9 @@
 import assert from "assert";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 
-export function buildRelationalSelect(
+const tables = await loadDrizzleSchema();
+
+export function buildDrizzleRelationalSelect(
   table: string,
   columns: Record<string, string[] | null>
 ) {
@@ -11,25 +14,19 @@ export function buildRelationalSelect(
     if (!columnNames) return;
 
     const tableParts = tableName.split(".");
-    let current = selectObject;
+    const current = selectObject;
 
     // Traverse to the correct level for each part, skipping the first table name
     tableParts.slice(1).forEach((part, index) => {
       // If it's the last part, add the columns under "select"
       if (index === tableParts.length - 2) {
-        current[part] = {
-          select: columnNames.reduce<Record<string, boolean>>(
-            (acc, columnName) => {
-              acc[columnName] = true;
-              return acc;
-            },
-            {}
-          ),
-        };
-      } else {
-        // Otherwise, continue nesting "select" objects as needed
-        if (!current[part]) current[part] = { select: {} };
-        current = current[part].select;
+        current[part] = columnNames.reduce<Record<string, any>>(
+          (acc, columnName) => {
+            acc[columnName] = tables[table][columnName];
+            return acc;
+          },
+          {}
+        );
       }
     });
 
@@ -40,7 +37,7 @@ export function buildRelationalSelect(
         "Column base table must match the starting table"
       );
       columnNames.forEach((columnName) => {
-        selectObject[columnName] = true;
+        selectObject[columnName] = tables[table][columnName];
       });
     }
   });

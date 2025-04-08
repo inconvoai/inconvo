@@ -1,6 +1,6 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
+import { getDb } from "~/dbConnection";
 
 test("What are my highest revenue generating products?", async () => {
   const iql = {
@@ -32,9 +32,9 @@ test("What are my highest revenue generating products?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await groupBy(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await groupBy(db, parsedQuery);
 
   expect(response).toEqual([
     {

@@ -1,6 +1,6 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { count } from "~/operations/count";
+import { getDb } from "~/dbConnection";
 
 test("How many orders have we had?", async () => {
   const iql = {
@@ -8,15 +8,17 @@ test("How many orders have we had?", async () => {
     whereAndArray: [],
     operation: "count",
     operationParameters: {
-      columns: ["unique_key"],
+      columns: ["_unique_key"],
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await count(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await count(db, parsedQuery);
 
   expect(response).toEqual({
-    unique_key: 16144,
+    _count: {
+      _unique_key: 16144,
+    },
   });
 });

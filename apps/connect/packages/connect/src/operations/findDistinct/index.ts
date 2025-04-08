@@ -1,38 +1,42 @@
-import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
-import { findDistinctJson } from "./json";
-import { env } from "~/env";
 
-export async function findDistinct(prisma: PrismaClient, query: Query) {
+export async function findDistinct(db: any, query: Query) {
   assert(query.operation === "findDistinct", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, jsonColumnSchema } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const jsonSchemaMapForTable = jsonColumnSchema?.find(
-    (jsonCol) => jsonCol.tableName === table
-  );
+  const drizzleSchema = await loadDrizzleSchema();
 
-  const jsonColumnNames =
-    jsonSchemaMapForTable?.jsonSchema.map((col) => col.name) || [];
+  const distinctColumn = getColumnFromTable({
+    columnName: operationParameters.column,
+    tableName: table,
+    drizzleSchema,
+    computedColumns,
+  });
 
-  if (
-    jsonColumnNames.includes(operationParameters.column) &&
-    env.DRIZZLE === "TRUE"
-  ) {
-    return findDistinctJson(prisma, query);
+  const response = await db
+
+    .selectDistinct({
+      [operationParameters.column]: distinctColumn,
+    })
+    .from(drizzleSchema[table])
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    )
+    .limit(250);
+
+  if (response.length > 249) {
+    throw new Error("Find Distinct limit hit at 250");
   }
 
-  const whereObject = {
-    AND: [...(whereAndArray || [])],
-  };
-  // @ts-expect-error - We don't know the table name in advance
-  const prismaQuery: Function = prisma[table]["findMany"];
-  const response = await prismaQuery({
-    select: {
-      [operationParameters.column]: true,
-    },
-    distinct: [operationParameters.column],
-    where: whereObject,
-  });
   return response;
 }

@@ -1,224 +1,169 @@
-import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
+import { asc, avg, count, desc, eq, max, min, SQL, sum } from "drizzle-orm";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
+import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
-import { splitWhereConditions } from "../utils";
-import { groupByComputed } from "./computed";
-import { groupByJson } from "./json";
-import { env } from "~/env";
 
-export async function groupBy(prisma: PrismaClient, query: Query) {
+export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
-  const {
-    table,
-    operation,
-    whereAndArray,
-    operationParameters,
-    computedColumns,
-    jsonColumnSchema,
-  } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const computedColumnNames = computedColumns?.map((column) => column.name);
+  const drizzleSchema = await loadDrizzleSchema();
 
-  // checks everywhere in opParams except the where for the existence of a computed column
-  const computedColumnUsed = function (
-    opParams: any,
-    computedColNames: string[] | undefined
-  ) {
-    if (!computedColNames) {
-      return false;
-    }
+  const countJsonFields: [string, SQL<number | null>][] | undefined =
+    operationParameters.count?.columns.map((col) => [
+      col,
+      count(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ]);
+  const minJsonFields: [string, SQL<number | null>][] | undefined =
+    operationParameters.min?.columns.map((col) => [
+      col,
+      min(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ]);
+  const maxJsonFields: [string, SQL<number | null>][] | undefined =
+    operationParameters.max?.columns.map((col) => [
+      col,
+      max(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ]);
+  const sumJsonFields: [string, SQL<string | null>][] | undefined =
+    operationParameters.sum?.columns.map((col) => [
+      col,
+      sum(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ]);
+  const avgJsonFields: [string, SQL<string | null>][] | undefined =
+    operationParameters.avg?.columns.map((col) => [
+      col,
+      avg(
+        getColumnFromTable({
+          columnName: col,
+          tableName: table,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ]);
 
-    const { orderBy, groupBy, sum, min, max, avg } = opParams;
-    const opParamColsToCheck = [
-      ...(groupBy.map((col: any) => col.column) || []),
-      ...(sum?.columns || []),
-      ...(min?.columns || []),
-      ...(max?.columns || []),
-      ...(avg?.columns || []),
-      orderBy?.column,
-    ].filter(Boolean);
+  const selectFields: Record<string, any> = {};
 
-    return computedColNames.some((str) => opParamColsToCheck.includes(str));
-  };
-
-  const [computedWhere, _dbWhere] = splitWhereConditions(
-    computedColumns || [],
-    whereAndArray
-  );
-
-  // computed branch
-  if (
-    computedColumnUsed(operationParameters, computedColumnNames) ||
-    computedWhere.length > 0
-  ) {
-    return groupByComputed(prisma, query);
+  if (countJsonFields) {
+    selectFields["_count"] = buildJsonObjectSelect(countJsonFields);
+  }
+  if (minJsonFields) {
+    selectFields["_min"] = buildJsonObjectSelect(minJsonFields);
+  }
+  if (maxJsonFields) {
+    selectFields["_max"] = buildJsonObjectSelect(maxJsonFields);
+  }
+  if (sumJsonFields) {
+    selectFields["_sum"] = buildJsonObjectSelect(sumJsonFields);
+  }
+  if (avgJsonFields) {
+    selectFields["_avg"] = buildJsonObjectSelect(avgJsonFields);
   }
 
-  const groupByColumns = operationParameters.groupBy.map(
-    (col: any) => col.column
-  );
-  const countColumns = operationParameters.count?.columns || [];
-  const sumColumns = operationParameters.sum?.columns || [];
-  const minColumns = operationParameters.min?.columns || [];
-  const maxColumns = operationParameters.max?.columns || [];
-  const avgColumns = operationParameters.avg?.columns || [];
+  const joinEntry = Object.entries(
+    operationParameters.groupBy[0]?.join ?? {}
+  )[0];
+  const [joinTable, joinColumn] = joinEntry
+    ? joinEntry
+    : [undefined, undefined];
 
-  const operationColumns: string[] = [
-    ...groupByColumns,
-    ...countColumns,
-    ...sumColumns,
-    ...minColumns,
-    ...maxColumns,
-    ...avgColumns,
-  ];
+  const dbQuery = db
+    .select({
+      [operationParameters.groupBy[0].column]:
+        drizzleSchema[table][operationParameters.groupBy[0].column],
+      ...selectFields,
+      ...(joinTable
+        ? { [joinColumn]: drizzleSchema[joinTable][joinColumn] }
+        : {}),
+    })
+    .from(drizzleSchema[table])
+    .groupBy(
+      drizzleSchema[table][operationParameters.groupBy[0].column],
+      ...(joinTable ? [drizzleSchema[joinTable][joinColumn]] : [])
+    )
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    )
+    .orderBy(() => {
+      const column = getColumnFromTable({
+        columnName: operationParameters.orderBy.column,
+        tableName: table,
+        drizzleSchema,
+        computedColumns,
+      });
+      const direction =
+        operationParameters.orderBy.direction === "asc" ? asc : desc;
 
-  const whereColumns: string[] = whereAndArray
-    .map((where) => Object.keys(where))
-    .flat();
-
-  const jsoncolumns: string[] = (jsonColumnSchema || []).flatMap((jsonTable) =>
-    jsonTable.jsonSchema.map((jsonCol) => jsonCol.name)
-  );
-
-  const joinColumns: string[] = operationParameters.groupBy.reduce(
-    (acc: string[], column: any) => {
-      if (column.join) {
-        const tableName = Object.keys(column.join)[0];
-        const joinColumn = column.join[tableName];
-        acc.push(joinColumn);
+      switch (operationParameters.orderBy.function) {
+        case "count":
+          return direction(count(column));
+        case "sum":
+          return direction(sum(column));
+        case "min":
+          return direction(min(column));
+        case "max":
+          return direction(max(column));
+        case "avg":
+          return direction(avg(column));
+        default:
+          return direction(count(column)); // Fallback to count
       }
-      return acc;
-    },
-    []
-  );
+    })
+    .limit(operationParameters.limit);
 
-  if (
-    (operationColumns.some((col) => jsoncolumns.includes(col)) ||
-      whereColumns.some((col) => jsoncolumns.includes(col)) ||
-      joinColumns.some((col) => jsoncolumns.includes(col))) &&
-    env.DRIZZLE === "TRUE"
-  ) {
-    return groupByJson(prisma, query);
+  if (joinTable) {
+    const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(
+      table,
+      joinTable,
+      joinTable,
+      drizzleSchema
+    );
+    dbQuery.leftJoin(
+      drizzleSchema[joinTable],
+      eq(
+        drizzleSchema[table][currentTableKey],
+        drizzleSchema[joinTable][relatedTableKey]
+      )
+    );
   }
 
-  // db branch
-  const groupColumns = operationParameters.groupBy.map(
-    (col: any) => col.column
-  );
-  const groupByObject = {
-    by: [...groupColumns],
-    ...(operationParameters?.count?.columns && {
-      _count: operationParameters.count.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
-          return acc;
-        },
-        {}
-      ),
-    }),
-    ...(operationParameters?.sum?.columns && {
-      _sum: operationParameters.sum.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
-          return acc;
-        },
-        {}
-      ),
-    }),
-    ...(operationParameters?.min?.columns && {
-      _min: operationParameters.min.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
-          return acc;
-        },
-        {}
-      ),
-    }),
-    ...(operationParameters?.max?.columns && {
-      _max: operationParameters.max.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
-          return acc;
-        },
-        {}
-      ),
-    }),
-    ...(operationParameters?.avg?.columns && {
-      _avg: operationParameters.avg.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
-          return acc;
-        },
-        {}
-      ),
-    }),
-  };
-
-  const groupBy = {
-    ...groupByObject,
-    [`_${operationParameters.orderBy.function}`]: {
-      [operationParameters.orderBy.column]: true,
-    },
-  };
-
-  const whereObject = {
-    AND: [...(whereAndArray || [])],
-  };
-
-  assert(
-    // @ts-ignore
-    typeof prisma[table][operation] === "function",
-    "Invalid prisma operation"
-  );
-
-  // @ts-ignore
-  const prismaQuery: Function = prisma[table][operation];
-  const response = await prismaQuery({
-    ...groupBy,
-    where: whereObject,
-    orderBy: {
-      [`_${operationParameters.orderBy.function}`]: {
-        [operationParameters.orderBy.column]:
-          operationParameters.orderBy.direction,
-      },
-    },
-    take: operationParameters.limit,
-  });
-
-  if (
-    operationParameters.groupBy.some((groupColumn: any) => groupColumn.join)
-  ) {
-    for (const column of operationParameters.groupBy) {
-      if (column.join) {
-        const tableName = Object.keys(column.join)[0];
-        const joinColumn = column.join[tableName];
-        // @ts-ignore
-        const joins = await prisma[table]["findMany"]({
-          select: {
-            [column.column]: true,
-            [tableName]: {
-              select: {
-                [joinColumn]: true,
-              },
-            },
-          },
-          where: {
-            [column.column]: {
-              in: response.map((row: any) => row[column.column]),
-            },
-          },
-          distinct: [column.column],
-        });
-
-        response.forEach((row: any) => {
-          const relation = joins.find(
-            (join: any) => join[column.column] === row[column.column]
-          );
-          row[joinColumn] = relation[tableName][joinColumn];
-        });
-      }
-    }
-  }
-
-  return response;
+  return dbQuery;
 }

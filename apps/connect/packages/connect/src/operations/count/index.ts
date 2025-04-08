@@ -1,70 +1,75 @@
-import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
+import { sql, count as dCount } from "drizzle-orm";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
-import { splitWhereConditions } from "../utils";
-import { countWithComputedColumn } from "./computed";
-import { countJson } from "./json";
-import { env } from "~/env";
+import {
+  getColumnFromCTE,
+  getColumnFromTable,
+} from "../utils/getColumnFromTable";
 
-export async function count(prisma: PrismaClient, query: Query) {
+export async function count(db: any, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
-  const {
-    table,
-    operation,
-    whereAndArray,
-    operationParameters,
-    computedColumns,
-    jsonColumnSchema,
-  } = query;
+  const { table, whereAndArray, operationParameters, computedColumns } = query;
 
-  const [computedWhere, dbWhere] = splitWhereConditions(
-    computedColumns || [],
-    whereAndArray
-  );
-
-  if (computedWhere.length > 0) {
-    return countWithComputedColumn(prisma, query);
-  }
+  const drizzleSchema = await loadDrizzleSchema();
 
   const columnNames = operationParameters.columns;
-  const jsonColumnSchemaEntry = jsonColumnSchema?.find(
-    (x) => x.tableName === table
-  );
-  const jsonColumnNames = jsonColumnSchemaEntry
-    ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
-    : [];
 
-  if (
-    jsonColumnSchema &&
-    columnNames.some((col) => jsonColumnNames.includes(col)) &&
-    env.DRIZZLE === "TRUE"
-  ) {
-    return countJson(prisma, query);
+  const selectQuery: Record<string, any> = {};
+  for (const name of columnNames) {
+    selectQuery[name] = sql`${getColumnFromTable({
+      columnName: name,
+      tableName: table,
+      drizzleSchema,
+      computedColumns,
+    })}`.as(name);
   }
 
-  const selectObject = operationParameters.columns
-    ? operationParameters?.columns.reduce(
-        (acc: Record<string, boolean>, column) => {
-          acc[column] = true;
+  const tmpTable = db.$with("tmpTable").as(
+    db
+      .select(selectQuery)
+      .from(drizzleSchema[table])
+      .where((columns: Record<string, unknown>) =>
+        parsePrismaWhere({
+          drizzleSchema,
+          tableName: table,
+          where: whereAndArray,
+          columns,
+          computedColumns: computedColumns,
+        })
+      )
+  );
+
+  const aggregateSelect = columnNames.reduce((acc, column) => {
+    const colSelect = {
+      [`count_${column}`]: dCount(
+        getColumnFromCTE({ cte: tmpTable, columnName: column })
+      ).as(`count_${column}`),
+    };
+    return { ...acc, ...colSelect };
+  }, {});
+
+  const response = (await db
+    .with(tmpTable)
+    .select(aggregateSelect)
+    .from(tmpTable)) as any;
+
+  const formattedResponse = response[0]
+    ? Object.keys(response[0]).reduce(
+        (
+          acc: {
+            _count: { [key: string]: any };
+          },
+          key
+        ) => {
+          if (key.startsWith("count_"))
+            acc._count[key.replace("count_", "")] = response[0][key];
           return acc;
         },
-        {}
+        { _count: {} }
       )
-    : undefined;
+    : {};
 
-  assert(
-    // @ts-expect-error - We don't know the table name in advance
-    typeof prisma[table][operation] === "function",
-    "Invalid prisma operation"
-  );
-  // @ts-expect-error
-  const prismaQuery: Function = prisma[table][operation];
-  const response = await prismaQuery({
-    select: selectObject,
-    where: {
-      AND: [...(whereAndArray || [])],
-    },
-  });
-
-  return response;
+  return formattedResponse;
 }

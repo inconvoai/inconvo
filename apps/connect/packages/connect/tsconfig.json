@@ -2,8 +2,8 @@
   "compilerOptions": {
     "resolveJsonModule": true,
     "target": "ESNext",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
@@ -19,6 +19,6 @@
       "~/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "test/**/*"],
+  "include": ["src/**/*", "test/**/*", "drizzle.config.ts"],
   "exclude": ["node_modules"]
 }

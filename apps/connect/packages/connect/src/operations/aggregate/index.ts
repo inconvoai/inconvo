@@ -1,113 +1,127 @@
-import { type PrismaClient } from "@prisma/client";
 import { type Query } from "~/types/querySchema";
-import { splitWhereConditions } from "../utils";
-import { aggregateWithComputedColumn } from "./computed";
-import { aggregateJson } from "./json";
+import { avg, min, sql, sum, max, count, SQL } from "drizzle-orm";
+import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
+import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
-import { env } from "~/env";
 
-export async function aggregate(prisma: PrismaClient, query: Query) {
+type AggregateTypes = "avg" | "sum" | "min" | "max" | "median" | "count";
+type AggregateResult = {
+  _avg?: Record<string, number>;
+  _sum?: Record<string, number>;
+  _min?: Record<string, number>;
+  _max?: Record<string, number>;
+  _median?: Record<string, number>;
+  _count?: Record<string, number>;
+};
+
+export async function aggregate(db: any, query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
   const {
-    table,
-    operation,
+    table: tableName,
     whereAndArray,
     operationParameters,
     computedColumns,
-    jsonColumnSchema,
   } = query;
 
-  const computedColumnNames = computedColumns?.map((column) => column.name);
-  const jsonColumnSchemaEntry = jsonColumnSchema?.find(
-    (x) => x.tableName === table
-  );
-  const jsonColumnNames = jsonColumnSchemaEntry
-    ? jsonColumnSchemaEntry.jsonSchema.map((column) => column.name)
-    : [];
+  const drizzleSchema = await loadDrizzleSchema();
 
-  const columnNames = [
-    ...(operationParameters.avg ?? []),
-    ...(operationParameters.sum ?? []),
-    ...(operationParameters.min ?? []),
-    ...(operationParameters.max ?? []),
-    ...(operationParameters.count ?? []),
-    ...(operationParameters.median ?? []),
-  ];
-
-  const [computedWhere, _dbWhere] = splitWhereConditions(
-    computedColumns || [],
-    whereAndArray
-  );
-
-  const computedColumnUsed = !computedColumnNames
-    ? false
-    : columnNames.some((col) => computedColumnNames.includes(col));
-
-  if (computedColumnUsed || computedWhere.length > 0) {
-    return aggregateWithComputedColumn(prisma, query);
-  }
-
-  if (
-    jsonColumnSchema &&
-    columnNames.some((col) => jsonColumnNames.includes(col)) &&
-    env.DRIZZLE === "TRUE"
-  ) {
-    return aggregateJson(prisma, query);
-  }
-
-  const createColumnObject = (columns: string[] | null) => {
-    if (!columns) return {};
-    return columns.reduce((acc: { [key: string]: boolean }, column: string) => {
-      acc[column] = true;
-      return acc;
-    }, {});
+  const aggregateFunctions: Record<AggregateTypes, (column: string) => any> = {
+    avg: (column) =>
+      avg(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`avg_${column}`),
+    sum: (column) =>
+      sum(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`sum_${column}`),
+    min: (column) =>
+      min(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`min_${column}`),
+    max: (column) =>
+      max(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`max_${column}`),
+    count: (column) =>
+      count(
+        getColumnFromTable({
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ).as(`count_${column}`),
+    median: (column) =>
+      sql<number>`cast(percentile_cont(0.5) within group (order by ${getColumnFromTable(
+        {
+          columnName: column,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        }
+      )}) as Numeric)`
+        .mapWith(Number)
+        .as(`median_${column}`),
   };
 
-  const aggregateObject = {
-    ...(operationParameters.avg
-      ? { _avg: createColumnObject(operationParameters.avg) }
-      : {}),
-    ...(operationParameters.sum
-      ? { _sum: createColumnObject(operationParameters.sum) }
-      : {}),
-    ...(operationParameters.min
-      ? { _min: createColumnObject(operationParameters.min) }
-      : {}),
-    ...(operationParameters.max
-      ? { _max: createColumnObject(operationParameters.max) }
-      : {}),
-    ...(operationParameters.count
-      ? { _count: createColumnObject(operationParameters.count) }
-      : {}),
-  };
-
-  // @ts-expect-error - We don't know the table name in advance
-  const prismaQuery: Function = prisma[table][operation];
-  const response = await prismaQuery({
-    ...aggregateObject,
-    where: { AND: [...(whereAndArray || [])] },
-  });
-
-  if (operationParameters.median) {
-    // @ts-expect-error - We don't know the table name in advance
-    const medianFm = await prisma[table]["findMany"]({
-      select: createColumnObject(operationParameters.median),
-      where: { AND: [...(whereAndArray || [])] },
+  const aggregateSelect: Record<string, any> = {};
+  Object.entries(operationParameters)
+    .filter(([_, value]) => Array.isArray(value) && value !== null)
+    .forEach(([type, columns]) => {
+      if (type in aggregateFunctions && Array.isArray(columns)) {
+        columns.forEach((column) => {
+          const aggFunction = aggregateFunctions[type as AggregateTypes];
+          aggregateSelect[`${type}_${column}`] = aggFunction(column);
+        });
+      }
     });
-    const median = operationParameters.median.reduce((acc, column) => {
-      const sorted = medianFm
-        .map((x: any) => x[column])
-        .sort((a: number, b: number) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      return {
-        ...acc,
-        [column]:
-          sorted.length % 2 !== 0
-            ? sorted[mid]
-            : (sorted[mid - 1] + sorted[mid]) / 2,
-      };
-    }, {});
-    response._median = median;
-  }
-  return response;
+
+  const response = await db
+    .select(aggregateSelect)
+    .from(drizzleSchema[tableName])
+    .where((columns: Record<string, SQL>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        columns,
+        tableName,
+        where: whereAndArray,
+        computedColumns,
+      })
+    );
+
+  return Object.keys(response[0]).reduce((acc: AggregateResult, key) => {
+    const aggregateType = Object.keys(aggregateFunctions).find((type) =>
+      key.startsWith(`${type}_`)
+    );
+    if (aggregateType) {
+      const column = key.substring(aggregateType.length + 1); // +1 for the underscore
+      const resultKey = `_${aggregateType}` as keyof AggregateResult;
+      if (!acc[resultKey]) {
+        acc[resultKey] = {};
+      }
+      (acc[resultKey] as Record<string, number>)[column] = response[0][key];
+    }
+    return acc;
+  }, {});
 }

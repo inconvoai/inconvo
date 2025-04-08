@@ -59,5 +59,9 @@ prisma/generated/
 # Prisma Introspect
 prisma/schema/introspected.prisma
 
-drizzle/schema.js
+
+drizzle/*.sql
+drizzle/*.js
+drizzle/meta/
+drizzle_phr/
 

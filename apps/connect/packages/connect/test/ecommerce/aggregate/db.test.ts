@@ -1,6 +1,6 @@
-import { getPrismaClient } from "~/prismaClient";
 import { QuerySchema } from "~/types/querySchema";
 import { aggregate } from "~/operations/aggregate";
+import { getDb } from "~/dbConnection";
 
 test("What is the most gross revenue we have made on an order?", async () => {
   const iql = {
@@ -17,16 +17,16 @@ test("What is the most gross revenue we have made on an order?", async () => {
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregate(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await aggregate(db, parsedQuery);
 
   expect(response).toEqual({
     _avg: {
-      ORDER_PRODUCT_GROSS_REVENUE: 129.62413280475718,
+      ORDER_PRODUCT_GROSS_REVENUE: "129.6241328047571853",
     },
     _sum: {
-      ORDER_PRODUCT_GROSS_REVENUE: 2092652,
+      ORDER_PRODUCT_GROSS_REVENUE: "2092652",
     },
     _min: {
       ORDER_PRODUCT_GROSS_REVENUE: 0,
@@ -61,16 +61,16 @@ test("What is the most gross revenue we made on an order which was priced over $
     },
   };
 
-  const prisma = getPrismaClient();
   const parsedQuery = QuerySchema.parse(iql);
-  const response = await aggregate(prisma, parsedQuery);
+  const db = await getDb();
+  const response = await aggregate(db, parsedQuery);
 
   expect(response).toEqual({
     _avg: {
-      ORDER_PRODUCT_GROSS_REVENUE: 215.8875,
+      ORDER_PRODUCT_GROSS_REVENUE: "215.8875000000000000",
     },
     _sum: {
-      ORDER_PRODUCT_GROSS_REVENUE: 1761642,
+      ORDER_PRODUCT_GROSS_REVENUE: "1761642",
     },
     _min: {
       ORDER_PRODUCT_GROSS_REVENUE: 0,

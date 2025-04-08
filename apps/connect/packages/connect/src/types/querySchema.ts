@@ -94,7 +94,7 @@ const SQLBracketsSchema: z.ZodType<SQLBrackets> = z.object({
 
 const computedColumnSchema = z.object({
   name: z.string(),
-  expression: SQLComputedColumnAstSchema,
+  ast: SQLComputedColumnAstSchema,
 });
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;

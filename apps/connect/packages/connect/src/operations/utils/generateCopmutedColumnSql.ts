@@ -2,7 +2,7 @@ import { SQL, sql } from "drizzle-orm";
 import { ComputedColumn } from "~/types/querySchema";
 
 export function generateComputedColumnAsSQL(
-  expression: ComputedColumn["expression"],
+  expression: ComputedColumn["ast"],
   tableName: string,
   drizzleSchema: Record<string, any>
 ): SQL<number> {

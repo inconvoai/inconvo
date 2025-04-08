@@ -26,7 +26,7 @@ export function getColumnFromTable({
     for (const computedColumn of computedColumns) {
       if (computedColumn.name === columnName) {
         return generateComputedColumnAsSQL(
-          computedColumn.expression,
+          computedColumn.ast,
           getTableName(tableSchema),
           drizzleSchema
         );

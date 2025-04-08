@@ -12,7 +12,10 @@ dotenv.config({ path: path.join(userProjectDir, ".env") });
 function getDrizzlePath() {
   try {
     const drizzleKit = require.resolve("drizzle-kit");
-    return path.resolve(drizzleKit, "../../../packages/connect");
+    if (process.env !== "production") {
+      return path.resolve(drizzleKit, "../../../packages/connect");
+    }
+    return path.resolve(drizzleKit, "../../../");
   } catch (e) {
     console.error("Drizzle kit package not found");
     console.error(e);

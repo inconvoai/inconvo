@@ -29,8 +29,7 @@
     }
   },
   "files": [
-    "dist",
-    "drizzle"
+    "dist"
   ],
   "author": "",
   "license": "UNLICENSED",

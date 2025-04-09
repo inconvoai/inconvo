@@ -1,6 +1,6 @@
 {
   "name": "@ten-dev/inconvo",
-  "version": "0.0.39",
+  "version": "0.0.40",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
@@ -45,6 +45,7 @@
     "mysql2": "^3.14.0",
     "next": "^15.2.4",
     "postgres": "^3.4.5",
+    "ts-morph": "^25.0.1",
     "typescript": "^5.8.3",
     "zod": "^3.24.2"
   },

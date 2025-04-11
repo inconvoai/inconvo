@@ -254,12 +254,14 @@ const groupBySchema = z
     operation: z.literal("groupBy"),
     operationParameters: z
       .object({
-        groupBy: z.array(
+        joins: z.array(
           z.object({
-            column: z.string(),
-            join: z.record(z.string(), z.string()).nullable(),
+            table: z.string(),
+            joinPath: z.string(),
+            joinType: z.enum(["inner", "left", "right"]),
           })
         ),
+        groupBy: z.array(z.string()),
         count: z.object({ columns: z.array(z.string()) }).nullable(),
         sum: z.object({ columns: z.array(z.string()) }).nullable(),
         min: z.object({ columns: z.array(z.string()) }).nullable(),

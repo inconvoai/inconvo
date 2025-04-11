@@ -13,18 +13,18 @@ function createAggregationFields<T>(
   drizzleSchema: any,
   computedColumns: any
 ): [string, SQL<T>][] | undefined {
-  return columns?.map((column) => {
+  return columns?.map((columnIdentifier) => {
     assert(
-      column.split(".").length === 2,
+      columnIdentifier.split(".").length === 2,
       "Invalid column format for aggregation (not table.column)"
     );
-    const [table, col] = column.split(".");
+    const [tableName, columnName] = columnIdentifier.split(".");
     return [
-      col,
+      columnName,
       aggregationFn(
         getColumnFromTable({
-          columnName: col,
-          tableName: table,
+          columnName,
+          tableName,
           drizzleSchema,
           computedColumns,
         })
@@ -93,31 +93,31 @@ export async function groupBy(db: any, query: Query) {
   }
 
   const groupBySelectFields: Record<string, any> =
-    operationParameters.groupBy.reduce((acc, gbColumn) => {
+    operationParameters.groupBy.reduce((acc, columnIdentifier) => {
       assert(
-        gbColumn.split(".").length === 2,
+        columnIdentifier.split(".").length === 2,
         "Invalid column format for group by (not table.column)"
       );
-      const [table, col] = gbColumn.split(".");
+      const [tableName, columnName] = columnIdentifier.split(".");
       const column = getColumnFromTable({
-        columnName: col,
-        tableName: table,
+        columnName,
+        tableName,
         drizzleSchema,
         computedColumns,
       });
-      acc[col] = column;
+      acc[columnName] = column;
       return acc;
     }, {} as Record<string, any>);
 
-  const groupByColumns = operationParameters.groupBy.map((gbColumn) => {
+  const groupByColumns = operationParameters.groupBy.map((columnIdentifier) => {
     assert(
-      gbColumn.split(".").length === 2,
+      columnIdentifier.split(".").length === 2,
       "Invalid column format for group by (not table.column)"
     );
-    const [table, col] = gbColumn.split(".");
+    const [tableName, columnName] = columnIdentifier.split(".");
     return getColumnFromTable({
-      columnName: col,
-      tableName: table,
+      columnName,
+      tableName,
       drizzleSchema,
       computedColumns,
     });
@@ -147,8 +147,8 @@ export async function groupBy(db: any, query: Query) {
       const [tableName, columnName] =
         operationParameters.orderBy.column.split(".");
       const column = getColumnFromTable({
-        columnName: columnName,
-        tableName: tableName,
+        columnName,
+        tableName,
         drizzleSchema,
         computedColumns,
       });

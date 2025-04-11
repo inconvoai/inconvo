@@ -60,8 +60,6 @@ prisma/generated/
 prisma/schema/introspected.prisma
 
 
-drizzle/*.sql
-drizzle/*.js
-drizzle/meta/
+drizzle/
 drizzle_phr/
 

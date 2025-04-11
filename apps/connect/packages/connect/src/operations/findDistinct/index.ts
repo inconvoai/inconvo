@@ -32,10 +32,10 @@ export async function findDistinct(db: any, query: Query) {
         computedColumns: computedColumns,
       })
     )
-    .limit(250);
+    .limit(500);
 
-  if (response.length > 249) {
-    throw new Error("Find Distinct limit hit at 250");
+  if (response.length > 499) {
+    throw new Error("Find Distinct limit hit at 500");
   }
 
   return response;

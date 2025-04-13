@@ -20,7 +20,7 @@ function createAggregationFields<T>(
     );
     const [tableName, columnName] = columnIdentifier.split(".");
     return [
-      columnName,
+      `${tableName}.${columnName}`,
       aggregationFn(
         getColumnFromTable({
           columnName,
@@ -105,7 +105,7 @@ export async function groupBy(db: any, query: Query) {
         drizzleSchema,
         computedColumns,
       });
-      acc[columnName] = column;
+      acc[`${tableName}.${columnName}`] = column;
       return acc;
     }, {} as Record<string, any>);
 

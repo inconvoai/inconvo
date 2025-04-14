@@ -1,12 +1,10 @@
 import { type Query } from "~/types/querySchema";
-import { sql, count as dCount } from "drizzle-orm";
+import { count as dCount, SQL } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
-import {
-  getColumnFromCTE,
-  getColumnFromTable,
-} from "../utils/getColumnFromTable";
+import { getColumnFromTable } from "../utils/getColumnFromTable";
+import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 
 export async function count(db: any, query: Query) {
   assert(query.operation === "count", "Invalid inconvo operation");
@@ -14,62 +12,37 @@ export async function count(db: any, query: Query) {
 
   const drizzleSchema = await loadDrizzleSchema();
 
-  const columnNames = operationParameters.columns;
+  const countColumns: [string, SQL<unknown>][] =
+    operationParameters.columns.map((columnName) => {
+      return [
+        columnName,
+        dCount(
+          getColumnFromTable({
+            columnName,
+            tableName: table,
+            drizzleSchema,
+            computedColumns,
+          })
+        ),
+      ];
+    });
 
-  const selectQuery: Record<string, any> = {};
-  for (const name of columnNames) {
-    selectQuery[name] = sql`${getColumnFromTable({
-      columnName: name,
-      tableName: table,
-      drizzleSchema,
-      computedColumns,
-    })}`.as(name);
-  }
+  const dbQuery = db
+    .select({
+      ["_count"]: buildJsonObjectSelect(countColumns),
+    })
+    .from(drizzleSchema[table])
+    .where((columns: Record<string, unknown>) =>
+      parsePrismaWhere({
+        drizzleSchema,
+        tableName: table,
+        where: whereAndArray,
+        columns,
+        computedColumns: computedColumns,
+      })
+    );
 
-  const tmpTable = db.$with("tmpTable").as(
-    db
-      .select(selectQuery)
-      .from(drizzleSchema[table])
-      .where((columns: Record<string, unknown>) =>
-        parsePrismaWhere({
-          drizzleSchema,
-          tableName: table,
-          where: whereAndArray,
-          columns,
-          computedColumns: computedColumns,
-        })
-      )
-  );
+  const response = await dbQuery;
 
-  const aggregateSelect = columnNames.reduce((acc, column) => {
-    const colSelect = {
-      [`count_${column}`]: dCount(
-        getColumnFromCTE({ cte: tmpTable, columnName: column })
-      ).as(`count_${column}`),
-    };
-    return { ...acc, ...colSelect };
-  }, {});
-
-  const response = (await db
-    .with(tmpTable)
-    .select(aggregateSelect)
-    .from(tmpTable)) as any;
-
-  const formattedResponse = response[0]
-    ? Object.keys(response[0]).reduce(
-        (
-          acc: {
-            _count: { [key: string]: any };
-          },
-          key
-        ) => {
-          if (key.startsWith("count_"))
-            acc._count[key.replace("count_", "")] = response[0][key];
-          return acc;
-        },
-        { _count: {} }
-      )
-    : {};
-
-  return formattedResponse;
+  return response[0];
 }

@@ -164,6 +164,26 @@ const countSchema = z
   })
   .strict();
 
+const countWithJoinSchema = z
+  .object({
+    ...baseSchema,
+    operation: z.literal("countWithJoin"),
+
+    operationParameters: z
+      .object({
+        joins: z.array(
+          z.object({
+            table: z.string(),
+            joinPath: z.string(),
+            joinType: z.enum(["inner", "left", "right"]),
+          })
+        ),
+        count: z.array(z.string()),
+      })
+      .strict(),
+  })
+  .strict();
+
 const countRelationsSchema = z
   .object({
     ...baseSchema,
@@ -254,12 +274,16 @@ const groupBySchema = z
     operation: z.literal("groupBy"),
     operationParameters: z
       .object({
-        groupBy: z.array(
-          z.object({
-            column: z.string(),
-            join: z.record(z.string(), z.string()).nullable(),
-          })
-        ),
+        joins: z
+          .array(
+            z.object({
+              table: z.string(),
+              joinPath: z.string(),
+              joinType: z.enum(["inner", "left", "right"]),
+            })
+          )
+          .nullable(),
+        groupBy: z.array(z.string()),
         count: z.object({ columns: z.array(z.string()) }).nullable(),
         sum: z.object({ columns: z.array(z.string()) }).nullable(),
         min: z.object({ columns: z.array(z.string()) }).nullable(),
@@ -280,6 +304,7 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   findManySchema,
   findDistinctSchema,
   countSchema,
+  countWithJoinSchema,
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,

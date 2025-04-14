@@ -7,72 +7,72 @@ import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 import { getColumnFromTable } from "../utils/getColumnFromTable";
 import assert from "assert";
 
+function createAggregationFields<T>(
+  columns: string[] | undefined,
+  aggregationFn: (column: SQL<any>) => SQL<T>,
+  drizzleSchema: any,
+  computedColumns: any
+): [string, SQL<T>][] | undefined {
+  return columns?.map((columnIdentifier) => {
+    assert(
+      columnIdentifier.split(".").length === 2,
+      "Invalid column format for aggregation (not table.column)"
+    );
+    const [tableName, columnName] = columnIdentifier.split(".");
+    return [
+      `${tableName}.${columnName}`,
+      aggregationFn(
+        getColumnFromTable({
+          columnName,
+          tableName,
+          drizzleSchema,
+          computedColumns,
+        })
+      ),
+    ];
+  });
+}
+
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
   const { table, whereAndArray, operationParameters, computedColumns } = query;
 
   const drizzleSchema = await loadDrizzleSchema();
 
-  const countJsonFields: [string, SQL<number | null>][] | undefined =
-    operationParameters.count?.columns.map((col) => [
-      col,
-      count(
-        getColumnFromTable({
-          columnName: col,
-          tableName: table,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ]);
-  const minJsonFields: [string, SQL<number | null>][] | undefined =
-    operationParameters.min?.columns.map((col) => [
-      col,
-      min(
-        getColumnFromTable({
-          columnName: col,
-          tableName: table,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ]);
-  const maxJsonFields: [string, SQL<number | null>][] | undefined =
-    operationParameters.max?.columns.map((col) => [
-      col,
-      max(
-        getColumnFromTable({
-          columnName: col,
-          tableName: table,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ]);
-  const sumJsonFields: [string, SQL<string | null>][] | undefined =
-    operationParameters.sum?.columns.map((col) => [
-      col,
-      sum(
-        getColumnFromTable({
-          columnName: col,
-          tableName: table,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ]);
-  const avgJsonFields: [string, SQL<string | null>][] | undefined =
-    operationParameters.avg?.columns.map((col) => [
-      col,
-      avg(
-        getColumnFromTable({
-          columnName: col,
-          tableName: table,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ]);
+  const countJsonFields = createAggregationFields(
+    operationParameters.count?.columns,
+    count,
+    drizzleSchema,
+    computedColumns
+  );
+
+  const minJsonFields = createAggregationFields(
+    operationParameters.min?.columns,
+    min,
+    drizzleSchema,
+    computedColumns
+  );
+
+  const maxJsonFields = createAggregationFields(
+    operationParameters.max?.columns,
+    max,
+    drizzleSchema,
+    computedColumns
+  );
+
+  const sumJsonFields = createAggregationFields(
+    operationParameters.sum?.columns,
+    sum,
+    drizzleSchema,
+    computedColumns
+  );
+
+  const avgJsonFields = createAggregationFields(
+    operationParameters.avg?.columns,
+    avg,
+    drizzleSchema,
+    computedColumns
+  );
 
   const selectFields: Record<string, any> = {};
 
@@ -92,27 +92,44 @@ export async function groupBy(db: any, query: Query) {
     selectFields["_avg"] = buildJsonObjectSelect(avgJsonFields);
   }
 
-  const joinEntry = Object.entries(
-    operationParameters.groupBy[0]?.join ?? {}
-  )[0];
-  const [joinTable, joinColumn] = joinEntry
-    ? joinEntry
-    : [undefined, undefined];
+  const groupBySelectFields: Record<string, any> =
+    operationParameters.groupBy.reduce((acc, columnIdentifier) => {
+      assert(
+        columnIdentifier.split(".").length === 2,
+        "Invalid column format for group by (not table.column)"
+      );
+      const [tableName, columnName] = columnIdentifier.split(".");
+      const column = getColumnFromTable({
+        columnName,
+        tableName,
+        drizzleSchema,
+        computedColumns,
+      });
+      acc[`${tableName}.${columnName}`] = column;
+      return acc;
+    }, {} as Record<string, any>);
+
+  const groupByColumns = operationParameters.groupBy.map((columnIdentifier) => {
+    assert(
+      columnIdentifier.split(".").length === 2,
+      "Invalid column format for group by (not table.column)"
+    );
+    const [tableName, columnName] = columnIdentifier.split(".");
+    return getColumnFromTable({
+      columnName,
+      tableName,
+      drizzleSchema,
+      computedColumns,
+    });
+  });
 
   const dbQuery = db
     .select({
-      [operationParameters.groupBy[0].column]:
-        drizzleSchema[table][operationParameters.groupBy[0].column],
+      ...groupBySelectFields,
       ...selectFields,
-      ...(joinTable
-        ? { [joinColumn]: drizzleSchema[joinTable][joinColumn] }
-        : {}),
     })
     .from(drizzleSchema[table])
-    .groupBy(
-      drizzleSchema[table][operationParameters.groupBy[0].column],
-      ...(joinTable ? [drizzleSchema[joinTable][joinColumn]] : [])
-    )
+    .groupBy(groupByColumns)
     .where((columns: Record<string, unknown>) =>
       parsePrismaWhere({
         drizzleSchema,
@@ -123,9 +140,15 @@ export async function groupBy(db: any, query: Query) {
       })
     )
     .orderBy(() => {
+      assert(
+        operationParameters.orderBy.column.split(".").length === 2,
+        "Order By column must be in the format table.column"
+      );
+      const [tableName, columnName] =
+        operationParameters.orderBy.column.split(".");
       const column = getColumnFromTable({
-        columnName: operationParameters.orderBy.column,
-        tableName: table,
+        columnName,
+        tableName,
         drizzleSchema,
         computedColumns,
       });
@@ -143,26 +166,54 @@ export async function groupBy(db: any, query: Query) {
           return direction(max(column));
         case "avg":
           return direction(avg(column));
-        default:
-          return direction(count(column)); // Fallback to count
       }
     })
     .limit(operationParameters.limit);
 
-  if (joinTable) {
-    const [currentTableKey, relatedTableKey] = findRelationsBetweenTables(
-      table,
-      joinTable,
-      joinTable,
-      drizzleSchema
-    );
-    dbQuery.leftJoin(
-      drizzleSchema[joinTable],
-      eq(
-        drizzleSchema[table][currentTableKey],
-        drizzleSchema[joinTable][relatedTableKey]
-      )
-    );
+  if (operationParameters.joins) {
+    for (const join of operationParameters.joins) {
+      const { table: joinTable, joinPath, joinType } = join;
+
+      const [currentKey, relatedKey] = findRelationsBetweenTables(
+        table,
+        joinTable,
+        joinPath.split(".").at(-1) ?? "",
+        drizzleSchema
+      );
+
+      switch (joinType) {
+        case "inner": {
+          dbQuery.innerJoin(
+            drizzleSchema[joinTable],
+            eq(
+              drizzleSchema[table][currentKey],
+              drizzleSchema[joinTable][relatedKey]
+            )
+          );
+          break;
+        }
+        case "left": {
+          dbQuery.leftJoin(
+            drizzleSchema[joinTable],
+            eq(
+              drizzleSchema[table][currentKey],
+              drizzleSchema[joinTable][relatedKey]
+            )
+          );
+          break;
+        }
+        case "right": {
+          dbQuery.rightJoin(
+            drizzleSchema[joinTable],
+            eq(
+              drizzleSchema[table][currentKey],
+              drizzleSchema[joinTable][relatedKey]
+            )
+          );
+          break;
+        }
+      }
+    }
   }
 
   return dbQuery;

@@ -12,6 +12,7 @@ import { countByTemporalComponent } from "~/operations/countByTemporalComponent"
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
 import { getDb } from "~/dbConnection";
+import { countWithJoin } from "~/operations/countWithJoin";
 import packageJson from "~/../../package.json";
 
 function safeJsonStringify(value: unknown): string {
@@ -57,6 +58,9 @@ export async function inconvo() {
           break;
         case "count":
           response = await count(db, parsedQuery);
+          break;
+        case "countWithJoin":
+          response = await countWithJoin(db, parsedQuery);
           break;
         case "countByTemporalComponent":
           response = await countByTemporalComponent(db, parsedQuery);

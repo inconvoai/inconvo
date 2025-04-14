@@ -8,7 +8,7 @@ test("How many lineitems are there with a profit of over $800", async () => {
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [

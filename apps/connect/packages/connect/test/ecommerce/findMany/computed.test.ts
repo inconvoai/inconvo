@@ -8,7 +8,7 @@ test("What are the revenues for our most profitable orders and what products wer
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "+",
           operands: [

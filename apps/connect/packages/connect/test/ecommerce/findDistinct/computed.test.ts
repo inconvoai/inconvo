@@ -8,7 +8,7 @@ test("Find Unique Channel Keys for an order where profit is greater than 200", a
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "+",
           operands: [

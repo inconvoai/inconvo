@@ -8,7 +8,7 @@ test("How many lineitems were sold each month which have a profit of over $500",
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [
@@ -87,7 +87,7 @@ test("What was the average profit per month where the profit was over $500", asy
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [

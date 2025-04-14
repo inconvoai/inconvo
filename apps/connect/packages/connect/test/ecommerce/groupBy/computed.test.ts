@@ -1,6 +1,7 @@
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
+import { table } from "console";
 
 test("What is the product with the highest total profit where the profit on sales of that product were over $100", async () => {
   const iql = {
@@ -8,7 +9,7 @@ test("What is the product with the highest total profit where the profit on sale
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [
@@ -54,24 +55,24 @@ test("What is the product with the highest total profit where the profit on sale
     ],
     operation: "groupBy",
     operationParameters: {
-      groupBy: [
+      joins: [
         {
-          column: "product_key",
-          join: {
-            dim_product: "PRODUCT_NAME",
-          },
+          table: "dim_product",
+          joinPath: "fct_order_lineitem.dim_product",
+          joinType: "inner",
         },
       ],
+      groupBy: ["fct_order_lineitem.product_key", "dim_product.PRODUCT_NAME"],
       count: null,
       sum: {
-        columns: ["profit_"],
+        columns: ["fct_order_lineitem.profit_"],
       },
       avg: null,
       min: null,
       max: null,
       orderBy: {
         function: "sum",
-        column: "profit_",
+        column: "fct_order_lineitem.profit_",
         direction: "desc",
       },
       limit: 1,
@@ -84,11 +85,11 @@ test("What is the product with the highest total profit where the profit on sale
 
   expect(response).toEqual([
     {
-      product_key: "shopify_31443282067544",
+      "fct_order_lineitem.product_key": "shopify_31443282067544",
       _sum: {
-        profit_: 205770.5833333336,
+        "fct_order_lineitem.profit_": 205770.5833333336,
       },
-      PRODUCT_NAME: "Tiger Toy",
+      "dim_product.PRODUCT_NAME": "Tiger Toy",
     },
   ]);
 });

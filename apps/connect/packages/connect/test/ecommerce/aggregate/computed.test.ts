@@ -8,7 +8,7 @@ test("What is our average profit on a lineitem?", async () => {
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [
@@ -63,16 +63,16 @@ test("What is our average profit on a lineitem?", async () => {
 
   expect(response).toEqual({
     _avg: {
-      profit_: "119.34086097368841",
+      profit_: 119.34086097368841,
     },
     _sum: {
-      profit_: "1002821.2547619037",
+      profit_: 1002821.2547619037,
     },
     _min: {
-      profit_: "-92",
+      profit_: -92,
     },
     _max: {
-      profit_: "942",
+      profit_: 942,
     },
     _count: {
       profit_: 8403,
@@ -86,7 +86,7 @@ test("How many times have we made more than $900 profit on a lineitem?", async (
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [
@@ -147,16 +147,16 @@ test("How many times have we made more than $900 profit on a lineitem?", async (
 
   expect(response).toEqual({
     _avg: {
-      profit_: "936.3333333333334",
+      profit_: 936.3333333333334,
     },
     _sum: {
-      profit_: "2809",
+      profit_: 2809,
     },
     _min: {
-      profit_: "925",
+      profit_: 925,
     },
     _max: {
-      profit_: "942",
+      profit_: 942,
     },
     _count: {
       profit_: 3,

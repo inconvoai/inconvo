@@ -8,7 +8,7 @@ test("How many lineitems have been sold per day of the week where the profit was
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "*",
           operands: [

@@ -8,7 +8,7 @@ test("What was the order with the most lineitems with an order profit of over $1
     computedColumns: [
       {
         name: "profit_",
-        expression: {
+        ast: {
           type: "operation",
           operator: "+",
           operands: [

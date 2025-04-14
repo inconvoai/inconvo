@@ -62,13 +62,24 @@ export async function aggregate(db: any, query: Query) {
       )
   );
 
-  if (avgFields) selectFields["_avg"] = buildJsonObjectSelect(avgFields);
-  if (sumFields) selectFields["_sum"] = buildJsonObjectSelect(sumFields);
-  if (minFields) selectFields["_min"] = buildJsonObjectSelect(minFields);
-  if (maxFields) selectFields["_max"] = buildJsonObjectSelect(maxFields);
-  if (countFields) selectFields["_count"] = buildJsonObjectSelect(countFields);
-  if (medianFields)
+  if (avgFields) {
+    selectFields["_avg"] = buildJsonObjectSelect(avgFields);
+  }
+  if (sumFields) {
+    selectFields["_sum"] = buildJsonObjectSelect(sumFields);
+  }
+  if (minFields) {
+    selectFields["_min"] = buildJsonObjectSelect(minFields);
+  }
+  if (maxFields) {
+    selectFields["_max"] = buildJsonObjectSelect(maxFields);
+  }
+  if (countFields) {
+    selectFields["_count"] = buildJsonObjectSelect(countFields);
+  }
+  if (medianFields) {
     selectFields["_median"] = buildJsonObjectSelect(medianFields);
+  }
 
   const response = await db
     .select(selectFields)

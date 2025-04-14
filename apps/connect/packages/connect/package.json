@@ -1,6 +1,6 @@
 {
   "name": "@ten-dev/inconvo",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
@@ -39,11 +39,11 @@
   "dependencies": {
     "@t3-oss/env-core": "^0.12.0",
     "date-fns": "^4.1.0",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "drizzle-kit": "^0.30.6",
     "drizzle-orm": "^0.41.0",
     "mysql2": "^3.14.0",
-    "next": "^15.2.4",
+    "next": "^15.3.0",
     "postgres": "^3.4.5",
     "ts-morph": "^25.0.1",
     "typescript": "^5.8.3",
@@ -53,7 +53,7 @@
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.14",
     "jest": "^29.7.0",
-    "ts-jest": "^29.3.1",
+    "ts-jest": "^29.3.2",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3"
   },

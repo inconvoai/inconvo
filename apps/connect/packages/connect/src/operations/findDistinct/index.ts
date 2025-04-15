@@ -17,7 +17,7 @@ export async function findDistinct(db: any, query: Query) {
     computedColumns,
   });
 
-  const response = await db
+  const dbQuery = db
 
     .selectDistinct({
       [operationParameters.column]: distinctColumn,
@@ -34,9 +34,10 @@ export async function findDistinct(db: any, query: Query) {
     )
     .limit(500);
 
+  const response = await dbQuery;
   if (response.length > 499) {
     throw new Error("Find Distinct limit hit at 500");
   }
 
-  return response;
+  return { query: db.toSQL(), data: response };
 }

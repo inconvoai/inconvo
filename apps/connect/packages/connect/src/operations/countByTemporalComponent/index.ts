@@ -110,5 +110,5 @@ export async function countByTemporalComponent(db: any, query: Query) {
     countByComponent[row.temporal_component] = row.count;
   });
 
-  return countByComponent;
+  return { query: dbQuery.toSQL(), data: countByComponent };
 }

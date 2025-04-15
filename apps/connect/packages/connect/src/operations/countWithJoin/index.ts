@@ -108,5 +108,6 @@ export async function countWithJoin(db: any, query: Query) {
     }
   }
 
-  return dbQuery;
+  const response = await dbQuery;
+  return { query: dbQuery.toSQL(), data: response };
 }

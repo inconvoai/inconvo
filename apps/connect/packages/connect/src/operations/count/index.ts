@@ -44,5 +44,5 @@ export async function count(db: any, query: Query) {
 
   const response = await dbQuery;
 
-  return response[0];
+  return { query: dbQuery.toSQL(), data: response[0] };
 }

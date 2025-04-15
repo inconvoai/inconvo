@@ -81,7 +81,7 @@ export async function aggregate(db: any, query: Query) {
     selectFields["_median"] = buildJsonObjectSelect(medianFields);
   }
 
-  const response = await db
+  const dbQuery = db
     .select(selectFields)
     .from(drizzleSchema[tableName])
     .where((columns: Record<string, SQL>) =>
@@ -94,5 +94,7 @@ export async function aggregate(db: any, query: Query) {
       })
     );
 
-  return response[0];
+  const sql = dbQuery.toSQL();
+  const response = await dbQuery;
+  return { query: sql, data: response[0] };
 }

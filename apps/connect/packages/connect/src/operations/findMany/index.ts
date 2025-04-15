@@ -381,5 +381,5 @@ export async function findMany(db: any, query: Query) {
   if (limit) dbQuery.limit(limit);
 
   const response = await dbQuery;
-  return response;
+  return { query: dbQuery.toSQL(), data: response };
 }

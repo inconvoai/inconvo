@@ -113,5 +113,5 @@ export async function aggregateByDateInterval(db: any, query: Query) {
     };
   });
 
-  return resultsByInterval;
+  return { query: dbQuery.toSQL(), data: resultsByInterval };
 }

@@ -135,5 +135,5 @@ export async function countRelations(db: any, query: Query) {
   }
 
   const response = await dbQuery;
-  return response.length > 0 ? response : 0;
+  return { query: dbQuery.toSQL(), data: response.length > 0 ? response : 0 };
 }

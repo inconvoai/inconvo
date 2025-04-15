@@ -16,9 +16,12 @@ import { countWithJoin } from "~/operations/countWithJoin";
 import packageJson from "~/../../package.json";
 
 function safeJsonStringify(value: unknown): string {
-  return JSON.stringify(value, (key, val) =>
-    typeof val === "bigint" ? val.toString() : val
-  );
+  return JSON.stringify(value, (key, val) => {
+    if (typeof val === "bigint") {
+      return val.toString();
+    }
+    return val;
+  });
 }
 
 export async function inconvo() {

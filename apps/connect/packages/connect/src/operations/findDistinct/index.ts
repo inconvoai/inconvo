@@ -39,5 +39,5 @@ export async function findDistinct(db: any, query: Query) {
     throw new Error("Find Distinct limit hit at 500");
   }
 
-  return { query: db.toSQL(), data: response };
+  return { query: dbQuery.toSQL(), data: response };
 }

@@ -129,7 +129,7 @@ export async function groupBy(db: any, query: Query) {
       ...selectFields,
     })
     .from(drizzleSchema[table])
-    .groupBy(groupByColumns)
+    .groupBy(...groupByColumns)
     .where((columns: Record<string, unknown>) =>
       parsePrismaWhere({
         drizzleSchema,

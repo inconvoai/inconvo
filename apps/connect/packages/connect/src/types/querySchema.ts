@@ -1,29 +1,81 @@
 import { z } from "zod";
 
-const QueryConditionSchema = z.record(
+const operatorEnum = z.enum([
+  "equals",
+  "not",
+  "none",
+  "lt",
+  "gt",
+  "in",
+  "contains",
+  "startsWith",
+  "endsWith",
+]);
+
+const valueTypes = z.union([
+  z.string(),
+  z.number(),
+  z.null(),
+  z.object({}),
+  z.boolean(),
+  z.array(z.string()),
+  z.array(z.number()),
+]);
+
+// Direct column condition (structure: { columnName: { operator: value } })
+const directColumnCondition = z.record(
+  z.string(), // column name
+  z.record(operatorEnum, valueTypes) // operator and value
+);
+
+// Relation condition structure:
+// { relationName: { filterOption: { columnName: { operator: value } } } }
+const relationCondition = z.record(
+  z.string(), // relation name
   z.record(
-    z.union([z.string(), z.number(), z.null(), z.object({}), z.boolean()])
+    z.enum(["some", "every", "none", "is", "isNot"]), // filterOption (some, every, none, is, isNot)
+    z.record(
+      z.string(), // column name
+      z.record(operatorEnum, valueTypes) // operator and value
+    )
   )
 );
 
-const QueryDateConditionSchema = z
-  .object({
-    OR: z.array(
-      z
-        .object({
-          AND: z.array(
-            z.record(z.record(z.union([z.string(), z.number(), z.null()])))
-          ),
-        })
-        .strict()
-    ),
-  })
-  .strict();
+const conditionObject = z.union([directColumnCondition, relationCondition]);
 
-const QueryWhereAndArraySchema = z.array(
-  z.union([QueryConditionSchema, QueryDateConditionSchema])
+// The full conditions object with logical operators
+export const questionConditionsSchema = z
+  .object({
+    OR: z.array(conditionObject).optional(),
+    AND: z.array(conditionObject).optional(),
+  })
+  .nullable();
+
+export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
+
+const dateConditionsQuerySchema = z.object({
+  OR: z.array(
+    z.object({
+      AND: z.array(
+        z.record(
+          z.string(), // column name
+          z.record(z.string(), z.string()) // operator and value (always string for dates)
+        )
+      ),
+    })
+  ),
+});
+
+// The complete whereAndArray schema
+export const whereAndArraySchema = z.array(
+  z.union([
+    directColumnCondition,
+    questionConditionsSchema,
+    dateConditionsQuerySchema,
+  ])
 );
-export type WhereConditions = z.infer<typeof QueryWhereAndArraySchema>;
+
+export type WhereConditions = z.infer<typeof whereAndArraySchema>;
 
 export type SQLOperator = "+" | "-" | "*" | "/" | "%";
 
@@ -116,7 +168,7 @@ const JsonColumnSchemaSchema = z.array(
 const baseSchema = {
   table: z.string(),
   computedColumns: z.array(computedColumnSchema).optional(),
-  whereAndArray: QueryWhereAndArraySchema,
+  whereAndArray: whereAndArraySchema,
   jsonColumnSchema: JsonColumnSchemaSchema.optional(),
 };
 

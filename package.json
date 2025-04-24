@@ -8,7 +8,7 @@
     "generate": "npx prisma generate",
     "migrate": "npx prisma migrate deploy",
     "dev": "next dev --turbopack",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && patch-package",
     "lint": "next lint",
     "start": "next start",
     "evals:e2e": "dotenv -e .env npx tsx evals/e2e/questionAgent/index.ts"
@@ -46,6 +46,7 @@
     "mathjs": "^14.4.0",
     "next": "^15.3.0",
     "next-auth": "^5.0.0-beta.25",
+    "patch-package": "^8.0.0",
     "pg": "^8.14.1",
     "posthog-js": "^1.235.6",
     "react": "19.1.0",

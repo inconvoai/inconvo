@@ -34,10 +34,7 @@ const relationCondition = z.record(
   z.string(), // relation name
   z.record(
     z.enum(["some", "every", "none", "is", "isNot"]), // filterOption (some, every, none, is, isNot)
-    z.record(
-      z.string(), // column name
-      z.record(operatorEnum, valueTypes) // operator and value
-    )
+    directColumnCondition
   )
 );
 
@@ -53,18 +50,22 @@ export const questionConditionsSchema = z
 
 export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
 
-const dateConditionsQuerySchema = z.object({
-  OR: z.array(
-    z.object({
-      AND: z.array(
-        z.record(
-          z.string(), // column name
-          z.record(z.string(), z.string()) // operator and value (always string for dates)
-        )
-      ),
-    })
-  ),
-});
+const dateConditionsQuerySchema = z
+  .object({
+    OR: z.array(
+      z
+        .object({
+          AND: z.array(
+            z.record(
+              z.string(), // column name
+              z.record(z.string(), z.string()) // operator and value (always string for dates)
+            )
+          ),
+        })
+        .strict()
+    ),
+  })
+  .strict();
 
 // The complete whereAndArray schema
 export const whereAndArraySchema = z.array(

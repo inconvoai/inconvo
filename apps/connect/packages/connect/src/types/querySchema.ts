@@ -255,6 +255,19 @@ const findDistinctSchema = z
   })
   .strict();
 
+const findDistinctByEditDistanceSchema = z
+  .object({
+    ...baseSchema,
+    operation: z.literal("findDistinctByEditDistance"),
+    operationParameters: z
+      .object({
+        column: z.string(),
+        compareString: z.string(),
+      })
+      .strict(),
+  })
+  .strict();
+
 const countSchema = z
   .object({
     ...baseSchema,
@@ -406,6 +419,7 @@ const groupBySchema = z
 export const QuerySchema = z.discriminatedUnion("operation", [
   findManySchema,
   findDistinctSchema,
+  findDistinctByEditDistanceSchema,
   countSchema,
   countWithJoinSchema,
   countRelationsSchema,

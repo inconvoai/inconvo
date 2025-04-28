@@ -200,7 +200,7 @@ export const whereAndArraySchema = z.array(
     dateConditionsQuerySchema,
   ])
 );
-export type WhereAndArray = z.infer<typeof whereAndArraySchema>;
+export type WhereConditions = z.infer<typeof whereAndArraySchema>;
 
 const JsonColumnSchemaSchema = z.array(
   z.object({

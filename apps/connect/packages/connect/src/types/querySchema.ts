@@ -1,83 +1,5 @@
 import { z } from "zod";
 
-const operatorEnum = z.enum([
-  "equals",
-  "not",
-  "none",
-  "lt",
-  "gt",
-  "in",
-  "contains",
-  "startsWith",
-  "endsWith",
-]);
-
-const valueTypes = z.union([
-  z.string(),
-  z.number(),
-  z.null(),
-  z.object({}),
-  z.boolean(),
-  z.array(z.string()),
-  z.array(z.number()),
-]);
-
-// Direct column condition (structure: { columnName: { operator: value } })
-const directColumnCondition = z.record(
-  z.string(), // column name
-  z.record(operatorEnum, valueTypes) // operator and value
-);
-
-// Relation condition structure:
-// { relationName: { filterOption: { columnName: { operator: value } } } }
-const relationCondition = z.record(
-  z.string(), // relation name
-  z.record(
-    z.enum(["some", "every", "none", "is", "isNot"]), // filterOption (some, every, none, is, isNot)
-    directColumnCondition
-  )
-);
-
-const conditionObject = z.union([directColumnCondition, relationCondition]);
-
-// The full conditions object with logical operators
-export const questionConditionsSchema = z
-  .object({
-    OR: z.array(conditionObject).optional(),
-    AND: z.array(conditionObject).optional(),
-  })
-  .nullable();
-
-export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
-
-const dateConditionsQuerySchema = z
-  .object({
-    OR: z.array(
-      z
-        .object({
-          AND: z.array(
-            z.record(
-              z.string(), // column name
-              z.record(z.string(), z.string()) // operator and value (always string for dates)
-            )
-          ),
-        })
-        .strict()
-    ),
-  })
-  .strict();
-
-// The complete whereAndArray schema
-export const whereAndArraySchema = z.array(
-  z.union([
-    directColumnCondition,
-    questionConditionsSchema,
-    dateConditionsQuerySchema,
-  ])
-);
-
-export type WhereConditions = z.infer<typeof whereAndArraySchema>;
-
 export type SQLOperator = "+" | "-" | "*" | "/" | "%";
 
 export type SQLColumnReference = {
@@ -151,6 +73,134 @@ const computedColumnSchema = z.object({
 });
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;
+
+export const tableConditionsSchema = z
+  .array(
+    z
+      .object({
+        column: z.string(),
+        operator: z.enum([
+          "gte",
+          "lte",
+          "equals",
+          "not",
+          "none",
+          "lt",
+          "gt",
+          "in",
+        ]),
+        value: z.union([
+          z.string(),
+          z.number(),
+          z.null(),
+          z.object({}),
+          z.boolean(),
+          z.array(z.string()),
+          z.array(z.number()),
+        ]),
+      })
+      .strict()
+  )
+  .nullable();
+export type TableConditions = z.infer<typeof tableConditionsSchema>;
+
+export const dateConditionSchema = z
+  .object({
+    OR: z.array(
+      z
+        .object({
+          AND: z.array(
+            z
+              .object({
+                column: z.string(),
+                operator: z.enum(["gte", "lte", "equals"]),
+                value: z.string(),
+              })
+              .strict()
+          ),
+        })
+        .strict()
+    ),
+  })
+  .strict()
+  .nullable();
+export type DateCondition = z.infer<typeof dateConditionSchema>;
+
+const conditionOperators = z.object({
+  equals: z.any().optional(),
+  not: z.any().optional(),
+  in: z.array(z.any()).optional(),
+  notIn: z.array(z.any()).optional(),
+  lt: z.any().optional(),
+  lte: z.any().optional(),
+  gt: z.any().optional(),
+  gte: z.any().optional(),
+  contains: z.any().optional(),
+  startsWith: z.any().optional(),
+  endsWith: z.any().optional(),
+});
+
+type RecursiveCondition = z.infer<typeof conditionOperators> & {
+  [key: string]: any;
+};
+
+const questionConditionSchema: z.ZodType<RecursiveCondition> = z.lazy(() =>
+  z
+    .object({
+      AND: z.array(questionConditionSchema).optional(),
+      OR: z.array(questionConditionSchema).optional(),
+      NOT: z.array(questionConditionSchema).optional(),
+    })
+    .catchall(
+      z.union([
+        questionConditionSchema, // recursive boolean logic
+        z.null(), // explicit null allowed
+        conditionOperators, // scalar operators FIRST!
+        z.object({
+          is: questionConditionSchema.optional(),
+          isNot: questionConditionSchema.optional(),
+          some: questionConditionSchema.optional(),
+          every: questionConditionSchema.optional(),
+          none: questionConditionSchema.optional(),
+        }),
+      ])
+    )
+);
+
+export const questionConditionsSchema = z
+  .object({
+    AND: z.array(questionConditionSchema),
+  })
+  .nullable();
+
+export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
+
+const dateConditionsQuerySchema = z
+  .object({
+    OR: z.array(
+      z
+        .object({
+          AND: z.array(
+            z.record(
+              z.string(), // column name
+              z.record(z.string(), z.string()) // operator and value (always string for dates)
+            )
+          ),
+        })
+        .strict()
+    ),
+  })
+  .strict();
+
+// The complete whereAndArray schema
+export const whereAndArraySchema = z.array(
+  z.union([
+    tableConditionsSchema,
+    questionConditionsSchema,
+    dateConditionsQuerySchema,
+  ])
+);
+export type WhereAndArray = z.infer<typeof whereAndArraySchema>;
 
 const JsonColumnSchemaSchema = z.array(
   z.object({

@@ -74,36 +74,6 @@ const computedColumnSchema = z.object({
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;
 
-export const tableConditionsSchema = z
-  .array(
-    z
-      .object({
-        column: z.string(),
-        operator: z.enum([
-          "gte",
-          "lte",
-          "equals",
-          "not",
-          "none",
-          "lt",
-          "gt",
-          "in",
-        ]),
-        value: z.union([
-          z.string(),
-          z.number(),
-          z.null(),
-          z.object({}),
-          z.boolean(),
-          z.array(z.string()),
-          z.array(z.number()),
-        ]),
-      })
-      .strict()
-  )
-  .nullable();
-export type TableConditions = z.infer<typeof tableConditionsSchema>;
-
 export const dateConditionSchema = z
   .object({
     OR: z.array(
@@ -192,10 +162,15 @@ const dateConditionsQuerySchema = z
   })
   .strict();
 
+const formattedTableConditionsSchema = z.record(
+  z.string(), // column name
+  z.record(z.string(), z.union([z.string(), z.number()])) // operator and value
+);
+
 // The complete whereAndArray schema
 export const whereAndArraySchema = z.array(
   z.union([
-    tableConditionsSchema,
+    formattedTableConditionsSchema,
     questionConditionsSchema,
     dateConditionsQuerySchema,
   ])

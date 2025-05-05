@@ -42,6 +42,7 @@
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.30.6",
     "drizzle-orm": "^0.41.0",
+    "fast-levenshtein": "^3.0.0",
     "mysql2": "^3.14.0",
     "next": "^15.3.0",
     "postgres": "^3.4.5",
@@ -51,6 +52,7 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
+    "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
     "jest": "^29.7.0",
     "ts-jest": "^29.3.2",

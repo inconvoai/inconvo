@@ -12,6 +12,8 @@ import {
   notExists,
   SQL,
   Relation,
+  inArray,
+  exists,
 } from "drizzle-orm";
 import type { ComputedColumn, WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
@@ -25,54 +27,176 @@ import { getColumnFromTable } from "./getColumnFromTable";
 type Table = Record<string, any>;
 type FilterObject = Record<string, any>;
 
-// -----------------------------------------------------------------------------
-// Parsing To-Many Relation Filters
-// -----------------------------------------------------------------------------
-
-/**
- * Builds a sub-query condition for "to-many" relations (e.g., "none", "some", "every").
- * Currently this example only supports "none", but can be extended.
- */
 function parseToManyRelationFilter({
   drizzleSchema,
   currentTable,
   currentTableName,
   relationName,
   filterObj,
+  computedColumns,
 }: {
   drizzleSchema: Record<string, any>;
   currentTable: Table;
   currentTableName: string;
   relationName: string;
-  filterObj: FilterObject;
+  filterObj: Record<"some" | "none" | "every", any>;
+  computedColumns: ComputedColumn[];
 }): SQL {
-  const [operator, _nestedCondition] = Object.entries(filterObj)[0];
+  const [[operator, nestedCondition]] = Object.entries(filterObj);
 
+  // ────────── find the related table and FK/PK pair ──────────
   const relatedTableName = getRelatedTableNameFromPath(
     [currentTableName, relationName],
     drizzleSchema
   );
+  const relatedTable = drizzleSchema[relatedTableName];
 
-  const [currentKey, relatedKey, groupBy] = findRelationsBetweenTables(
+  const [currentKey, relatedKey] = findRelationsBetweenTables(
     currentTableName,
     relatedTableName,
     relationName,
     drizzleSchema
   );
 
+  // ────────── build the nested condition (if any) ──────────
+  const hasNested = nestedCondition && Object.keys(nestedCondition).length > 0;
+  const nestedSql = hasNested
+    ? parseCondition({
+        drizzleSchema,
+        table: relatedTable,
+        tableName: relatedTableName,
+        condition: nestedCondition,
+        columns: relatedTable,
+        computedColumns,
+      })
+    : undefined;
+
+  // base predicate that connects parent ↔ child
+  const pkFkPredicate = eq(relatedTable[relatedKey], currentTable[currentKey]);
+
+  // --------- construct the sub‑query we will later pipe into EXISTS ----------
+  const subQueryBody = nestedSql
+    ? and(pkFkPredicate, nestedSql)
+    : pkFkPredicate;
+
+  const subQuery = sql`(
+    SELECT 1
+    FROM   ${relatedTable}
+    WHERE  ${subQueryBody})
+  `;
+
+  // ───────────────────────── operator semantics ──────────────────────────────
   switch (operator) {
-    case "none": {
-      const baseSubquery = sql`
-        SELECT 1 FROM ${drizzleSchema[relatedTableName]}
-        WHERE ${drizzleSchema[relatedTableName][relatedKey]} = ${currentTable[currentKey]}
-        AND ${drizzleSchema[relatedTableName][relatedKey]} IS NOT NULL`;
-      return notExists(sql`(${baseSubquery})`);
+    case "some":
+      // at least one child row satisfies nestedSql
+      return exists(subQuery);
+
+    case "none":
+      // no child row satisfies nestedSql
+      return notExists(subQuery);
+
+    case "every": {
+      // “every child row satisfies nestedSql”
+      // ≡ “no child row violates nestedSql”
+      const violation = nestedSql ? sql`NOT (${nestedSql})` : sql`FALSE`;
+      const subQueryEvery = sql`(
+        SELECT 1
+        FROM   ${relatedTable}
+        WHERE  ${and(pkFkPredicate, violation)}
+      )`;
+      return notExists(subQueryEvery);
     }
+
     default:
       throw new Error(
-        `Unsupported operator "${operator}" in filter for relation "${relationName}". ` +
-          `Currently supported: none.`
+        `Unknown to-many operator "${operator}". Allowed: some | none | every`
       );
+  }
+}
+
+function parseToOneRelationFilter({
+  drizzleSchema,
+  currentTable,
+  currentTableName,
+  relationName,
+  filterObj,
+  computedColumns,
+}: {
+  drizzleSchema: Record<string, any>;
+  currentTable: Record<string, any>;
+  currentTableName: string;
+  relationName: string;
+  filterObj: { is?: any; isNot?: any };
+  computedColumns: ComputedColumn[];
+}): SQL {
+  const [[operator, nestedCondition]] = Object.entries(filterObj) as [
+    ["is" | "isNot", any]
+  ];
+
+  // lookup related table
+  const relatedTableName = getRelatedTableNameFromPath(
+    [currentTableName, relationName],
+    drizzleSchema
+  );
+  const relatedTable = drizzleSchema[relatedTableName];
+
+  // find FK/PK between current (child) and related (parent)
+  const [currentKey, relatedKey] = findRelationsBetweenTables(
+    currentTableName,
+    relatedTableName,
+    relationName,
+    drizzleSchema
+  );
+
+  // nestedCondition === null means user wrote is: null or isNot: null
+  if (nestedCondition === null) {
+    if (operator === "is") {
+      // absence of relation
+      return eq(currentTable[currentKey], null);
+    } else {
+      // presence of relation
+      return ne(currentTable[currentKey], null);
+    }
+  }
+
+  // turn nestedCondition into SQL if it has keys
+  const nestedFilterSql: SQL | undefined =
+    nestedCondition && Object.keys(nestedCondition).length > 0
+      ? parseCondition({
+          drizzleSchema,
+          table: relatedTable,
+          tableName: relatedTableName,
+          condition: nestedCondition,
+          columns: relatedTable,
+          computedColumns,
+        })
+      : undefined;
+
+  if (operator === "is") {
+    // if no nested filters, simply require fk != null
+    if (!nestedFilterSql) {
+      return ne(currentTable[currentKey], null);
+    }
+    // otherwise require a matching parent row
+    const sub = sql`
+      SELECT 1 
+      FROM ${relatedTable}
+      WHERE ${relatedTable[relatedKey]} = ${currentTable[currentKey]}
+        AND ${nestedFilterSql}
+    `;
+    return exists(sql`(${sub})`);
+  } else {
+    // isNot: no matching parent row with those properties
+    if (!nestedFilterSql) {
+      return eq(currentTable[currentKey], null);
+    }
+    const sub = sql`
+      SELECT 1 
+      FROM ${relatedTable}
+      WHERE ${relatedTable[relatedKey]} = ${currentTable[currentKey]}
+        AND ${nestedFilterSql}
+    `;
+    return notExists(sql`(${sub})`);
   }
 }
 
@@ -99,34 +223,79 @@ function parseColumnFilter({
   columnName: string;
   filterObj: FilterObject;
   columns: Record<string, any>;
-  computedColumns?: ComputedColumn[];
+  computedColumns: ComputedColumn[];
 }): SQL {
+  // 1) filterObj === null  → column IS NULL or "no to‑one" relation
+  if (filterObj === null) {
+    // scalar column?
+    if (columnName in columns) {
+      return eq(columns[columnName], null);
+    }
+    // otherwise it's a to-one relation absence
+    const [currentKey] = findRelationsBetweenTables(
+      tableName,
+      getRelatedTableNameFromPath([tableName, columnName], drizzleSchema),
+      columnName,
+      drizzleSchema
+    );
+    return eq(table[currentKey], null);
+  }
+
+  // 2) empty object {}  → treat as "no to‑one" relation
+  if (
+    typeof filterObj === "object" &&
+    !Array.isArray(filterObj) &&
+    Object.keys(filterObj).length === 0 &&
+    !(columnName in columns)
+  ) {
+    const [currentKey] = findRelationsBetweenTables(
+      tableName,
+      getRelatedTableNameFromPath([tableName, columnName], drizzleSchema),
+      columnName,
+      drizzleSchema
+    );
+    return eq(table[currentKey], null);
+  }
+
   const subExpressions: SQL[] = [];
 
+  // 3) iterate operators
   for (const [operator, value] of Object.entries(filterObj)) {
-    // Check if this is a "to-many" operator like "none"/"some"/"every"
-    if (operator === "none") {
+    // to‑many relations
+    if (operator === "some" || operator === "none" || operator === "every") {
       subExpressions.push(
         parseToManyRelationFilter({
           drizzleSchema,
           currentTable: table,
           currentTableName: tableName,
           relationName: columnName,
-          filterObj,
+          filterObj: filterObj as Record<"some" | "none" | "every", any>,
+          computedColumns: computedColumns,
+        })
+      );
+      // only one of some/none/every per relation, so we can break
+      continue;
+    }
+
+    // to‑one relations
+    if (operator === "is" || operator === "isNot") {
+      subExpressions.push(
+        parseToOneRelationFilter({
+          drizzleSchema,
+          currentTable: table,
+          currentTableName: tableName,
+          relationName: columnName,
+          filterObj: { [operator]: value },
+          computedColumns: computedColumns,
         })
       );
       continue;
     }
 
-    let column: SQL | undefined;
-    for (const [key, value] of Object.entries(columns)) {
-      if (key === columnName) {
-        column = value;
-        break;
-      }
-    }
-    if (!column) {
-      column = getColumnFromTable({
+    // scalar columns
+    let columnExpr: SQL | undefined = columns[columnName];
+    if (!columnExpr) {
+      columnExpr = getColumnFromTable({
         columnName,
         tableName,
         drizzleSchema,
@@ -136,42 +305,41 @@ function parseColumnFilter({
 
     switch (operator) {
       case "equals":
-        subExpressions.push(eq(column, value));
+        subExpressions.push(eq(columnExpr, value));
         break;
       case "gt":
-        subExpressions.push(gt(column, value));
+        subExpressions.push(gt(columnExpr, value));
         break;
       case "gte":
-        subExpressions.push(gte(column, value));
+        subExpressions.push(gte(columnExpr, value));
         break;
       case "lt":
-        subExpressions.push(lt(column, value));
+        subExpressions.push(lt(columnExpr, value));
         break;
       case "lte":
-        subExpressions.push(lte(column, value));
+        subExpressions.push(lte(columnExpr, value));
         break;
       case "not":
-        subExpressions.push(ne(column, value));
+        subExpressions.push(ne(columnExpr, value));
+        break;
+      case "in":
+        subExpressions.push(inArray(columnExpr, value));
         break;
       default:
         throw new Error(
           `Unsupported operator "${operator}" in filter for "${columnName}". ` +
-            `Allowed operators: equals, gt, gte, lt, lte, not, none.`
+            `Allowed operators: equals, gt, gte, lt, lte, not, in, some, none, every, is, isNot.`
         );
     }
   }
 
-  // If no valid sub-expressions were created, the user likely provided an empty/invalid filter
   if (subExpressions.length === 0) {
     throw new Error(`No valid operators found in filter for "${columnName}".`);
   }
 
-  // Combine multiple operators for the same column with AND
-  if (subExpressions.length === 1) {
-    return subExpressions[0];
-  } else {
-    return and(...subExpressions) as SQL;
-  }
+  return subExpressions.length === 1
+    ? subExpressions[0]
+    : (and(...subExpressions) as SQL);
 }
 
 // -----------------------------------------------------------------------------

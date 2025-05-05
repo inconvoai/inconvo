@@ -14,6 +14,7 @@ import { findDistinct } from "~/operations/findDistinct";
 import { getDb } from "~/dbConnection";
 import { countWithJoin } from "~/operations/countWithJoin";
 import packageJson from "~/../../package.json";
+import { findDistinctByEditDistance } from "~/operations/findDistinctByEditDistance";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {
@@ -73,6 +74,9 @@ export async function inconvo() {
           break;
         case "findDistinct":
           response = await findDistinct(db, parsedQuery);
+          break;
+        case "findDistinctByEditDistance":
+          response = await findDistinctByEditDistance(db, parsedQuery);
           break;
         case "findMany":
           response = await findMany(db, parsedQuery);

@@ -1,30 +1,5 @@
 import { z } from "zod";
 
-const QueryConditionSchema = z.record(
-  z.record(
-    z.union([z.string(), z.number(), z.null(), z.object({}), z.boolean()])
-  )
-);
-
-const QueryDateConditionSchema = z
-  .object({
-    OR: z.array(
-      z
-        .object({
-          AND: z.array(
-            z.record(z.record(z.union([z.string(), z.number(), z.null()])))
-          ),
-        })
-        .strict()
-    ),
-  })
-  .strict();
-
-const QueryWhereAndArraySchema = z.array(
-  z.union([QueryConditionSchema, QueryDateConditionSchema])
-);
-export type WhereConditions = z.infer<typeof QueryWhereAndArraySchema>;
-
 export type SQLOperator = "+" | "-" | "*" | "/" | "%";
 
 export type SQLColumnReference = {
@@ -99,6 +74,109 @@ const computedColumnSchema = z.object({
 
 export type ComputedColumn = z.infer<typeof computedColumnSchema>;
 
+export const dateConditionSchema = z
+  .object({
+    OR: z.array(
+      z
+        .object({
+          AND: z.array(
+            z
+              .object({
+                column: z.string(),
+                operator: z.enum(["gte", "lte", "equals"]),
+                value: z.string(),
+              })
+              .strict()
+          ),
+        })
+        .strict()
+    ),
+  })
+  .strict()
+  .nullable();
+export type DateCondition = z.infer<typeof dateConditionSchema>;
+
+const conditionOperators = z.object({
+  equals: z.any().optional(),
+  not: z.any().optional(),
+  in: z.array(z.any()).optional(),
+  notIn: z.array(z.any()).optional(),
+  lt: z.any().optional(),
+  lte: z.any().optional(),
+  gt: z.any().optional(),
+  gte: z.any().optional(),
+  contains: z.any().optional(),
+  startsWith: z.any().optional(),
+  endsWith: z.any().optional(),
+});
+
+type RecursiveCondition = z.infer<typeof conditionOperators> & {
+  [key: string]: any;
+};
+
+const questionConditionSchema: z.ZodType<RecursiveCondition> = z.lazy(() =>
+  z
+    .object({
+      AND: z.array(questionConditionSchema).optional(),
+      OR: z.array(questionConditionSchema).optional(),
+      NOT: z.array(questionConditionSchema).optional(),
+    })
+    .catchall(
+      z.union([
+        questionConditionSchema, // recursive boolean logic
+        z.null(), // explicit null allowed
+        conditionOperators, // scalar operators FIRST!
+        z.object({
+          is: questionConditionSchema.optional(),
+          isNot: questionConditionSchema.optional(),
+          some: questionConditionSchema.optional(),
+          every: questionConditionSchema.optional(),
+          none: questionConditionSchema.optional(),
+        }),
+      ])
+    )
+);
+
+export const questionConditionsSchema = z
+  .object({
+    AND: z.array(questionConditionSchema),
+  })
+  .nullable();
+
+export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
+
+const dateConditionsQuerySchema = z
+  .object({
+    OR: z.array(
+      z
+        .object({
+          AND: z.array(
+            z.record(
+              z.string(), // column name
+              z.record(z.string(), z.string()) // operator and value (always string for dates)
+            )
+          ),
+        })
+        .strict()
+    ),
+  })
+  .strict();
+
+const formattedTableConditionsSchema = z.record(
+  z.string(), // column name
+  z.record(z.string(), z.union([z.string(), z.number()])) // operator and value
+);
+
+// The complete whereAndArray schema
+export const whereAndArraySchema = z.array(
+  z.union([
+    formattedTableConditionsSchema,
+    questionConditionsSchema,
+    dateConditionsQuerySchema,
+  ])
+);
+export type WhereConditions = z.infer<typeof whereAndArraySchema>;
+
 const JsonColumnSchemaSchema = z.array(
   z.object({
     tableName: z.string(),
@@ -116,7 +194,7 @@ const JsonColumnSchemaSchema = z.array(
 const baseSchema = {
   table: z.string(),
   computedColumns: z.array(computedColumnSchema).optional(),
-  whereAndArray: QueryWhereAndArraySchema,
+  whereAndArray: whereAndArraySchema,
   jsonColumnSchema: JsonColumnSchemaSchema.optional(),
 };
 
@@ -147,6 +225,19 @@ const findDistinctSchema = z
     operationParameters: z
       .object({
         column: z.string(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const findDistinctByEditDistanceSchema = z
+  .object({
+    ...baseSchema,
+    operation: z.literal("findDistinctByEditDistance"),
+    operationParameters: z
+      .object({
+        column: z.string(),
+        compareString: z.string(),
       })
       .strict(),
   })
@@ -303,6 +394,7 @@ const groupBySchema = z
 export const QuerySchema = z.discriminatedUnion("operation", [
   findManySchema,
   findDistinctSchema,
+  findDistinctByEditDistanceSchema,
   countSchema,
   countWithJoinSchema,
   countRelationsSchema,

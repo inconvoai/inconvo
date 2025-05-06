@@ -14,6 +14,8 @@ import {
   Relation,
   inArray,
   exists,
+  isNull,
+  isNotNull,
 } from "drizzle-orm";
 import type { ComputedColumn, WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
@@ -305,6 +307,10 @@ function parseColumnFilter({
 
     switch (operator) {
       case "equals":
+        if (value === null) {
+          subExpressions.push(isNull(columnExpr));
+          break;
+        }
         subExpressions.push(eq(columnExpr, value));
         break;
       case "gt":
@@ -320,6 +326,10 @@ function parseColumnFilter({
         subExpressions.push(lte(columnExpr, value));
         break;
       case "not":
+        if (value === null) {
+          subExpressions.push(isNotNull(columnExpr));
+          break;
+        }
         subExpressions.push(ne(columnExpr, value));
         break;
       case "in":

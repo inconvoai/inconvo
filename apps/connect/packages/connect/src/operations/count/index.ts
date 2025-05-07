@@ -14,6 +14,9 @@ export async function count(db: any, query: Query) {
 
   const countColumns: [string, SQL<unknown>][] =
     operationParameters.columns.map((columnName) => {
+      if (columnName === "_all") {
+        return [columnName, dCount()];
+      }
       return [
         columnName,
         dCount(

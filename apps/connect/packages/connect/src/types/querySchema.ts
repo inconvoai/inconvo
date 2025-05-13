@@ -318,19 +318,6 @@ const aggregateSchema = z
   })
   .strict();
 
-const averageDurationBetweenTwoDatesSchema = z
-  .object({
-    ...baseSchema,
-    operation: z.literal("averageDurationBetweenTwoDates"),
-    operationParameters: z
-      .object({
-        columnA: z.string(),
-        columnB: z.string(),
-      })
-      .strict(),
-  })
-  .strict();
-
 const aggregateByDateIntervalSchema = z
   .object({
     ...baseSchema,
@@ -402,7 +389,6 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   groupBySchema,
   aggregateByDateIntervalSchema,
   countByTemporalComponentSchema,
-  averageDurationBetweenTwoDatesSchema,
 ]);
 
 export type Query = z.infer<typeof QuerySchema>;

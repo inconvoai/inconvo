@@ -16,6 +16,7 @@
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
     "@aws-sdk/client-secrets-manager": "^3.787.0",
+    "@langchain/community": "^0.3.42",
     "@langchain/core": "^0.3.48",
     "@langchain/langgraph": "^0.2.67",
     "@langchain/langgraph-checkpoint-postgres": "^0.0.4",

@@ -7,7 +7,7 @@ import { aggregate } from "~/operations/aggregate/index";
 import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
-import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { groupByDateInterval } from "~/operations/groupByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
@@ -27,7 +27,7 @@ function safeJsonStringify(value: unknown): string {
 
 export async function inconvo() {
   const router = Router();
-  router.use(authenticated);
+  // router.use(authenticated);
 
   router.get("/", async (req: Request, res: Response) => {
     try {
@@ -57,8 +57,8 @@ export async function inconvo() {
         case "aggregate":
           response = await aggregate(db, parsedQuery);
           break;
-        case "aggregateByDateInterval":
-          response = await aggregateByDateInterval(db, parsedQuery);
+        case "groupByDateInterval":
+          response = await groupByDateInterval(db, parsedQuery);
           break;
         case "count":
           response = await count(db, parsedQuery);

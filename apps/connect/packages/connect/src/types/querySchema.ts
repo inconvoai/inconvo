@@ -318,16 +318,28 @@ const aggregateSchema = z
   })
   .strict();
 
-const aggregateByDateIntervalSchema = z
+const groupByDateIntervalSchema = z
   .object({
     ...baseSchema,
-    operation: z.literal("aggregateByDateInterval"),
+    operation: z.literal("groupByDateInterval"),
     operationParameters: z
       .object({
-        interval: z.enum(["day", "week", "month", "year"]),
-        aggregationType: z.enum(["min", "max", "count", "sum", "avg"]),
         dateColumn: z.string(),
-        aggregateColumn: z.string(),
+        interval: z.enum(["day", "week", "month", "year"]),
+        count: z.array(z.string()).nullable(),
+        sum: z.array(z.string()).nullable(),
+        min: z.array(z.string()).nullable(),
+        max: z.array(z.string()).nullable(),
+        avg: z.array(z.string()).nullable(),
+        orderBy: z.union([
+          z.object({
+            function: z.enum(["count", "sum", "min", "max", "avg"]),
+            column: z.string(),
+            direction: z.enum(["asc", "desc"]),
+          }),
+          z.enum(["chronological", "reverseChronological"]),
+        ]),
+        limit: z.number().nullable(),
       })
       .strict(),
   })
@@ -387,7 +399,7 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,
-  aggregateByDateIntervalSchema,
+  groupByDateIntervalSchema,
   countByTemporalComponentSchema,
 ]);
 

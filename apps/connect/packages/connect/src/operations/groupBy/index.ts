@@ -3,35 +3,10 @@ import { asc, avg, count, desc, eq, max, min, SQL, sum } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
-import { getColumnFromTable } from "../utils/getColumnFromTable";
+import { buildJsonObjectSelect } from "~/operations/utils/jsonBuilderHelpers";
+import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
+import { createAggregationFields } from "~/operations/utils/createAggregationFields";
 import assert from "assert";
-
-function createAggregationFields<T>(
-  columns: string[] | undefined,
-  aggregationFn: (column: SQL<any>) => SQL<T>,
-  drizzleSchema: any,
-  computedColumns: any
-): [string, SQL<T>][] | undefined {
-  return columns?.map((columnIdentifier) => {
-    assert(
-      columnIdentifier.split(".").length === 2,
-      "Invalid column format for aggregation (not table.column)"
-    );
-    const [tableName, columnName] = columnIdentifier.split(".");
-    return [
-      `${tableName}.${columnName}`,
-      aggregationFn(
-        getColumnFromTable({
-          columnName,
-          tableName,
-          drizzleSchema,
-          computedColumns,
-        })
-      ),
-    ];
-  });
-}
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");

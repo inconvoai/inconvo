@@ -1,5 +1,5 @@
 import { QuerySchema } from "~/types/querySchema";
-import { aggregateByDateInterval } from "~/operations/aggregateByDateInterval";
+import { aggregateByDateInterval } from "~/operations/groupByDateInterval";
 import { getDb } from "~/dbConnection";
 
 test("How many lineitems were sold each month?", async () => {

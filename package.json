@@ -9,9 +9,12 @@
     "migrate": "npx prisma migrate deploy",
     "dev": "next dev --turbopack",
     "postinstall": "prisma generate && patch-package",
-    "lint": "next lint",
+    "check": "next lint && tsc --noEmit",
+    "lint": "next lint && tsc --noEmit",
+    "lint:fix": "next lint --fix",
     "start": "next start",
-    "evals:e2e": "dotenv -e .env npx tsx evals/e2e/questionAgent/index.ts"
+    "evals:e2e": "dotenv -e .env npx tsx evals/e2e/questionAgent/index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.1",

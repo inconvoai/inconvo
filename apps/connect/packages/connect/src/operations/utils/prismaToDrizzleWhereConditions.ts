@@ -16,6 +16,7 @@ import {
   exists,
   isNull,
   isNotNull,
+  like,
 } from "drizzle-orm";
 import type { ComputedColumn, WhereConditions } from "~/types/querySchema";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
@@ -335,10 +336,18 @@ function parseColumnFilter({
       case "in":
         subExpressions.push(inArray(columnExpr, value));
         break;
+      case "contains":
+        subExpressions.push(like(columnExpr, `%${value}%`));
+        break;
+      case "contains_insensitive":
+        subExpressions.push(
+          like(sql`lower(${columnExpr})`, `%${value.toLowerCase()}%`)
+        );
+        break;
       default:
         throw new Error(
           `Unsupported operator "${operator}" in filter for "${columnName}". ` +
-            `Allowed operators: equals, gt, gte, lt, lte, not, in, some, none, every, is, isNot.`
+            `Allowed operators: equals, gt, gte, lt, lte, not, in, contains, contains_insensitive, some, none, every, is, isNot.`
         );
     }
   }

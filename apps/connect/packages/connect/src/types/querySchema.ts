@@ -105,6 +105,7 @@ const conditionOperators = z.object({
   lte: z.any().optional(),
   gt: z.any().optional(),
   gte: z.any().optional(),
+  contains_insensitive: z.any().optional(),
   contains: z.any().optional(),
   startsWith: z.any().optional(),
   endsWith: z.any().optional(),

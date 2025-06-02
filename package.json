@@ -30,6 +30,7 @@
     "@mantine/form": "^8.0.1",
     "@mantine/hooks": "^8.0.1",
     "@mantine/modals": "^8.0.1",
+    "@mantine/notifications": "^8.0.1",
     "@monaco-editor/react": "^4.7.0",
     "@prisma/adapter-pg": "^6.7.0",
     "@prisma/client": "^6.7.0",

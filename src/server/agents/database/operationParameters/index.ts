@@ -748,14 +748,17 @@ export function operationParametersAgent(params: RequestParams) {
     ]);
 
     const orderBySchema = z.object({
-      orderBy: z.object({
-        function: z.literal(orderByFunctionObj.orderByFunction),
-        column:
-          orderByFunctionObj.orderByFunction === "count"
-            ? stringArrayToZodEnum(state.columnNames)
-            : stringArrayToZodEnum(state.numericalColumnNames),
-        direction: z.enum(["asc", "desc"]),
-      }),
+      orderBy: z.union([
+        z.enum(["chronological", "reverseChronological"]),
+        z.object({
+          function: z.literal(orderByFunctionObj.orderByFunction),
+          column:
+            orderByFunctionObj.orderByFunction === "count"
+              ? stringArrayToZodEnum(state.columnNames)
+              : stringArrayToZodEnum(state.numericalColumnNames),
+          direction: z.enum(["asc", "desc"]),
+        }),
+      ]),
       limit: z.number().describe("The number of records to return"),
     });
 

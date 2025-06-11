@@ -262,6 +262,7 @@ export async function questionAgent(params: QuestionAgentParams) {
         .describe("The formatted output"),
       {
         strict: true,
+        method: "function_calling",
       }
     );
     if (selectedType === "chart") {
@@ -292,6 +293,7 @@ export async function questionAgent(params: QuestionAgentParams) {
           .describe("The formatted output"),
         {
           strict: true,
+          method: "function_calling",
         }
       );
     } else if (selectedType === "table") {
@@ -318,6 +320,7 @@ export async function questionAgent(params: QuestionAgentParams) {
           .describe("The formatted output"),
         {
           strict: true,
+          method: "function_calling",
         }
       );
     }

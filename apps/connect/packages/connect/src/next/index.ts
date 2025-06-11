@@ -85,7 +85,7 @@ async function handlePostRequest(request: NextRequest) {
 
     const parsedQuery = QuerySchema.parse(body);
     const { operation } = parsedQuery;
-    const db = getDb();
+    const db = await getDb();
 
     if (operation === "aggregate") {
       const response = await aggregate(db, parsedQuery);

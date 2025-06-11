@@ -19,6 +19,11 @@ class MyLogger implements Logger {
 }
 
 export async function getDb() {
+  // Return cached db instance if it exists
+  if (globalForDb.db) {
+    return globalForDb.db;
+  }
+
   const drizzleSchema = await loadDrizzleSchema();
 
   let db: any;
@@ -26,7 +31,7 @@ export async function getDb() {
   if (env.DATABASE_DIALECT === "mysql") {
     const mysqlConn =
       globalForDb.mysqlConn ?? createPool({ uri: env.INCONVO_DATABASE_URL });
-    if (env.NODE_ENV !== "production") globalForDb.mysqlConn = mysqlConn;
+    globalForDb.mysqlConn = mysqlConn;
     db = drizzleMysql(mysqlConn, {
       schema: drizzleSchema,
       logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,
@@ -34,7 +39,7 @@ export async function getDb() {
     });
   } else if (env.DATABASE_DIALECT === "postgresql") {
     const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
-    if (env.NODE_ENV !== "production") globalForDb.pgConn = pgConn;
+    globalForDb.pgConn = pgConn;
     db = drizzlePostgres(pgConn, {
       schema: drizzleSchema,
       logger: env.NODE_ENV === "development" ? new MyLogger() : undefined,

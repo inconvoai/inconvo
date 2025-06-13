@@ -463,10 +463,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const decideComplete = async (state: typeof DatabaseAgentState.State) => {
-    if (state.notCompleteCount >= 1) {
-      return { next: END, reason: "Too many follow-up questions" };
-    }
-
     const nextStepPrompt = await getPrompt("decide_database_next_step");
     const nextStepSchema = model.withStructuredOutput(
       z.object({
@@ -487,6 +483,13 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         .join("\n\n"),
       date: new Date().toISOString(),
     });
+
+    if (
+      state.notCompleteCount >= 1 &&
+      response.next === "generate_follow_up_question"
+    ) {
+      return { next: END, reason: "Too many follow-up questions" };
+    }
 
     return {
       next: response.next,

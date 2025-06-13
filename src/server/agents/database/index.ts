@@ -109,6 +109,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     // The number of follow-up questions asked
     notCompleteCount: Annotation<number>({
       reducer: (x, y) => y,
+      default: () => 0,
     }),
     // Next conditional node to go to
     next: Annotation<string>({
@@ -462,7 +463,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const decideComplete = async (state: typeof DatabaseAgentState.State) => {
-    if (state.notCompleteCount > 2) {
+    if (state.notCompleteCount >= 1) {
       return { next: END, reason: "Too many follow-up questions" };
     }
 

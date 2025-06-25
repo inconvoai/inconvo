@@ -75,7 +75,7 @@ const messageReducer = (
   return emptyArray;
 };
 
-export async function questionAgent(params: QuestionAgentParams) {
+export async function inconvoAgent(params: QuestionAgentParams) {
   const AgentState = Annotation.Root({
     userQuestion: Annotation<HumanMessage>({
       reducer: (x, y) => y,

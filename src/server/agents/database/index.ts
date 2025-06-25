@@ -386,7 +386,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const questionWhereConditions = async (
     state: typeof DatabaseAgentState.State
   ) => {
-    const questionAgentResponse = await questionWhereConditionAgent({
+    const questionWhereAgentResponse = await questionWhereConditionAgent({
       schema: state.schema,
       tableSchema: state.tableSchema,
       tableName: state.tableName,
@@ -400,7 +400,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       connectorUrl: params.connectorUrl,
       connectorSigningKey: params.connectorSigningKey,
     });
-    return { questionConditions: questionAgentResponse };
+    return { questionConditions: questionWhereAgentResponse };
   };
 
   const buildQuery = async (state: typeof DatabaseAgentState.State) => {

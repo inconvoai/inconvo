@@ -17,7 +17,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-apprunner": "^3.835.0",
     "@aws-sdk/client-secrets-manager": "^3.830.0",
+    "@inngest/middleware-encryption": "^1.0.1",
     "@langchain/community": "^0.3.47",
     "@langchain/core": "^0.3.61",
     "@langchain/langgraph": "^0.3.5",

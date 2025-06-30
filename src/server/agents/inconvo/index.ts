@@ -1,7 +1,6 @@
-import { AzureChatOpenAI } from "@langchain/openai";
 import {
+  AIMessage,
   HumanMessage,
-  type AIMessage,
   type BaseMessage,
   isAIMessage,
 } from "@langchain/core/messages";
@@ -27,6 +26,7 @@ import { Calculator } from "@langchain/community/tools/calculator";
 import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
+import { getAIModel } from "../utils/getAIModel";
 
 interface Chart {
   type: "bar" | "line";
@@ -88,7 +88,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }),
     // The QA message pairs from previous runs
     chatHistory: Annotation<BaseMessage[]>({
-      reducer: (x, y) => y,
+      reducer: (x, y) => x.concat(y),
       default: () => [],
     }),
     answer: Annotation<Answer>({
@@ -111,11 +111,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     [];
   const toolNode = new ToolNode(tools);
 
-  const model = new AzureChatOpenAI({
-    model: "gpt-4.1",
-    deploymentName: "gpt-4.1",
-    temperature: 0,
-  });
+  const model = getAIModel("azure:gpt-4.1");
 
   const tableContext = params.schema
     .filter((table) => table.context)
@@ -151,8 +147,13 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             connectorSigningKey: params.connectorSigningKey,
           })
         ).invoke({});
-        const data = databaseRetrieverResponse.databaseResponse;
-        return { queries: data };
+        const response = databaseRetrieverResponse.reason
+          ? databaseRetrieverResponse.reason +
+            "\n\n" +
+            JSON.stringify(databaseRetrieverResponse.databaseResponse, null, 2)
+          : databaseRetrieverResponse.databaseResponse;
+
+        return { response: response };
       },
       {
         name: "databaseRetriever",
@@ -207,14 +208,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("question_agent");
+    const prompt = await getPrompt("inconvo_agent");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
       tableContext: tableContext,
       chatHistory: state.chatHistory,
       date: new Date().toISOString(),
-      requestContext: state.requestContext,
+      requestContext: JSON.stringify(state.requestContext),
       userQuestion: state.userQuestion,
       messages: state.messages,
     });
@@ -222,8 +223,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
-    const prompt = await getPrompt("question_agent");
-    const tables = params.schema.map((table) => table.name);
+    const prompt = await getPrompt("format_response");
     let selectedType = "text";
     const outputTypeSelectSchema = model.withStructuredOutput(
       z
@@ -232,20 +232,15 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         })
         .describe("The type of output to display"),
       {
-        strict: false,
+        strict: true,
+        method: "function_calling",
       }
     );
 
     const selectedTypeResponse = await prompt
       .pipe(outputTypeSelectSchema)
       .invoke({
-        tables,
-        tableContext: tableContext,
-        chatHistory: state.chatHistory,
-        date: new Date().toISOString(),
-        requestContext: state.requestContext,
-        userQuestion: state.userQuestion,
-        messages: state.messages,
+        messageToFormat: state.messages?.at(-1)?.content ?? "",
       });
 
     selectedType = selectedTypeResponse.type;
@@ -325,32 +320,29 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       );
     }
     const response = await prompt.pipe(outputFormatterSchema).invoke({
-      tables,
-      tableContext: tableContext,
-      chatHistory: state.chatHistory,
-      date: new Date().toISOString(),
-      requestContext: state.requestContext,
-      userQuestion: state.userQuestion,
-      messages: state.messages,
+      messageToFormat: state.messages?.at(-1)?.content ?? "",
     });
     return {
       answer: response,
-      chatHistory: [...state.chatHistory, ...(state.messages ?? [])],
+      chatHistory: [
+        state.userQuestion,
+        new AIMessage(JSON.stringify(response, null, 2)),
+      ],
     };
   }
 
   const workflow = new StateGraph(AgentState)
     .addNode("reset_state", resetState)
     .addNode("build_tools", buildTools)
-    .addNode("question_agent", callModel)
-    .addNode("question_agent_tools", toolNode)
+    .addNode("inconvo_agent", callModel)
+    .addNode("inconvo_agent_tools", toolNode)
     .addNode("format_response", formatResponse)
     .addEdge(START, "reset_state")
     .addEdge("reset_state", "build_tools")
-    .addEdge("build_tools", "question_agent")
-    .addEdge("question_agent_tools", "question_agent")
-    .addConditionalEdges("question_agent", shouldContinue, {
-      continue: "question_agent_tools",
+    .addEdge("build_tools", "inconvo_agent")
+    .addEdge("inconvo_agent_tools", "inconvo_agent")
+    .addConditionalEdges("inconvo_agent", shouldContinue, {
+      continue: "inconvo_agent_tools",
       [END]: "format_response",
     });
 

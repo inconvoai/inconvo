@@ -1,6 +1,6 @@
 import assert from "assert";
 import { z } from "zod";
-import { AzureChatOpenAI } from "@langchain/openai";
+import { getAIModel } from "~/server/agents/utils/getAIModel";
 import { Annotation, START, StateGraph } from "@langchain/langgraph";
 import { stringArrayToZodEnum } from "../../utils/zodHelpers";
 import type { Schema } from "~/server/db/schema";
@@ -63,11 +63,7 @@ export function operationParametersAgent(params: RequestParams) {
     }),
   });
 
-  const model = new AzureChatOpenAI({
-    model: "gpt-4.1",
-    deploymentName: "gpt-4.1",
-    temperature: 0,
-  });
+  const model = getAIModel("azure:gpt-4.1");
 
   const prepareForOperation = async (
     _state: typeof OperationParametersState.State

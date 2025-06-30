@@ -16,7 +16,7 @@ import type {
 import type { Schema } from "~/server/db/schema";
 import type { JsonColumnSchema } from "~/server/userDatabaseConnector/types";
 import { tryCatch } from "~/server/api/utils/tryCatch";
-import { AzureChatOpenAI } from "@langchain/openai";
+import { getAIModel } from "~/server/agents/utils/getAIModel";
 import { stringArrayToZodEnum } from "../../utils/zodHelpers";
 import { whereConditionDocs } from "../utils/whereDocs";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
@@ -174,11 +174,7 @@ async function getCorrectedValueForStringColumn({
     return caseInsensitiveMatch;
   }
 
-  const model = new AzureChatOpenAI({
-    model: "gpt-4.1",
-    deploymentName: "gpt-4.1",
-    temperature: 0,
-  });
+  const model = getAIModel("azure:gpt-4.1");
   const prompt = await getPrompt("string_value_selector");
   const correctedStringSchema = model.withStructuredOutput(
     z.object({
@@ -198,11 +194,7 @@ async function getCorrectedValueForStringColumn({
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = new AzureChatOpenAI({
-    model: "gpt-4.1",
-    deploymentName: "gpt-4.1",
-    temperature: 0,
-  });
+  const llm = getAIModel("azure:gpt-4.1");
 
   /************* 1. shared array for filters ****************************/
   const filters: unknown[] = [];

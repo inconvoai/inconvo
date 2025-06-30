@@ -5,7 +5,7 @@ import type {
   Query,
   QueryResponse,
 } from "~/server/userDatabaseConnector/types";
-import { AzureChatOpenAI } from "@langchain/openai";
+import { getAIModel } from "~/server/agents/utils/getAIModel";
 import assert from "assert";
 import {
   Annotation,
@@ -106,11 +106,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     error: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
     }),
-    // The number of follow-up questions asked
-    notCompleteCount: Annotation<number>({
-      reducer: (x, y) => y,
-      default: () => 0,
-    }),
     // Next conditional node to go to
     next: Annotation<string>({
       reducer: (x, y) => y ?? x ?? END,
@@ -150,32 +145,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     ...QueryBuilderState.spec,
   });
 
-  const model = new AzureChatOpenAI({
-    model: "gpt-4.1",
-    deploymentName: "gpt-4.1",
-    temperature: 0,
-  });
-
-  const generateFollowUpQuestion = async (
-    state: typeof OverallStateAnnotation.State
-  ) => {
-    const followUpQuestion = await getPrompt("generate_follow_up_question");
-    const responseFormat = model.withStructuredOutput(
-      z.object({
-        question: z
-          .string()
-          .describe("The question to ask the database retriever"),
-      }),
-      { strict: true }
-    );
-    return followUpQuestion.pipe(responseFormat).invoke({
-      question: params.userQuestion,
-      reason: state.reason,
-      databaseAgentResponse: state.databaseResponseString
-        .map((message, idx) => `${idx + 1}): ${message}`)
-        .join("\n\n"),
-    });
-  };
+  const model = getAIModel("azure:gpt-4.1");
 
   const flattenJsonTablesInSchema = async (
     state: typeof DatabaseAgentState.State
@@ -484,23 +454,21 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       date: new Date().toISOString(),
     });
 
-    if (
-      state.notCompleteCount >= 1 &&
-      response.next === "generate_follow_up_question"
-    ) {
-      return { next: END, reason: "Too many follow-up questions" };
+    if (response.next === "generate_follow_up_question") {
+      return {
+        next: END,
+        reason: `Sorry, I was not able to find the data you were looking for, The data I retrieved is incorrect because ${response.reason}`,
+      };
     }
 
     return {
       next: response.next,
       reason: response.reason,
-      notComplete: state.notCompleteCount + 1,
     };
   };
 
   const workflow = new StateGraph(OverallStateAnnotation)
     .addNode("flatten_json_tables", flattenJsonTablesInSchema)
-    .addNode("generate_follow_up_question", generateFollowUpQuestion)
     .addNode("select_table_name", selectTableName, {
       input: DatabaseAgentState,
     })
@@ -535,8 +503,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addConditionalEdges(
       "decide_complete",
       (x: typeof OverallStateAnnotation.State) => x.next
-    )
-    .addEdge("generate_follow_up_question", "select_table_name");
+    );
 
   return workflow.compile();
 }

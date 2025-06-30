@@ -12,13 +12,15 @@ export function buildTableSchemaStringFromTableSchema(
 
   const columns = tableSchema.columns
     .map((column) => {
-      return `\t\t- ${column.name} (${column.type})`;
+      const unitSuffix = column.unit ? ` [${column.unit}]` : "";
+      return `\t\t- ${column.name} (${column.type}${unitSuffix})`;
     })
     .join("\n")
     .replace(/^/, `\tColumns:\n`);
   const computedColumns = tableSchema.computedColumns
     .map((column, index) => {
-      return `${index === 0 ? "\n" : ""}\t\t- ${column.name} (${column.type})`;
+      const unitSuffix = column.unit ? ` [${column.unit}]` : "";
+      return `${index === 0 ? "\n" : ""}\t\t- ${column.name} (${column.type}${unitSuffix})`;
     })
     .join("\n");
   const relations =

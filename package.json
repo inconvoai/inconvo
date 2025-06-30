@@ -13,7 +13,7 @@
     "lint": "next lint && tsc --noEmit",
     "lint:fix": "next lint --fix",
     "start": "next start",
-    "evals:e2e": "dotenv -e .env npx tsx evals/e2e/questionAgent/index.ts",
+    "evals:e2e": "NODE_ENV=development dotenv -e .env npx tsx evals/e2e/inconvoAgent/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -54,6 +54,7 @@
     "mantine-datatable": "^8.1.1",
     "mathjs": "^14.5.2",
     "next": "^15.3.4",
+    "openevals": "^0.1.0",
     "patch-package": "^8.0.0",
     "pg": "^8.16.2",
     "posthog-js": "^1.255.1",

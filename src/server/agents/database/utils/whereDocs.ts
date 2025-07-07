@@ -1,118 +1,122 @@
 export const whereConditionDocs = `# Filters
 
 ## Base Filters
-
-You have access to the following base filters:
-\`equals\`, \`not\`, \`in\`, \`notIn\`, \`lt\`, \`lte\`, \`gt\`, \`gte\`.
-These filters can be used to filter records based on the properties of the record itself.
+You have access to the following base filters:  
+\`equals\`, \`not\`, \`in\`, \`notIn\`, \`lt\`, \`lte\`, \`gt\`, \`gte\`.  
+These filters apply to columns on the record itself.
 
 ## Filter on "-to-many" Relations
 
-You have access to \`some\`, \`every\`, and \`none\` options to filter records by the properties of related records on the "-to-many" side of the relation.
-| Requirement | Query Option to Use |
+You can scope a parent record by the properties of its **many-side** children with the options **\`some\`**, **\`every\`**, and **\`none\`**.
+
+| Natural-language requirement | Prisma option to use |
 |--------------------------------------------------------------------|----------------------------------------------|
-| "I want a list of every User that has at least one unpublished Post record" | \`some posts are unpublished\` |
-| "I want a list of every User that has no unpublished Post records" | \`none of the posts are unpublished\` |
-| "I want a list of every User that has only unpublished Post records" | \`every post is unpublished\` |
+| “…has **at least one** related record that matches X” | \`some\` |
+| “…has **no** related records that match X” | \`none\` |
+| “…has **only / all / every** related records that match X (no exceptions)” | \`every\` |
 
-Example query to return Users with no posts over 100 views and all posts having ≤ 50 likes:
 
-\`\`\`json
+> **Decision rule**  
+> • If the wording implies *at least one*, use **\`some\`**.  
+> • If the wording implies *exclusivity* (“only”, “all”, “every”), use **\`every\`**.  
+> • If the wording is “no / none”, use **\`none\`**.
+
+
+### Contrast example - spotting the exclusivity cue
+
+**A. “some” (at-least-one semantics)**  
+“List users who have at least one order over \$100.”
+
 {
-  "table": "users",
-  "operation": "findMany",
-  "operationParameters": {},
-  "where": {
-    "posts": {
-      "none": {
-        "views": {
-          "gt": 100
-        }
-      },
-      "every": {
-        "likes": {
-          "lte": 50
-        }
-      }
-    }
-  }
+  "relation": "orders",
+  "filterOption": "some",
+  "column": "total_order_value",
+  "operator": "gt",
+  "value": 100
 }
-\`\`\`
+
+
+B. “every” (exclusive semantics)
+“List users who's every order is after 2024”
+{
+  "relation": "orders",
+  "filterOption": "every",
+  "column": "order_date",
+  "operator": "gt",
+  "value": "2024-01-01"
+}
+
+C. Combined example
+Return users with no posts over 100 views and where all posts have ≤ 50 likes:
+
+{ 
+  "relation": "posts",
+  "filterOption": "every",
+  "column": "likes",
+  "operator": "lte",
+  "value": 50,
+}
+  
+{
+  "relation": "posts",
+  "filterOption": "none",
+  "column": "views",
+  "operator": "gt",
+  "value": 100
+}
+
 
 ## Filter on "-to-one" Relations
 
-You can use \`is\` and \`isNot\` options to filter records by the properties of related records on the "-to-one" side of the relation.
+Use \`is\` and \`isNot\` to target a single related record.
 
-Example query to return Posts where the author's name is not Bob and the author is older than 40:
+Example - posts whose author is not Bob and is older than 40:
 
-\`\`\`json
 {
-  "table": "posts",
-  "operation": "findMany",
-  "operationParameters": {},
-  "where": {
-    "author": {
-      "isNot": {
-        "name": "Bob"
-      },
-      "is": {
-        "age": {
-          "gt": 40
-        }
-      }
-    }
-  }
-}
-\`\`\`
+  "relation": "author",
+  "filterOption": "isNot",
+  "column": "name",
+  "operator": "contains_insensitive",
+  "value": "Bob"
+    
+  },
+{
+  "relation": "author",
 
+  "filterOption": "is",
+  "column": "age",
+  "operator": "gt",
+  "value": 40
+} 
 ## Filter on Absence of "-to-many" Records
 
 Example query to return all users that have zero posts:
 
-\`\`\`json
 {
-  "table": "users",
-  "operation": "findMany",
-  "operationParameters": {},
-  "where": {
-    "posts": {
-      "none": {}
-    }
+  "relation": "posts",
+  "filterOption": "none",
+  "value": {}
   }
-}
-\`\`\`
 
 ## Filter on Absence of "-to-one" Relations
 
 Example query to return all posts that don't have an author relation:
 
-\`\`\`json
 {
-  "table": "posts",
-  "operation": "findMany",
-  "operationParameters": {},
-  "where": {
-    "author": {
-      "is": {} // or "is": null
-    }
-  }
+  "relation": "author",
+  "filterOption": "is",
+  "value": {}
 }
-\`\`\`
 
-## Filter on Presence of Related Records
-
-Example query to return all users with at least one post:
-
-\`\`\`json
-{
-  "table": "users",
-  "operation": "findMany",
-  "operationParameters": {},
-  "where": {
-    "posts": {
-      "some": {}
-    }
-  }
-}
-\`\`\`
 `;
+
+// Filter tool does not exist
+// ## Filter on Presence of Related Records
+
+// Example query to return all users with at least one post:
+
+// {
+//   "relation": "posts",
+//   "filterOption": "some",
+//   "value": {}
+// }

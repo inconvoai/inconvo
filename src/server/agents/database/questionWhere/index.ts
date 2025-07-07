@@ -751,9 +751,9 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     organisationName: params.organisationName,
     tableName: params.tableName,
     operation: params.operation,
-    operationParams: params.operationParams,
+    operationParams: JSON.stringify(params.operationParams, null, 2),
     date: new Date().toISOString(),
-    tableConditions: params.tableConditions,
+    tableConditions: JSON.stringify(params.tableConditions, null, 2),
     tableSchema: buildTableSchemaStringFromTableSchema(params.tableSchema),
     relatedTablesSchemas: relatedTablesSchemasString,
   })) as Record<"messages", BaseMessage[]>;

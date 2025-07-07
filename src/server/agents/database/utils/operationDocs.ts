@@ -15,7 +15,7 @@ export const operationDocs = {
           },
           orderBy: {
             column: "createdAt",
-            direction: "asc",
+            direction: "desc",
           },
           limit: 2,
         },
@@ -72,12 +72,12 @@ export const operationDocs = {
           columns: ["id", "name"],
         },
       },
-      response: { id: 41, name: 40 },
+      response: { _count: { id: 41, name: 40 } },
     },
   },
   countWithJoin: {
     description:
-      "Returns the count of non-null values after joining with related tables. It differs from countRelations by operating on a joined dataset instead of counting relations per row.",
+      "Returns the count of non-null values after joining with related tables. It differs from countRelations by operating on a joined dataset instead of counting relations per row. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
     example: {
       question: "Count the number of posts by users with a verified email.",
       query: {
@@ -160,7 +160,7 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      "Groups rows by one or more columns in starting table or a joined table. Can calculate the Count, Sum, Min, Max or Avg of the columns in the starting table or joined tabled grouped by the grouped columns. If a join is not needed set join to null. The results are ordered in descending order and limited to a chosen value. If you want to groupBy a date column use groupByDateInterval instead. When grouping by an ID column, also add a friendly name to the groupBy array to present to the user later.",
+      "Groups rows by one or more columns in starting table or a joined table. Can calculate the Count, Sum, Min, Max or Avg of the columns in the starting table or joined tabled grouped by the grouped columns. If a join is not needed set joins to null. The results are ordered in descending order and limited to a chosen value. If you want to groupBy a date column use groupByDateInterval instead. When grouping by an ID column, also add a friendly name to the groupBy array to present to the user later. Column names in groupBy array must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'.",
     example: {
       question: "How many cars are owned by users in each country?",
       query: {
@@ -182,7 +182,7 @@ export const operationDocs = {
           max: null,
           count: null,
           orderBy: {
-            function: "count",
+            function: "sum",
             column: "user.cars",
             direction: "desc",
           },
@@ -198,7 +198,7 @@ export const operationDocs = {
   },
   groupByDateInterval: {
     description:
-      "Calculates aggregations (min, max, count, sum, or avg) of records grouped by a given date interval. (day, week, month, year). This is useful for time series analysis",
+      "Calculates aggregations (min, max, count, sum, or avg) of records grouped by a given date interval. (day, week, month, year). This is useful for time series analysis. OrderBy can be 'chronological', 'reverseChronological', or an object with function, column, and direction.",
     example: {
       question: "Which months had the highest average order amounts?",
       query: {
@@ -221,9 +221,9 @@ export const operationDocs = {
         },
       },
       response: [
-        { "2021-02-01": { _avg: { totalAmount: 145.75 } } },
-        { "2021-03-01": { _avg: { totalAmount: 132.25 } } },
-        { "2021-01-01": { _avg: { totalAmount: 120.5 } } },
+        { date_interval: "2021-02-01", _avg: { totalAmount: 145.75 } },
+        { date_interval: "2021-03-01", _avg: { totalAmount: 132.25 } },
+        { date_interval: "2021-01-01", _avg: { totalAmount: 120.5 } },
       ],
     },
   },
@@ -236,19 +236,19 @@ export const operationDocs = {
         table: "user",
         operation: "countByTemporalComponent",
         operationParameters: {
-          temporalComponent: "Day",
+          component: "Day",
           dateColumn: "createdAt",
         },
       },
-      response: [
-        { temporalComponent: "Monday", count: 1 },
-        { temporalComponent: "Tuesday", count: 4 },
-        { temporalComponent: "Wednesday", count: 10 },
-        { temporalComponent: "Thursday", count: 2 },
-        { temporalComponent: "Friday", count: 3 },
-        { temporalComponent: "Saturday", count: 1 },
-        { temporalComponent: "Sunday", count: 0 },
-      ],
+      response: {
+        Monday: 1,
+        Tuesday: 4,
+        Wednesday: 10,
+        Thursday: 2,
+        Friday: 3,
+        Saturday: 1,
+        Sunday: 0,
+      },
     },
   },
   NONE: {

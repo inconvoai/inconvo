@@ -93,11 +93,11 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       reducer: (x, y) => y,
       default: () => null,
     }),
-    databaseResponse: Annotation<Record<string, unknown>[]>({
-      reducer: (x, y) => (x ? [...x, ...y] : y),
-    }),
-    databaseResponseString: Annotation<string[]>({
-      reducer: (x, y) => (x ? [...x, ...y] : y),
+    databaseResponse: Annotation<{
+      query: string;
+      response: unknown;
+    }>({
+      reducer: (x, y) => y,
     }),
     // The reason for the answer isn't sufficient
     reason: Annotation<string>({
@@ -416,19 +416,10 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     state: typeof DatabaseAgentState.State
   ) => {
     return {
-      databaseResponse: [
-        {
-          query: state.queryResponse?.query,
-          response: state.queryResponse?.data,
-        },
-      ],
-      databaseResponseString: [
-        `Query:\n${JSON.stringify(
-          state.queryResponse?.query,
-          null,
-          2
-        )}\nResponse:\n${JSON.stringify(state.queryResponse?.data, null, 2)}`,
-      ],
+      databaseResponse: {
+        query: state.queryResponse?.query,
+        response: state.queryResponse?.data,
+      },
     };
   };
 
@@ -436,21 +427,19 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const nextStepPrompt = await getPrompt("decide_database_next_step");
     const nextStepSchema = model.withStructuredOutput(
       z.object({
+        _scratchpad: z.string().describe("Your reasoning scratchpad"),
         reason: z
           .string()
           .describe("The thinking behind the next selecting the next step"),
         next: z
           .enum(["generate_follow_up_question", END])
           .describe("The next step to take"),
-      }),
-      { method: "jsonSchema", strict: true }
+      })
     );
     const response = await nextStepPrompt.pipe(nextStepSchema).invoke({
       question: params.userQuestion,
       requestContext: params.requestContext,
-      database_response: state.databaseResponseString
-        .map((message, idx) => `${idx + 1}): ${message}`)
-        .join("\n\n"),
+      database_response: state.databaseResponse.query,
       date: new Date().toISOString(),
     });
 

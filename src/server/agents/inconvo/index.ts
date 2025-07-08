@@ -223,7 +223,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
-    const prompt = await getPrompt("format_response");
+    const prompt = await getPrompt("format_response_type");
     let selectedType = "text";
     const outputTypeSelectSchema = model.withStructuredOutput(
       z
@@ -319,9 +319,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
       );
     }
-    const response = await prompt.pipe(outputFormatterSchema).invoke({
-      messageToFormat: state.messages?.at(-1)?.content ?? "",
-    });
+    const outputFormatterPrompt = await getPrompt(`format_response`);
+    const response = await outputFormatterPrompt
+      .pipe(outputFormatterSchema)
+      .invoke({
+        messageToFormat: state.messages?.at(-1)?.content ?? "",
+      });
     return {
       answer: response,
       chatHistory: [

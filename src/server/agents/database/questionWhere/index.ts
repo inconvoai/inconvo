@@ -118,7 +118,7 @@ async function getDistinctValuesByEditDistance({
   // We ignore the error here and later just let the LLM use any string
   // Query will error if more than 500 distinct values are returned
   if (!queryResponse) {
-    return `Error fetching distinct values. Its likely that there are too many distinct values in the column ${columnName} of table ${tableName}. Maybe just use ${targetString}.`;
+    return false;
   }
 
   const responseType = z.array(z.string());
@@ -126,6 +126,71 @@ async function getDistinctValuesByEditDistance({
   const distinctValues = parsedResponse;
 
   return distinctValues;
+}
+
+interface GetCorrectedValueForStringColumnInput {
+  columnName: string;
+  value: string;
+  tableName: string;
+  tableConditions: TableConditions;
+  jsonColumnSchema: JsonColumnSchema | null;
+  dateCondition: DateCondition;
+  connectorUrl: string;
+  connectorSigningKey: string;
+  question: string;
+}
+
+async function getCorrectedValueForStringColumn({
+  columnName,
+  value,
+  tableName,
+  tableConditions,
+  jsonColumnSchema,
+  dateCondition,
+  connectorUrl,
+  connectorSigningKey,
+  question,
+}: GetCorrectedValueForStringColumnInput) {
+  const closeMatches = await getDistinctValuesByEditDistance({
+    columnName,
+    tableName,
+    targetString: value,
+    tableConditions,
+    jsonColumnSchema,
+    dateCondition,
+    connectorUrl,
+    connectorSigningKey,
+  });
+
+  // If the query fails, we ignore the error and just let the LLM use any string
+  if (closeMatches === false) {
+    return value;
+  }
+
+  const caseInsensitiveMatch = closeMatches.find(
+    (match) => match.toLowerCase() === value.toLowerCase()
+  );
+  if (caseInsensitiveMatch) {
+    return caseInsensitiveMatch;
+  }
+
+  const model = getAIModel("azure:gpt-4.1");
+  const prompt = await getPrompt("string_value_selector");
+  const correctedStringSchema = model.withStructuredOutput(
+    z.object({
+      correctedValue: stringArrayToZodEnum(closeMatches),
+    }),
+    {
+      method: "jsonSchema",
+      strict: true,
+    }
+  );
+  const { correctedValue } = await prompt.pipe(correctedStringSchema).invoke({
+    question: question,
+    columnName: columnName,
+    value: value,
+  });
+  return correctedValue;
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
@@ -309,7 +374,27 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: string | string[];
         }) => {
           const { column, operator, value } = input;
-          const filter = scalarCond(column, operator, value);
+          if (
+            Array.isArray(value) ||
+            operator === "contains" ||
+            operator === "contains_insensitive"
+          ) {
+            const filter = scalarCond(column, operator, value);
+            filters.push(filter);
+            return filter;
+          }
+          const correctedValue = await getCorrectedValueForStringColumn({
+            columnName: column,
+            value: value,
+            tableName: params.tableName,
+            tableConditions: params.tableConditions,
+            jsonColumnSchema: null,
+            dateCondition: params.dateCondition,
+            connectorUrl: params.connectorUrl,
+            connectorSigningKey: params.connectorSigningKey,
+            question: params.question,
+          });
+          const filter = scalarCond(column, operator, correctedValue);
           filters.push(filter);
           return filter;
         },
@@ -384,6 +469,32 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             relationColumn,
             `Column ${column} not found in relation ${relation} schema`
           );
+          if (relationColumn.type === "string") {
+            const correctedValue = await getCorrectedValueForStringColumn({
+              columnName: column,
+              value: value as string,
+              tableName: relatedTableName,
+              tableConditions: buildConditionsForTable(
+                relationSchema,
+                params.requestContext
+              ),
+              jsonColumnSchema: null,
+              dateCondition: null,
+              connectorUrl: params.connectorUrl,
+              connectorSigningKey: params.connectorSigningKey,
+              question: params.question,
+            });
+            const filter = relationCond(
+              relation,
+              filterOption,
+              column,
+              operator,
+              correctedValue
+            );
+            filters.push(filter);
+            return filter;
+          }
+
           const filter = relationCond(
             relation,
             filterOption,
@@ -502,6 +613,31 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             relationColumn,
             `Column ${column} not found in relation ${relation} schema`
           );
+          if (relationColumn.type === "string") {
+            const correctedValue = await getCorrectedValueForStringColumn({
+              columnName: column,
+              value: value as string,
+              tableName: relatedTableName,
+              tableConditions: buildConditionsForTable(
+                relationSchema,
+                params.requestContext
+              ),
+              jsonColumnSchema: null,
+              dateCondition: null,
+              connectorUrl: params.connectorUrl,
+              connectorSigningKey: params.connectorSigningKey,
+              question: params.question,
+            });
+            const filter = relationCond(
+              relation,
+              filterOption,
+              column,
+              operator,
+              correctedValue
+            );
+            filters.push(filter);
+            return filter;
+          }
 
           const filter = relationCond(
             relation,
@@ -572,32 +708,6 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     return tools;
   };
 
-  const findSimilarStringsByEditDistance = tool(
-    async (input: { column: string; value: string }) => {
-      const { column, value } = input;
-      const correctedValue = await getDistinctValuesByEditDistance({
-        columnName: column,
-        targetString: value,
-        tableName: params.tableName,
-        tableConditions: params.tableConditions,
-        jsonColumnSchema: null,
-        dateCondition: params.dateCondition,
-        connectorUrl: params.connectorUrl,
-        connectorSigningKey: params.connectorSigningKey,
-      });
-      return correctedValue;
-    },
-    {
-      name: "findSimilarStringsByEditDistance",
-      description:
-        "Finds similar string to an input string in a column by edit distance",
-      schema: z.object({
-        column: stringArrayToZodEnum(stringColumnNames),
-        value: z.string(),
-      }),
-    }
-  );
-
   const finalFilterGenerator = tool(
     async () => {
       if (filters.length === 0) {
@@ -634,7 +744,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 3. THE AGENT ****************************************/
 
-  const agentPrompt = await getPrompt("where_condition_dev");
+  const agentPrompt = await getPrompt("where_condition_agent");
 
   const agentPromptFormatted = (await agentPrompt.invoke({
     whereConditionDocs: whereConditionDocs,
@@ -650,11 +760,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   const agent = createReactAgent({
     llm,
-    tools: [
-      ...buildTools(),
-      findSimilarStringsByEditDistance,
-      finalFilterGenerator,
-    ],
+    tools: [...buildTools(), finalFilterGenerator],
     prompt: agentPromptFormatted.messages[0],
   });
 

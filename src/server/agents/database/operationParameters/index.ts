@@ -110,7 +110,7 @@ export function operationParametersAgent(params: RequestParams) {
     tableSchema?: string;
     queryCurrentState?: string;
   }): Promise<z.infer<T>> => {
-    const queryExtenderPrompt = await getPrompt("extend_query");
+    const queryExtenderPrompt = await getPrompt("extend_query:f100254a");
     const queryExtender = model.withStructuredOutput(schema, {
       method: "jsonSchema",
       strict: true,
@@ -147,7 +147,9 @@ export function operationParametersAgent(params: RequestParams) {
           params.schema.find((table) => table.name === tableName)!
         )
       );
-      const tableSelectionPrompt = await getPrompt("findmany-select-tables");
+      const tableSelectionPrompt = await getPrompt(
+        "findmany-select-tables:391dcd8e"
+      );
       const tableSelector = model.withStructuredOutput(tableSelectSchema, {
         method: "jsonSchema",
         strict: true,
@@ -265,7 +267,9 @@ export function operationParametersAgent(params: RequestParams) {
         };
       }
 
-      const tableSelectionPrompt = await getPrompt("select_join_tables");
+      const tableSelectionPrompt = await getPrompt(
+        "select_join_tables:2e053bc1"
+      );
 
       const joinTableZodSchemas = Object.entries(tableCandidates.iqlPaths)
         .filter(([_path, tableName]) => tableName !== params.tableName)
@@ -501,7 +505,9 @@ export function operationParametersAgent(params: RequestParams) {
         throw new Error("No tables to join");
       }
 
-      const tableSelectionPrompt = await getPrompt("select_join_tables");
+      const tableSelectionPrompt = await getPrompt(
+        "select_join_tables:2e053bc1"
+      );
 
       const joinTableZodSchemas = Object.entries(tableCandidates.iqlPaths)
         .filter(([_path, tableName]) => tableName !== params.tableName)

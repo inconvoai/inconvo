@@ -147,13 +147,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             connectorSigningKey: params.connectorSigningKey,
           })
         ).invoke({});
-        const response = databaseRetrieverResponse.reason
-          ? databaseRetrieverResponse.reason +
-            "\n\n" +
-            JSON.stringify(databaseRetrieverResponse.databaseResponse, null, 2)
-          : databaseRetrieverResponse.databaseResponse;
 
-        return { response: response };
+        return {
+          verification: databaseRetrieverResponse.reason,
+          query: databaseRetrieverResponse.databaseResponse.query,
+          data: databaseRetrieverResponse.databaseResponse.response,
+        };
       },
       {
         name: "databaseRetriever",
@@ -208,7 +207,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent");
+    const prompt = await getPrompt("inconvo_agent:213aeefb");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -223,7 +222,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
-    const prompt = await getPrompt("format_response_type");
+    const prompt = await getPrompt("format_response_type:0b4217c5");
     let selectedType = "text";
     const outputTypeSelectSchema = model.withStructuredOutput(
       z
@@ -319,7 +318,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
       );
     }
-    const outputFormatterPrompt = await getPrompt(`format_response`);
+    const outputFormatterPrompt = await getPrompt("format_response:c7276066");
     const response = await outputFormatterPrompt
       .pipe(outputFormatterSchema)
       .invoke({

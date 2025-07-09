@@ -41,6 +41,7 @@ import { operationParametersAgent } from "./operationParameters";
 import type { Schema } from "~/server/db/schema";
 import { mapJsonToSchema } from "./utils/jsonColumnSchemaMapper";
 import { buildConditionsForTable } from "./utils/buildConditionsForTable";
+import { whereConditionDocsSummary } from "./utils/whereDocs";
 
 interface RequestParams {
   userQuestion: string;
@@ -250,7 +251,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
-    const selectTablePrompt = await getPrompt("select_table");
+    const selectTablePrompt = await getPrompt("select_table:6fec9476");
     const tableNames = state.schema
       .filter((table) => table.access === "QUERYABLE")
       .map((table) => table.name);
@@ -285,7 +286,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const selectDatabaseOperation = async (
     state: typeof DatabaseAgentState.State
   ) => {
-    const operationSelectorPrompt = await getPrompt("select_operation");
+    const operationSelectorPrompt = await getPrompt(
+      "select_operation:c973d516"
+    );
 
     const { columns = [], outwardRelations: relations = [] } =
       state.tableSchema;
@@ -322,6 +325,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       .invoke({
         user_question: state.question,
         operationDocs: YAML.stringify(operationDocs, null, 2),
+        filterDocsSummary: whereConditionDocsSummary,
         tableSchema: buildTableSchemaStringFromTableSchema(state.tableSchema),
         tableConditions: state.tableConditions,
       });
@@ -424,7 +428,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const decideComplete = async (state: typeof DatabaseAgentState.State) => {
-    const nextStepPrompt = await getPrompt("decide_database_next_step");
+    const nextStepPrompt = await getPrompt(
+      "decide_database_next_step:f8a087f4"
+    );
     const nextStepSchema = model.withStructuredOutput(
       z.object({
         _scratchpad: z.string().describe("Your reasoning scratchpad"),
@@ -439,7 +445,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const response = await nextStepPrompt.pipe(nextStepSchema).invoke({
       question: params.userQuestion,
       requestContext: params.requestContext,
-      database_response: state.databaseResponse.query,
+      database_sql: state.databaseResponse.query,
       date: new Date().toISOString(),
     });
 

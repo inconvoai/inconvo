@@ -175,7 +175,7 @@ async function getCorrectedValueForStringColumn({
   }
 
   const model = getAIModel("azure:gpt-4.1");
-  const prompt = await getPrompt("string_value_selector");
+  const prompt = await getPrompt("string_value_selector:0f6264ae");
   const correctedStringSchema = model.withStructuredOutput(
     z.object({
       correctedValue: stringArrayToZodEnum(closeMatches),
@@ -713,7 +713,9 @@ export async function questionWhereConditionAgent(params: RequestParams) {
       if (filters.length === 0) {
         return null;
       } else {
-        const prompt = await getPrompt("where_condition_agent_formatter");
+        const prompt = await getPrompt(
+          "where_condition_agent_formatter:acffdd16"
+        );
         const response = llm.withStructuredOutput(
           z.object({
             AND: z.array(z.object({}).passthrough()),
@@ -744,7 +746,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 3. THE AGENT ****************************************/
 
-  const agentPrompt = await getPrompt("where_condition_agent");
+  const agentPrompt = await getPrompt("where_condition_agent:48f3174f");
 
   const agentPromptFormatted = (await agentPrompt.invoke({
     whereConditionDocs: whereConditionDocs,

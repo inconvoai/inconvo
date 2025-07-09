@@ -111,3 +111,18 @@ generateRelationToOneAbsentCondition({
 //   "filterOption": "some",
 //   "value": {}
 // }
+
+export const whereConditionDocsSummary = `
+## Filters:
+Use base filters (equals, gt, contains, etc.) on any column.
+
+For -to-many relations, use:
+   some = at least one match
+    every = all must match
+    none = no matches
+
+For -to-one relations, use:
+    is / isNot = match or exclude a single related record
+
+To filter by absence of related records, use none (many) or is with empty value (one).
+`;

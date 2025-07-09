@@ -27,6 +27,8 @@ import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import { getAIModel } from "../utils/getAIModel";
+import { inconvoAnswerSchema } from "~/server/userDatabaseConnector/types";
+import { tryCatchSync } from "~/server/api/utils/tryCatch";
 
 interface Chart {
   type: "bar" | "line";
@@ -207,7 +209,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent:213aeefb");
+    const prompt = await getPrompt("inconvo_agent:1c571c14");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -222,6 +224,32 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
+    // try to zod parse the last message before using the LLM to format it
+    const potentiallyFormattedMessage = state.messages?.at(-1)?.content ?? "";
+    const messageContent =
+      typeof potentiallyFormattedMessage === "string"
+        ? potentiallyFormattedMessage
+        : JSON.stringify(potentiallyFormattedMessage);
+    const { data: potentiallyFormattedMessageAsJson } = tryCatchSync(
+      () => JSON.parse(messageContent) as unknown
+    ) as { data: unknown; error: Error | null };
+
+    if (potentiallyFormattedMessageAsJson) {
+      const parsedMessage = inconvoAnswerSchema.safeParse(
+        potentiallyFormattedMessageAsJson
+      );
+      if (parsedMessage.success) {
+        return {
+          answer: parsedMessage.data,
+          chatHistory: [
+            state.userQuestion,
+            new AIMessage(JSON.stringify(parsedMessage.data, null, 2)),
+          ],
+        };
+      }
+    }
+
+    // Fallback to using the LLM to format the response
     const prompt = await getPrompt("format_response_type:0b4217c5");
     let selectedType = "text";
     const outputTypeSelectSchema = model.withStructuredOutput(

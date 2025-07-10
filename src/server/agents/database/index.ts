@@ -273,9 +273,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     return { tableName: response.table, tableSchema };
   };
 
-  const defineTableConditions = async (
-    state: typeof DatabaseAgentState.State
-  ) => {
+  const setContextFilters = async (state: typeof DatabaseAgentState.State) => {
     const conditions = buildConditionsForTable(
       state.tableSchema,
       params.requestContext
@@ -357,7 +355,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     return { operationParams: operationParamsResponse.operationParameters };
   };
 
-  const questionWhereConditions = async (
+  const setMessageDerivedFilters = async (
     state: typeof DatabaseAgentState.State
   ) => {
     const questionWhereAgentResponse = await questionWhereConditionAgent({
@@ -466,32 +464,62 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addNode("flatten_json_tables", flattenJsonTablesInSchema)
     .addNode("select_table_name", selectTableName, {
       input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
     })
-    .addNode("define_table_conditions", defineTableConditions, {
+    .addNode("set_context_filters", setContextFilters, {
       input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
     })
     .addNode("select_operation", selectDatabaseOperation, {
       input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
     })
     .addNode("define_operation_params", defineOperationParams, {
       input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
     })
-    .addNode("question_where_conditions", questionWhereConditions, {
+    .addNode("set_message_derived_filters", setMessageDerivedFilters, {
       input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
     })
-    .addNode("build_query", buildQuery, { input: DatabaseAgentState })
-    .addNode("execute_query", executeQuery, { input: DatabaseAgentState })
+    .addNode("build_query", buildQuery, {
+      input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
+    })
+    .addNode("execute_query", executeQuery, {
+      input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
+    })
     .addNode("format_database_response", formatDatabaseResponse, {
       input: DatabaseAgentState,
     })
-    .addNode("decide_complete", decideComplete, { input: DatabaseAgentState })
+    .addNode("decide_complete", decideComplete, {
+      input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
+    })
     .addEdge(START, "flatten_json_tables")
     .addEdge("flatten_json_tables", "select_table_name")
-    .addEdge("select_table_name", "define_table_conditions")
-    .addEdge("define_table_conditions", "select_operation")
+    .addEdge("select_table_name", "set_context_filters")
+    .addEdge("set_context_filters", "select_operation")
     .addEdge("select_operation", "define_operation_params")
-    .addEdge("define_operation_params", "question_where_conditions")
-    .addEdge("question_where_conditions", "build_query")
+    .addEdge("define_operation_params", "set_message_derived_filters")
+    .addEdge("set_message_derived_filters", "build_query")
     .addEdge("build_query", "execute_query")
     .addEdge("execute_query", "format_database_response")
     .addEdge("format_database_response", "decide_complete")

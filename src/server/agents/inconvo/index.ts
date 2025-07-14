@@ -209,7 +209,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent:1c571c14");
+    const prompt = await getPrompt("inconvo_agent:a8238f65");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,

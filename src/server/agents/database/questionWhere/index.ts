@@ -746,7 +746,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 3. THE AGENT ****************************************/
 
-  const agentPrompt = await getPrompt("where_condition_agent:48f3174f");
+  const agentPrompt = await getPrompt("where_condition_agent:4217c5e0");
 
   const agentPromptFormatted = (await agentPrompt.invoke({
     whereConditionDocs: whereConditionDocs,

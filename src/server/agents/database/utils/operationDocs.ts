@@ -198,7 +198,7 @@ export const operationDocs = {
   },
   groupByDateInterval: {
     description:
-      "Calculates aggregations (min, max, count, sum, or avg) of records grouped by a given date interval. (day, week, month, year). This is useful for time series analysis. OrderBy can be 'chronological', 'reverseChronological', or an object with function, column, and direction.",
+      "Calculates aggregations (min, max, count, sum, or avg) of records grouped by a given date interval. (day, week, month, year). This is useful for time series analysis. OrderBy can be 'chronological', 'reverseChronological', or an object with function, column, and direction. If the order is not specified you should use 'chronological' as the default order. 'reverseChronological' can be used to find the X most recent records grouped by the specified date interval.",
     example: {
       question: "Which months had the highest average order amounts?",
       query: {

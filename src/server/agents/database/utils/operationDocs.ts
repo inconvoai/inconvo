@@ -77,7 +77,7 @@ export const operationDocs = {
   },
   countWithJoin: {
     description:
-      "Returns the count of non-null values after joining with related tables. It differs from countRelations by operating on a joined dataset instead of counting relations per row. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
+      "Returns the count of non-null values after joining with related tables. This counts the number of matching records in the joined table, not the number of distinct records in the starting table. If you need to count distinct users who have made recent posts, use a count on the user ID with appropriate filters. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
     example: {
       question: "Count the number of posts by users with a verified email.",
       query: {

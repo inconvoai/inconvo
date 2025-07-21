@@ -139,22 +139,31 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
     const databaseRetriever = tool(
       async (input: { question: string }) => {
-        const databaseRetrieverResponse = await (
-          await databaseRetrieverAgent({
-            userQuestion: input.question,
-            organisationName: params.organisationName,
-            schema: params.schema,
-            requestContext: state.requestContext,
-            connectorUrl: params.connectorUrl,
-            connectorSigningKey: params.connectorSigningKey,
-          })
-        ).invoke({});
-
-        return {
-          verification: databaseRetrieverResponse.reason,
-          query: databaseRetrieverResponse.databaseResponse.query,
-          data: databaseRetrieverResponse.databaseResponse.response,
-        };
+        try {
+          const databaseRetrieverResponse = await (
+            await databaseRetrieverAgent({
+              userQuestion: input.question,
+              organisationName: params.organisationName,
+              schema: params.schema,
+              requestContext: state.requestContext,
+              connectorUrl: params.connectorUrl,
+              connectorSigningKey: params.connectorSigningKey,
+            })
+          ).invoke({});
+          return {
+            verification: databaseRetrieverResponse.reason,
+            query: databaseRetrieverResponse.databaseResponse.query,
+            data: databaseRetrieverResponse.databaseResponse.response,
+          };
+        } catch (e) {
+          return {
+            error: `Calling tool with arguments:\n\n${JSON.stringify(
+              input
+            )}\n\nraised the following error:\n\n${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          };
+        }
       },
       {
         name: "databaseRetriever",

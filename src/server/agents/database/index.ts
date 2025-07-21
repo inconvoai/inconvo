@@ -7,13 +7,7 @@ import type {
 } from "~/server/userDatabaseConnector/types";
 import { getAIModel } from "~/server/agents/utils/getAIModel";
 import assert from "assert";
-import {
-  Annotation,
-  Command,
-  END,
-  START,
-  StateGraph,
-} from "@langchain/langgraph";
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import {
   tableConditionsSchema,
   dateConditionSchema,
@@ -328,16 +322,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         tableConditions: state.tableConditions,
       });
     if (operationResponse.operation === "NONE") {
-      return new Command({
-        update: {
-          error: {
-            message:
-              "Sorry, I do not have the tools needed to answer this particular question right now.",
-          },
-        },
-        graph: Command.PARENT,
-        goto: "output_formatter",
-      });
+      throw new Error(
+        "Sorry, I was not able to find a suitable operation for your question. Please try rephrasing your question or providing more context."
+      );
     }
     return { operation: operationResponse.operation };
   };

@@ -27,8 +27,10 @@ import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import { getAIModel } from "../utils/getAIModel";
-import { inconvoAnswerSchema } from "~/server/userDatabaseConnector/types";
+import { inconvoResponseSchema } from "~/server/userDatabaseConnector/types";
 import { tryCatchSync } from "~/server/api/utils/tryCatch";
+import { inngest } from "~/server/inngest/client";
+import type { Conversation } from "@prisma/client";
 
 interface Chart {
   type: "bar" | "line";
@@ -59,6 +61,7 @@ interface QuestionAgentParams {
   connectorUrl: string;
   connectorSigningKey: string;
   checkpointer: PostgresSaver | MemorySaver;
+  conversation: Conversation;
 }
 
 const messageReducer = (
@@ -102,6 +105,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }),
     requestContext: Annotation<Record<string, string | number>>({
       reducer: (x, y) => y,
+      default: () =>
+        params.conversation.requestContext as Record<string, string | number>,
     }),
     error: Annotation<Record<string, unknown> | undefined>({
       reducer: (x, y) => y,
@@ -211,7 +216,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       isAIMessage(lastMessage) &&
       (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0)
     ) {
-      return END;
+      return "formatResponse";
     } else {
       return "continue";
     }
@@ -244,7 +249,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     ) as { data: unknown; error: Error | null };
 
     if (potentiallyFormattedMessageAsJson) {
-      const parsedMessage = inconvoAnswerSchema.safeParse(
+      const parsedMessage = inconvoResponseSchema.safeParse(
         potentiallyFormattedMessageAsJson
       );
       if (parsedMessage.success) {
@@ -370,20 +375,38 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     };
   }
 
+  async function titleConversation(state: typeof AgentState.State) {
+    if (params.conversation.title) {
+      return {};
+    }
+
+    await inngest.send({
+      name: "conversation/title",
+      data: {
+        conversationId: params.conversation.id,
+        encrypted: { message: state.userQuestion.text },
+      },
+    });
+    return {};
+  }
+
   const workflow = new StateGraph(AgentState)
     .addNode("reset_state", resetState)
+    .addNode("title_conversation", titleConversation)
     .addNode("build_tools", buildTools)
     .addNode("inconvo_agent", callModel)
     .addNode("inconvo_agent_tools", toolNode)
     .addNode("format_response", formatResponse)
     .addEdge(START, "reset_state")
     .addEdge("reset_state", "build_tools")
+    .addEdge("reset_state", "title_conversation")
     .addEdge("build_tools", "inconvo_agent")
-    .addEdge("inconvo_agent_tools", "inconvo_agent")
     .addConditionalEdges("inconvo_agent", shouldContinue, {
       continue: "inconvo_agent_tools",
-      [END]: "format_response",
-    });
+      formatResponse: "format_response",
+    })
+    .addEdge("inconvo_agent_tools", "inconvo_agent")
+    .addEdge("format_response", END);
 
   const graph = workflow.compile({ checkpointer: params.checkpointer });
 

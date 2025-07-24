@@ -60,11 +60,9 @@ export async function countWithJoin(db: any, query: Query) {
       )
     : undefined;
 
-  assert(countColumns, "Count columns are required");
-
   const selectFields: any = {};
 
-  if (countColumns) {
+  if (countColumns && countColumns.length > 0) {
     selectFields["_count"] = buildJsonObjectSelect(countColumns);
   }
 

@@ -1,5 +1,10 @@
 import { type Query } from "~/types/querySchema";
-import { count as dCount, eq, SQL } from "drizzle-orm";
+import {
+  count as drizzleCount,
+  countDistinct as drizzleCountDistinct,
+  eq,
+  SQL,
+} from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
@@ -41,16 +46,35 @@ export async function countWithJoin(db: any, query: Query) {
 
   const countColumns = createAggregationFields(
     operationParameters.count,
-    dCount,
+    drizzleCount,
     drizzleSchema,
     computedColumns
   );
+
+  const countDistinctColumns = operationParameters.countDistinct
+    ? createAggregationFields(
+        operationParameters.countDistinct,
+        drizzleCountDistinct,
+        drizzleSchema,
+        computedColumns
+      )
+    : undefined;
+
   assert(countColumns, "Count columns are required");
 
+  const selectFields: any = {};
+
+  if (countColumns) {
+    selectFields["_count"] = buildJsonObjectSelect(countColumns);
+  }
+
+  if (countDistinctColumns) {
+    selectFields["_countDistinct"] =
+      buildJsonObjectSelect(countDistinctColumns);
+  }
+
   const dbQuery = db
-    .select({
-      ["_count"]: buildJsonObjectSelect(countColumns),
-    })
+    .select(selectFields)
     .from(drizzleSchema[table])
     .where((columns: Record<string, unknown>) =>
       parsePrismaWhere({

@@ -271,6 +271,7 @@ const countWithJoinSchema = z
           })
         ),
         count: z.array(z.string()),
+        countDistinct: z.array(z.string()).nullable(),
       })
       .strict(),
   })

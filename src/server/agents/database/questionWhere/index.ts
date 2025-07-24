@@ -18,7 +18,7 @@ import type { JsonColumnSchema } from "~/server/userDatabaseConnector/types";
 import { tryCatch } from "~/server/api/utils/tryCatch";
 import { getAIModel } from "~/server/agents/utils/getAIModel";
 import { stringArrayToZodEnum } from "../../utils/zodHelpers";
-import { whereConditionDocs } from "../utils/whereDocs";
+import { whereConditionDocsSummary } from "../utils/whereDocs";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
 import { generateJoinedTables } from "../utils/tableRelations";
 import { getPrompt } from "../../utils/getPrompt";
@@ -266,7 +266,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateNullCondition",
-          description: "Add a null predicate on a column.",
+          description: "Filter for null values. Use 'equals' to find null values, 'not' to exclude null values.",
           schema: z.object({
             column: stringArrayToZodEnum(columns.map((col) => col.name)),
             operation: z.enum(["equals", "not"]),
@@ -291,7 +291,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateDateCondition",
-          description: "Add a date predicate on a column of type date.",
+          description: "Filter date columns using comparison operators (equals, gt, gte, lt, lte). Value must be ISO 8601 format.",
           schema: z.object({
             column: stringArrayToZodEnum(dateColumnNames),
             operator: z.enum(["gte", "lte", "gt", "lt", "equals"]),
@@ -325,7 +325,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateNumericalCondition",
-          description: "Add a number predicate on a column of type number.",
+          description: "Filter numeric columns. Use comparison operators (equals, not, gt, gte, lt, lte) or 'in' for multiple values.",
           schema: z.object({
             column: stringArrayToZodEnum(numericalColumnNames),
             operator: z.enum(["equals", "not", "lt", "lte", "gt", "gte", "in"]),
@@ -350,7 +350,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateBooleanCondition",
-          description: "Add a boolean predicate on a column of type boolean.",
+          description: "Filter boolean columns. Use 'equals' to match true/false, 'not' to exclude true/false values.",
           schema: z.object({
             column: stringArrayToZodEnum(booleanColumnNames),
             operator: z.enum(["equals", "not"]),
@@ -400,7 +400,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateStringCondition",
-          description: "Add a string predicate on a column of type string.",
+          description: "Filter string columns. Use 'equals'/'not' for exact match, 'in' for multiple values, 'contains'/'contains_insensitive' for partial match.",
           schema: z.object({
             column: stringArrayToZodEnum(stringColumnNames),
             operator: z.enum([
@@ -508,7 +508,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         {
           name: "generateRelationToOneCondition",
           description:
-            "Add a nested relation predicate such as { post: { is: { likes: { gt: 100 } } } }",
+            "Filter by properties of a single related record (to-one relation). Use 'is' to match conditions, 'isNot' to exclude.",
           schema: z.object({
             relation: stringArrayToZodEnum(relationToOneNames),
             filterOption: z.enum(["is", "isNot"]),
@@ -550,7 +550,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         {
           name: "generateRelationToOneAbsentCondition",
           description:
-            "Add a nested relation predicate such as { post: { is: {} } }",
+            "Filter for absence of a to-one relation. Use with empty object {} to find records without this relation.",
           schema: z.object({
             relation: stringArrayToZodEnum(relationToOneNames),
             filterOption: z.enum(["is"]),
@@ -652,7 +652,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         {
           name: "generateRelationToManyCondition",
           description:
-            "Add a nested relation predicate such as { orders: { every: { revenue: { lt: 25 } } } }",
+            "Filter by properties of multiple related records (to-many relation). Use 'some' for at least one match, 'every' for all must match, 'none' for no matches.",
           schema: z.object({
             relation: stringArrayToZodEnum(relationToManyNames),
             filterOption: z.enum(["some", "every", "none"]),
@@ -694,7 +694,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         {
           name: "generateRelationToManyAbsentCondition",
           description:
-            "Add a nested relation predicate such as { orders: { none: {} } }",
+            "Filter for absence of to-many relations. Use 'none' with empty object {} to find records with zero related records.",
           schema: z.object({
             relation: stringArrayToZodEnum(relationToManyNames),
             filterOption: z.enum(["none"]),
@@ -737,7 +737,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     {
       name: "finalFilterGenerator",
       description:
-        "Call this to END. Combines all individual conditions into a valid filter object or returns null.",
+        "Call this to END. Combines all individual filter conditions into a single WHERE clause object or returns null if no filters.",
       schema: z.object({}),
       returnDirect: true,
       responseFormat: "content_and_artifact",
@@ -746,10 +746,10 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 3. THE AGENT ****************************************/
 
-  const agentPrompt = await getPrompt("where_condition_agent:4217c5e0");
+  const agentPrompt = await getPrompt("where_condition_agent:9a9aa093");
 
   const agentPromptFormatted = (await agentPrompt.invoke({
-    whereConditionDocs: whereConditionDocs,
+    filterDocsSummary: whereConditionDocsSummary,
     organisationName: params.organisationName,
     tableName: params.tableName,
     operation: params.operation,

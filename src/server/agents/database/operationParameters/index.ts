@@ -588,10 +588,15 @@ export function operationParametersAgent(params: RequestParams) {
       count: z
         .array(stringArrayToZodEnum(columnNames))
         .describe("The columns to count"),
+      countDistinct: z
+        .array(stringArrayToZodEnum(columnNames))
+        .nullable()
+        .describe("The columns to count"),
     });
 
     const countColumnsParams = await determineParamsForSchema({
       schema: countColumnsSchema,
+      queryCurrentState: YAML.stringify(tableJoinResult),
     });
 
     return {

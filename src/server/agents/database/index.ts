@@ -279,7 +279,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     state: typeof DatabaseAgentState.State
   ) => {
     const operationSelectorPrompt = await getPrompt(
-      "select_operation:c973d516"
+      "select_operation:40e1f049"
     );
 
     const { columns = [], outwardRelations: relations = [] } =
@@ -302,6 +302,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
     const operationSelector = model.withStructuredOutput(
       z.object({
+        _scratchpad: z.string().describe("Your reasoning scratchpad"),
         operation: stringArrayToZodEnum(ops).describe(
           "The database operation to perform. Choose NONE if no suitable operation is available"
         ),

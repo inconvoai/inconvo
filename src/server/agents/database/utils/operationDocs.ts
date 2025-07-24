@@ -77,9 +77,10 @@ export const operationDocs = {
   },
   countWithJoin: {
     description:
-      "Returns the count of non-null values after joining with related tables. This counts the number of matching records in the table after join, there is **no** distinct count option. If you need to count distinct id you must start at the table you want and use the **count** operation with appropriate filters. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
+      "Returns the count of non-null values after joining with related tables. You can count matching records using `count`, or count distinct values using `countDistinct`. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
     example: {
-      question: "Count the number of posts by users with a verified email.",
+      question:
+        "Count the number of posts and users who has made posts by users with a verified email.",
       query: {
         table: "user",
         operation: "countWithJoin",
@@ -92,6 +93,7 @@ export const operationDocs = {
             },
           ],
           count: ["posts.id"],
+          countDistinct: ["user.id"],
         },
         where: [
           {
@@ -102,6 +104,9 @@ export const operationDocs = {
       response: {
         _count: {
           "posts.id": 10,
+        },
+        _countDistinct: {
+          "user.id": 8,
         },
       },
     },

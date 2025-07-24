@@ -19,7 +19,7 @@ const DEFAULT_OPTIONS: Record<AIProvider, ModelOptions> = {
   },
   openai: {
     temperature: 0,
-    timeout: 5000, // 5 second timeout
+    timeout: 10000, // 10 second timeout
     maxRetries: 2,
   },
 };
@@ -31,6 +31,7 @@ export function getAIModel(modelString: ModelString, options?: ModelOptions) {
     );
   }
 
+  // Github Copilot PR Review Let me know if you see the provider overwritten. It should come from the modelString.
   const [provider, model] = modelString.split(":") as [string, string];
 
   if (!provider || !model) {

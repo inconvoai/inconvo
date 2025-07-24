@@ -117,7 +117,7 @@ export const whereConditionDocsSummary = `
 Use base filters (equals, gt, contains, etc.) on any column.
 
 For -to-many relations, use:
-   some = at least one match
+    some = at least one match
     every = all must match
     none = no matches
 

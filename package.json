@@ -13,6 +13,7 @@
     "lint": "next lint && tsc --noEmit",
     "lint:fix": "next lint --fix",
     "start": "next start",
+    "eval": "vitest run --config ls.vitest.config.ts",
     "evals:e2e": "NODE_ENV=development dotenv -e .env npx tsx evals/e2e/inconvoAgent/index.ts",
     "evals:simulated": "NODE_ENV=development dotenv -e .env npx tsx evals/e2e/simulated/index.ts",
     "typecheck": "tsc --noEmit"
@@ -86,7 +87,8 @@
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
     "prisma": "^6.12.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vitest": "^3.2.4"
   },
   "ct3aMetadata": {
     "initVersion": "7.36.2"

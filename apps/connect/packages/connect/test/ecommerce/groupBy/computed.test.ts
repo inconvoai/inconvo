@@ -1,7 +1,6 @@
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
-import { table } from "console";
 
 test("What is the product with the highest total profit where the profit on sales of that product were over $100", async () => {
   const iql = {

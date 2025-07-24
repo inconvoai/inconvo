@@ -1,5 +1,5 @@
 import { type Query } from "~/types/querySchema";
-import { asc, avg, count, desc, eq, max, min, SQL, sum } from "drizzle-orm";
+import { asc, avg, count, desc, eq, max, min, sum } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";

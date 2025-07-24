@@ -139,7 +139,7 @@ export const operationDocs = {
   },
   aggregate: {
     description:
-      "Returns aggregated values (min, max, average, sum, count, median) for specified columns in a table. Each aggregation type can be applied to different columns.",
+      "Returns aggregated values (min, max, average, sum, count, median) for specified columns in a table. Each aggregation type can be applied to different columns. Only supports columns of type number (or Date for MIN and Max only)",
     example: {
       question:
         "What is the minimum and maximum age, and average salary of users.",

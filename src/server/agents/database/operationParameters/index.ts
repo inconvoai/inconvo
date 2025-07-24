@@ -671,8 +671,22 @@ export function operationParametersAgent(params: RequestParams) {
     const schema = z.object({
       avg: z.array(stringArrayToZodEnum(state.numericalColumnNames)).nullable(),
       sum: z.array(stringArrayToZodEnum(state.numericalColumnNames)).nullable(),
-      min: z.array(stringArrayToZodEnum(state.numericalColumnNames)).nullable(),
-      max: z.array(stringArrayToZodEnum(state.numericalColumnNames)).nullable(),
+      min: z
+        .array(
+          stringArrayToZodEnum([
+            ...state.numericalColumnNames,
+            ...state.dateColumnNames,
+          ])
+        )
+        .nullable(),
+      max: z
+        .array(
+          stringArrayToZodEnum([
+            ...state.numericalColumnNames,
+            ...state.dateColumnNames,
+          ])
+        )
+        .nullable(),
       count: z.array(stringArrayToZodEnum(state.columnNames)).nullable(),
       median: z
         .array(stringArrayToZodEnum(state.numericalColumnNames))

@@ -60,8 +60,12 @@ export async function countWithJoin(db: any, query: Query) {
       )
     : undefined;
 
-  const selectFields: any = {};
+  interface SelectFields {
+    _count?: ReturnType<typeof buildJsonObjectSelect>;
+    _countDistinct?: ReturnType<typeof buildJsonObjectSelect>;
+  }
 
+  const selectFields: SelectFields = {};
   if (countColumns && countColumns.length > 0) {
     selectFields["_count"] = buildJsonObjectSelect(countColumns);
   }

@@ -3,6 +3,8 @@ import {
   HumanMessage,
   type BaseMessage,
   isAIMessage,
+  type ToolMessage,
+  isToolMessage,
 } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
@@ -80,6 +82,72 @@ const messageReducer = (
   return emptyArray;
 };
 
+/**
+ * Extracts database retriever tool calls and their corresponding tool messages
+ * from a list of messages.
+ */
+function extractDatabaseRelatedMessages(messages: BaseMessage[]) {
+  const databaseRelatedMessages: BaseMessage[] = [];
+  const messageMap = new Map<string, ToolMessage>();
+
+  // First pass: create a map of tool_call_id to ToolMessage for O(1) lookup
+  messages.forEach((msg) => {
+    if (isToolMessage(msg) && msg.tool_call_id) {
+      messageMap.set(msg.tool_call_id, msg);
+    }
+  });
+
+  // Second pass: find AI messages with database retriever calls and their responses
+  messages.forEach((msg) => {
+    if (isAIMessage(msg)) {
+      const databaseRetrieverCalls = [
+        ...(msg.tool_calls ?? []),
+        ...(msg.invalid_tool_calls ?? []),
+      ].filter((call) => call.name === "databaseRetriever");
+
+      if (databaseRetrieverCalls.length > 0) {
+        databaseRelatedMessages.push(msg);
+        databaseRetrieverCalls.forEach((call) => {
+          if (call.id) {
+            const toolMessage = messageMap.get(call.id);
+            if (toolMessage) {
+              databaseRelatedMessages.push(toolMessage);
+            }
+          }
+        });
+      }
+    }
+  });
+
+  return databaseRelatedMessages;
+}
+
+/**
+ * Checks if a message contains tool calls
+ */
+function hasToolCalls(msg: BaseMessage): boolean {
+  if (!isAIMessage(msg)) return false;
+
+  return Boolean(
+    (msg.tool_calls && msg.tool_calls.length > 0) ??
+      (msg.invalid_tool_calls && msg.invalid_tool_calls.length > 0)
+  );
+}
+
+/**
+ * Checks if any message in the array contains database retriever tool calls
+ */
+function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
+  return messages.some(
+    (msg) =>
+      isAIMessage(msg) &&
+      (msg.tool_calls?.some((call) => call.name === "databaseRetriever") ??
+        msg.invalid_tool_calls?.some(
+          (call) => call.name === "databaseRetriever"
+        ))
+  );
+}
+
 export async function inconvoAgent(params: QuestionAgentParams) {
   const AgentState = Annotation.Root({
     userQuestion: Annotation<HumanMessage>({
@@ -93,7 +161,25 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }),
     // The QA message pairs from previous runs
     chatHistory: Annotation<BaseMessage[]>({
-      reducer: (x, y) => x.concat(y),
+      reducer: (x, y) => {
+        // When new messages contain database retriever calls,
+        // we filter out all tool-related messages from history
+        // to avoid duplication and keep only human/AI conversation pairs
+        if (hasDatabaseRetrieverCall(y)) {
+          const filteredHistory = x.filter((msg) => {
+            // Remove all tool messages
+            if (isToolMessage(msg)) return false;
+            // Remove AI messages that contain tool calls
+            if (hasToolCalls(msg)) return false;
+            // Keep human messages and AI responses without tool calls
+            return true;
+          });
+          return filteredHistory.concat(y);
+        }
+
+        // No database calls in new messages, just append
+        return x.concat(y);
+      },
       default: () => [],
     }),
     answer: Annotation<Answer>({
@@ -248,6 +334,9 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       () => JSON.parse(messageContent) as unknown
     ) as { data: unknown; error: Error | null };
 
+    const stateMessages = state.messages ?? [];
+    const databaseRelatedMessages = extractDatabaseRelatedMessages(stateMessages);
+
     if (potentiallyFormattedMessageAsJson) {
       const parsedMessage = inconvoResponseSchema.safeParse(
         potentiallyFormattedMessageAsJson
@@ -257,6 +346,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           answer: parsedMessage.data,
           chatHistory: [
             state.userQuestion,
+            ...databaseRelatedMessages,
             new AIMessage(JSON.stringify(parsedMessage.data, null, 2)),
           ],
         };
@@ -366,10 +456,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       .invoke({
         messageToFormat: state.messages?.at(-1)?.content ?? "",
       });
+
     return {
       answer: response,
       chatHistory: [
         state.userQuestion,
+        ...databaseRelatedMessages,
         new AIMessage(JSON.stringify(response, null, 2)),
       ],
     };

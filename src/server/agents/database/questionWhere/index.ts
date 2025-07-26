@@ -266,7 +266,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateNullCondition",
-          description: "Filter for null values. Use 'equals' to find null values, 'not' to exclude null values.",
+          description:
+            "Filter for null values. Use 'equals' to find null values, 'not' to exclude null values.",
           schema: z.object({
             column: stringArrayToZodEnum(columns.map((col) => col.name)),
             operation: z.enum(["equals", "not"]),
@@ -291,7 +292,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateDateCondition",
-          description: "Filter date columns using comparison operators (equals, gt, gte, lt, lte). Value must be ISO 8601 format.",
+          description:
+            "Filter date columns using comparison operators (equals, gt, gte, lt, lte). Value must be ISO 8601 format.",
           schema: z.object({
             column: stringArrayToZodEnum(dateColumnNames),
             operator: z.enum(["gte", "lte", "gt", "lt", "equals"]),
@@ -325,7 +327,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateNumericalCondition",
-          description: "Filter numeric columns. Use comparison operators (equals, not, gt, gte, lt, lte) or 'in' for multiple values.",
+          description:
+            "Filter numeric columns. Use comparison operators (equals, not, gt, gte, lt, lte) or 'in' for multiple values.",
           schema: z.object({
             column: stringArrayToZodEnum(numericalColumnNames),
             operator: z.enum(["equals", "not", "lt", "lte", "gt", "gte", "in"]),
@@ -350,7 +353,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateBooleanCondition",
-          description: "Filter boolean columns. Use 'equals' to match true/false, 'not' to exclude true/false values.",
+          description:
+            "Filter boolean columns. Use 'equals' to match true/false, 'not' to exclude true/false values.",
           schema: z.object({
             column: stringArrayToZodEnum(booleanColumnNames),
             operator: z.enum(["equals", "not"]),
@@ -400,7 +404,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
         },
         {
           name: "generateStringCondition",
-          description: "Filter string columns. Use 'equals'/'not' for exact match, 'in' for multiple values, 'contains'/'contains_insensitive' for partial match.",
+          description:
+            "Filter string columns. Use 'equals'/'not' for exact match, 'in' for multiple values, 'contains'/'contains_insensitive' for partial match.",
           schema: z.object({
             column: stringArrayToZodEnum(stringColumnNames),
             operator: z.enum([
@@ -746,7 +751,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 3. THE AGENT ****************************************/
 
-  const agentPrompt = await getPrompt("where_condition_agent:9a9aa093");
+  const agentPrompt = await getPrompt("where_condition_agent:e780c95e");
 
   const agentPromptFormatted = (await agentPrompt.invoke({
     filterDocsSummary: whereConditionDocsSummary,

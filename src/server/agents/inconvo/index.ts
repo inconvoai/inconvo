@@ -335,7 +335,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     ) as { data: unknown; error: Error | null };
 
     const stateMessages = state.messages ?? [];
-    const databaseRelatedMessages = extractDatabaseRelatedMessages(stateMessages);
+    const databaseRelatedMessages =
+      extractDatabaseRelatedMessages(stateMessages);
 
     if (potentiallyFormattedMessageAsJson) {
       const parsedMessage = inconvoResponseSchema.safeParse(

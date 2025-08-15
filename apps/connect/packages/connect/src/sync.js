@@ -4,9 +4,26 @@ const path = require("path");
 const dotenv = require("dotenv");
 const { Project, SyntaxKind } = require("ts-morph");
 const fs = require("fs");
+const pino = require("pino");
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || "info",
+  transport: {
+    target: "pino-pretty",
+    options: {
+      translateTime: "HH:MM:ss",
+      ignore: "pid,hostname,time,level",
+      messageFormat: "[{level}]:{msg}",
+    },
+  },
+  formatters: {
+    level: (label) => {
+      return { level: label.toUpperCase() };
+    },
+  },
+});
 
 const userProjectDir = process.cwd();
-console.log("User project dir", userProjectDir);
 
 // Load the .env file
 dotenv.config({ path: path.join(userProjectDir, ".env") });
@@ -16,8 +33,8 @@ function getDrizzlePath() {
     const drizzleKit = require.resolve("@ten-dev/inconvo/express");
     return path.resolve(drizzleKit, "../../../");
   } catch (e) {
-    console.error("Drizzle kit package not found");
-    console.error(e);
+    logger.error("[DRIZZLE]:Drizzle kit package not found");
+    logger.error({ err: e }, "[DRIZZLE]:Error details");
   }
   return null;
 }
@@ -25,13 +42,87 @@ function getDrizzlePath() {
 function runDrizzleCommand(command, drizzlePath) {
   try {
     const configPath = path.join(drizzlePath, "drizzle.config.js");
-    return execSync(`npx drizzle-kit ${command} --config=${configPath}`, {
-      env: process.env,
-      cwd: drizzlePath,
-      stdio: "inherit",
-    });
+    const output = execSync(
+      `npx drizzle-kit ${command} --config=${configPath}`,
+      {
+        env: process.env,
+        cwd: drizzlePath,
+        stdio: "pipe",
+        encoding: "utf8",
+      }
+    );
+
+    if (output) {
+      // Parse output to show only final state
+      const lines = output.toString().split("\n");
+      const finalStateMap = new Map();
+      const otherMessages = [];
+
+      // Process lines to find the last occurrence of each type
+      lines.forEach((line) => {
+        if (line.includes("[✓]") && line.includes("fetched")) {
+          // Extract the type (tables, columns, enums, etc.)
+          const match = line.match(/(\d+\s+\w+)\s+fetched/);
+          if (match) {
+            finalStateMap.set(match[1].trim().split(/\s+/).pop(), line);
+          }
+        } else if (
+          line.includes("Your schema file is ready") ||
+          line.includes("Your relations file is ready") ||
+          line.includes("No SQL generated")
+        ) {
+          otherMessages.push(line);
+        } else if (line.includes("Using") && line.includes("driver")) {
+          otherMessages.unshift(line); // Put driver info at the beginning
+        }
+      });
+
+      if (finalStateMap.size > 0 || otherMessages.length > 0) {
+        // Show driver info first if present
+        const driverInfo = otherMessages.find((line) =>
+          line.includes("driver")
+        );
+        if (driverInfo) {
+          console.log(driverInfo);
+          otherMessages.splice(otherMessages.indexOf(driverInfo), 1);
+        }
+
+        // Show fetch results in a consistent order
+        const order = [
+          "tables",
+          "columns",
+          "enums",
+          "indexes",
+          "keys",
+          "policies",
+          "constraints",
+          "views",
+        ];
+        order.forEach((key) => {
+          if (finalStateMap.has(key)) {
+            console.log(finalStateMap.get(key));
+          }
+        });
+
+        // Show other messages
+        otherMessages.forEach((line) => console.log(line));
+      }
+    }
+
+    return output;
   } catch (error) {
-    throw new Error(`Failed to run command "${command}": ${error}`);
+    // Log stderr if available
+    if (error.stderr) {
+      error.stderr
+        .toString()
+        .split("\n")
+        .forEach((line) => {
+          if (line.trim()) {
+            logger.error(`[DRIZZLE]:${line.trim()}`);
+          }
+        });
+    }
+    throw new Error(`Failed to run command "${command}": ${error.message}`);
   }
 }
 
@@ -120,21 +211,46 @@ function parseSchema(drizzlePath) {
 
 function compileSchemas(drizzlePath) {
   try {
-    console.log("Compiling Drizzle schemas to JavaScript...");
+    logger.info("[SCHEMA]:Compiling Drizzle schemas to JavaScript...");
     const drizzleDir = path.join(drizzlePath, "../drizzle");
-    execSync(
+    const output = execSync(
       `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
         drizzleDir,
         "relations.ts"
       )} --skipLibCheck --outDir ${drizzleDir}`,
       {
-        stdio: "inherit",
+        stdio: "pipe",
+        encoding: "utf8",
       }
     );
-    console.log("Schema compilation completed successfully.");
+
+    if (output) {
+      // Split output by lines and log each non-empty line
+      output
+        .toString()
+        .split("\n")
+        .forEach((line) => {
+          if (line.trim()) {
+            logger.info(`[SCHEMA]:${line.trim()}`);
+          }
+        });
+    }
+
+    logger.info("[SCHEMA]:Schema compilation completed successfully.");
     return true;
   } catch (error) {
-    console.error("Failed to compile schemas:", error);
+    // Log stderr if available
+    if (error.stderr) {
+      error.stderr
+        .toString()
+        .split("\n")
+        .forEach((line) => {
+          if (line.trim()) {
+            logger.error(`[SCHEMA]:${line.trim()}`);
+          }
+        });
+    }
+    logger.error({ err: error }, "[SCHEMA]:Failed to compile schemas");
     return false;
   }
 }
@@ -143,23 +259,25 @@ function compileSchemas(drizzlePath) {
   try {
     const drizzlePath = getDrizzlePath();
     if (!drizzlePath) {
-      console.error("Drizzle path or schema path not found");
+      logger.error("[DRIZZLE]:Drizzle path or schema path not found");
       process.exit(1);
     }
-    console.log("Drizzle path", drizzlePath);
+    logger.info("[DATABASE]:Reading live database schema...");
     runDrizzleCommand("pull", drizzlePath);
-    console.log("Schema pulled successfully.");
-    console.log("Parsing Drizzle schemas...");
+    logger.info("[SCHEMA]:Updating local schema representation...");
+
+    logger.info("[SCHEMA]:Validating schema...");
     parseSchema(drizzlePath);
-    console.log("Compiling TypeScript schemas...");
+    logger.info("[SCHEMA]:Schema validation completed successfully.");
+
     const compiled = compileSchemas(drizzlePath);
     if (!compiled) {
-      console.warn(
-        "Schema compilation failed. The TypeScript schemas will still be available."
+      logger.warn(
+        "[SCHEMA]:Schema compilation failed. The TypeScript schemas will still be available."
       );
     }
   } catch (error) {
-    console.error("An error occurred while syncing DB:", error);
+    logger.error({ err: error }, "[SYNC]:An error occurred while syncing DB");
     process.exit(1);
   }
 })();

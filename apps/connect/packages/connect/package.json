@@ -45,6 +45,8 @@
     "fast-levenshtein": "^3.0.0",
     "mysql2": "^3.14.1",
     "next": "^15.3.4",
+    "pino": "^9.9.0",
+    "pino-pretty": "^13.1.1",
     "postgres": "^3.4.7",
     "ts-morph": "^26.0.0",
     "typescript": "^5.8.3",

@@ -33,8 +33,8 @@ function getDrizzlePath() {
     const drizzleKit = require.resolve("@ten-dev/inconvo/express");
     return path.resolve(drizzleKit, "../../../");
   } catch (e) {
-    logger.error("[DRIZZLE]:Drizzle kit package not found");
-    logger.error({ err: e }, "[DRIZZLE]:Error details");
+    logger.error("Schema pull package not found");
+    logger.debug({ err: e }, "Error details");
   }
   return null;
 }
@@ -212,7 +212,7 @@ function parseSchema(drizzlePath) {
 
 function compileSchemas(drizzlePath) {
   try {
-    logger.info("Compiling Drizzle schemas to JavaScript...");
+    logger.debug("Compiling Drizzle schemas to JavaScript...");
     const drizzleDir = path.join(drizzlePath, "../drizzle");
     const output = execSync(
       `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
@@ -237,7 +237,7 @@ function compileSchemas(drizzlePath) {
         });
     }
 
-    logger.info("Schema compilation completed successfully.");
+    logger.info("Schema pulled successfully.");
     return true;
   } catch (error) {
     // Log stderr if available
@@ -263,9 +263,8 @@ function compileSchemas(drizzlePath) {
       logger.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-    logger.info("Reading live database schema...");
+    logger.info("Reading database schema...");
     runDrizzleCommand("pull", drizzlePath);
-    logger.info("Updating local schema representation...");
 
     logger.info("Validating schema...");
     parseSchema(drizzlePath);

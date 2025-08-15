@@ -39,6 +39,52 @@ function getDrizzlePath() {
   return null;
 }
 
+function parseDrizzlePullOutput(output) {
+  const lines = output.toString().split("\n");
+  const finalStateMap = new Map();
+  let driverInfo = null;
+  
+  // Process lines to find the last occurrence of each type
+  lines.forEach((line) => {
+    if (line.includes("[✓]") && line.includes("fetched")) {
+      // Extract the type (tables, columns, enums, etc.)
+      const match = line.match(/(\d+\s+\w+)\s+fetched/);
+      if (match) {
+        finalStateMap.set(match[1].trim().split(/\s+/).pop(), line);
+      }
+    } else if (line.includes("Using") && line.includes("driver")) {
+      driverInfo = line;
+    }
+  });
+  
+  const result = [];
+  
+  // Add driver info first if present
+  if (driverInfo) {
+    result.push(driverInfo);
+  }
+  
+  // Add fetch results in a consistent order
+  const order = [
+    "tables",
+    "columns",
+    "enums",
+    "indexes",
+    "keys",
+    "policies",
+    "constraints",
+    "views",
+  ];
+  
+  order.forEach((key) => {
+    if (finalStateMap.has(key)) {
+      result.push(finalStateMap.get(key));
+    }
+  });
+  
+  return result;
+}
+
 function runDrizzleCommand(command, drizzlePath) {
   try {
     const configPath = path.join(drizzlePath, "drizzle.config.js");
@@ -52,61 +98,16 @@ function runDrizzleCommand(command, drizzlePath) {
       }
     );
 
-    if (output) {
-      // Parse output to show only final state
-      const lines = output.toString().split("\n");
-      const finalStateMap = new Map();
-      const otherMessages = [];
-
-      // Process lines to find the last occurrence of each type
-      lines.forEach((line) => {
-        if (line.includes("[✓]") && line.includes("fetched")) {
-          // Extract the type (tables, columns, enums, etc.)
-          const match = line.match(/(\d+\s+\w+)\s+fetched/);
-          if (match) {
-            finalStateMap.set(match[1].trim().split(/\s+/).pop(), line);
-          }
-        } else if (
-          line.includes("Your schema file is ready") ||
-          line.includes("Your relations file is ready") ||
-          line.includes("No SQL generated")
-        ) {
-          otherMessages.push(line);
-        } else if (line.includes("Using") && line.includes("driver")) {
-          otherMessages.unshift(line); // Put driver info at the beginning
-        }
-      });
-
-      if (finalStateMap.size > 0 || otherMessages.length > 0) {
-        // Show driver info first if present
-        const driverInfo = otherMessages.find((line) =>
-          line.includes("driver")
-        );
-        if (driverInfo) {
-          console.log(driverInfo);
-          otherMessages.splice(otherMessages.indexOf(driverInfo), 1);
-        }
-
-        // Show fetch results in a consistent order
-        const order = [
-          "tables",
-          "columns",
-          "enums",
-          "indexes",
-          "keys",
-          "policies",
-          "constraints",
-          "views",
-        ];
-        order.forEach((key) => {
-          if (finalStateMap.has(key)) {
-            console.log(finalStateMap.get(key));
-          }
-        });
-
-        // Show other messages
-        otherMessages.forEach((line) => console.log(line));
+    if (output && command === "pull") {
+      // Parse and display cleaned output for pull command
+      const parsedLines = parseDrizzlePullOutput(output);
+      if (parsedLines.length > 0) {
+        console.log("Database introspection completed:");
+        parsedLines.forEach(line => console.log(line));
       }
+    } else if (output) {
+      // For other commands, show full output
+      console.log(output);
     }
 
     return output;

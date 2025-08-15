@@ -186,10 +186,10 @@ export function processPullOutput(output: string): void {
  * Logs error details from a command execution error
  */
 export function logCommandError(error: any, command: string): void {
-  // If the error message already contains our custom error message, just re-throw
+  // If the error message already contains our custom error message, just log it
   if (error.message && error.message.includes("Error while pulling schema:")) {
     logger.error(error.message);
-    throw error;
+    return;
   }
 
   // Otherwise, handle other types of errors

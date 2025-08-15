@@ -75,6 +75,6 @@
     "dts": true,
     "css": true,
     "outDir": "dist",
-    "onSuccess": "cp src/pullSchema.js dist/pullSchema.js"
+    "onSuccess": "cp src/pullSchema.js dist/pullSchema.js && cp src/drizzleOutputParser.js dist/drizzleOutputParser.js"
   }
 }

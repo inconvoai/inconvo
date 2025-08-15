@@ -94,38 +94,45 @@ function runDrizzleCommand(command, drizzlePath) {
     );
 
     if (command === "pull") {
-      // First check for errors before showing any progress
+      // Always log the full output at debug level
+      logger.debug("Full output from drizzle-kit pull:");
+      output.split("\n").forEach((line) => {
+        if (line.trim()) {
+          logger.debug(`  ${line.trim()}`);
+        }
+      });
+
+      // Check for errors
       const lines = output.split("\n");
       let hasError = false;
       let errorMessages = [];
+      let captureErrorContext = false;
+      let errorContextLines = 0;
 
       lines.forEach((line) => {
         const trimmedLine = line.trim();
 
-        // Capture any error lines
-        if (trimmedLine.includes("Error:") || trimmedLine.includes("Error ")) {
+        // Start capturing when we see an Error
+        if (trimmedLine.includes("Error:") || trimmedLine.includes("Error")) {
           hasError = true;
+          captureErrorContext = true;
+          errorContextLines = 10; // Capture next 10 lines after error
           if (trimmedLine && !errorMessages.includes(trimmedLine)) {
             errorMessages.push(trimmedLine);
+          }
+        }
+        // Continue capturing error context lines
+        else if (captureErrorContext && errorContextLines > 0 && trimmedLine) {
+          errorMessages.push(trimmedLine);
+          errorContextLines--;
+          if (errorContextLines === 0) {
+            captureErrorContext = false;
           }
         }
       });
 
       if (hasError) {
         let errorDetail = errorMessages.join(" ");
-        logger.debug("Full error output from drizzle-kit pull:");
-        errorMessages.forEach((msg) => {
-          logger.debug(`  ${msg}`);
-        });
-        logger.debug(
-          {
-            command: `drizzle-kit pull`,
-            configPath: path.join(drizzlePath, "drizzle.config.js"),
-            errorCount: errorMessages.length,
-            rawErrors: errorMessages,
-          },
-          "Detailed error context"
-        );
 
         // Category 1: Connection errors - wrong host/port or database not accessible
         if (

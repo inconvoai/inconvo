@@ -152,13 +152,25 @@ function runDrizzleCommand(command, drizzlePath) {
         }
         // Category 3: Database doesn't exist - wrong database name
         else if (
-          errorDetail.includes("database") &&
-          errorDetail.includes("does not exist")
+          (errorDetail.includes("database") && errorDetail.includes("does not exist")) ||
+          errorDetail.includes("Unknown database") ||
+          errorDetail.includes("ER_BAD_DB_ERROR")
         ) {
-          const dbMatch = errorDetail.match(
-            /database\s+"([^"]+)"\s+does not exist/
-          );
-          const dbName = dbMatch ? dbMatch[1] : "specified database";
+          // Try to extract database name from different error formats
+          let dbName = "specified database";
+          
+          // PostgreSQL format: database "name" does not exist
+          const pgMatch = errorDetail.match(/database\s+"([^"]+)"\s+does not exist/);
+          if (pgMatch) {
+            dbName = pgMatch[1];
+          }
+          
+          // MySQL format: Unknown database 'name'
+          const mysqlMatch = errorDetail.match(/Unknown database '([^']+)'/);
+          if (mysqlMatch) {
+            dbName = mysqlMatch[1];
+          }
+          
           errorDetail = `Database "${dbName}" does not exist. Please check your database name.`;
         }
 

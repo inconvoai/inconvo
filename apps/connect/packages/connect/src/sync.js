@@ -43,7 +43,7 @@ function parseDrizzlePullOutput(output) {
   const lines = output.toString().split("\n");
   const finalStateMap = new Map();
   let driverInfo = null;
-  
+
   // Process lines to find the last occurrence of each type
   lines.forEach((line) => {
     if (line.includes("[✓]") && line.includes("fetched")) {
@@ -52,18 +52,11 @@ function parseDrizzlePullOutput(output) {
       if (match) {
         finalStateMap.set(match[1].trim().split(/\s+/).pop(), line);
       }
-    } else if (line.includes("Using") && line.includes("driver")) {
-      driverInfo = line;
     }
   });
-  
+
   const result = [];
-  
-  // Add driver info first if present
-  if (driverInfo) {
-    result.push(driverInfo);
-  }
-  
+
   // Add fetch results in a consistent order
   const order = [
     "tables",
@@ -75,13 +68,13 @@ function parseDrizzlePullOutput(output) {
     "constraints",
     "views",
   ];
-  
+
   order.forEach((key) => {
     if (finalStateMap.has(key)) {
       result.push(finalStateMap.get(key));
     }
   });
-  
+
   return result;
 }
 
@@ -102,8 +95,15 @@ function runDrizzleCommand(command, drizzlePath) {
       // Parse and display cleaned output for pull command
       const parsedLines = parseDrizzlePullOutput(output);
       if (parsedLines.length > 0) {
-        console.log("Database introspection completed:");
-        parsedLines.forEach(line => console.log(line));
+        logger.info("Database introspection completed:");
+        parsedLines.forEach((line) => {
+          const match = line.match(/\[✓\]\s+(\d+\s+\w+\s+fetched)/);
+          if (match) {
+            logger.info(`[✓] ${match[1]}`);
+          } else {
+            logger.info(line);
+          }
+        });
       }
     } else if (output) {
       // For other commands, show full output
@@ -212,7 +212,7 @@ function parseSchema(drizzlePath) {
 
 function compileSchemas(drizzlePath) {
   try {
-    logger.info("[SCHEMA]:Compiling Drizzle schemas to JavaScript...");
+    logger.info("Compiling Drizzle schemas to JavaScript...");
     const drizzleDir = path.join(drizzlePath, "../drizzle");
     const output = execSync(
       `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
@@ -232,12 +232,12 @@ function compileSchemas(drizzlePath) {
         .split("\n")
         .forEach((line) => {
           if (line.trim()) {
-            logger.info(`[SCHEMA]:${line.trim()}`);
+            logger.info(`${line.trim()}`);
           }
         });
     }
 
-    logger.info("[SCHEMA]:Schema compilation completed successfully.");
+    logger.info("Schema compilation completed successfully.");
     return true;
   } catch (error) {
     // Log stderr if available
@@ -247,11 +247,11 @@ function compileSchemas(drizzlePath) {
         .split("\n")
         .forEach((line) => {
           if (line.trim()) {
-            logger.error(`[SCHEMA]:${line.trim()}`);
+            logger.error(`${line.trim()}`);
           }
         });
     }
-    logger.error({ err: error }, "[SCHEMA]:Failed to compile schemas");
+    logger.error({ err: error }, "Failed to compile schemas");
     return false;
   }
 }
@@ -260,25 +260,25 @@ function compileSchemas(drizzlePath) {
   try {
     const drizzlePath = getDrizzlePath();
     if (!drizzlePath) {
-      logger.error("[DRIZZLE]:Drizzle path or schema path not found");
+      logger.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-    logger.info("[DATABASE]:Reading live database schema...");
+    logger.info("Reading live database schema...");
     runDrizzleCommand("pull", drizzlePath);
-    logger.info("[SCHEMA]:Updating local schema representation...");
+    logger.info("Updating local schema representation...");
 
-    logger.info("[SCHEMA]:Validating schema...");
+    logger.info("Validating schema...");
     parseSchema(drizzlePath);
-    logger.info("[SCHEMA]:Schema validation completed successfully.");
+    logger.info("Schema validation completed successfully.");
 
     const compiled = compileSchemas(drizzlePath);
     if (!compiled) {
       logger.warn(
-        "[SCHEMA]:Schema compilation failed. The TypeScript schemas will still be available."
+        "Schema compilation failed. The TypeScript schemas will still be available."
       );
     }
   } catch (error) {
-    logger.error({ err: error }, "[SYNC]:An error occurred while syncing DB");
+    logger.error({ err: error }, "An error occurred while syncing DB");
     process.exit(1);
   }
 })();

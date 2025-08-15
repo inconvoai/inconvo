@@ -4,9 +4,14 @@ const path = require("path");
 const dotenv = require("dotenv");
 const { Project, SyntaxKind } = require("ts-morph");
 const fs = require("fs");
+const {
+  logger,
+  processPullOutput,
+  logCommandError,
+  logCompilationResult,
+} = require("./src/drizzleOutputParser");
 
 const userProjectDir = process.cwd();
-console.log("User project dir", userProjectDir);
 
 // Load the .env file
 dotenv.config({ path: path.join(userProjectDir, ".env") });
@@ -16,8 +21,8 @@ function getDrizzlePath() {
     const drizzleKit = require.resolve("@ten-dev/inconvo/express");
     return path.resolve(drizzleKit, "../../../");
   } catch (e) {
-    console.error("Drizzle kit package not found");
-    console.error(e);
+    logger.error("Schema pull package not found");
+    logger.debug({ err: e }, "Error details");
   }
   return null;
 }
@@ -25,13 +30,29 @@ function getDrizzlePath() {
 function runDrizzleCommand(command, drizzlePath) {
   try {
     const configPath = path.join(drizzlePath, "drizzle.config.js");
-    return execSync(`npx drizzle-kit ${command} --config=${configPath}`, {
-      env: process.env,
-      cwd: drizzlePath,
-      stdio: "inherit",
-    });
+    logger.debug(`Running drizzle-kit ${command} with config: ${configPath}`);
+
+    const output = execSync(
+      `npx drizzle-kit ${command} --config=${configPath} 2>&1`,
+      {
+        env: process.env,
+        cwd: drizzlePath,
+        stdio: "pipe",
+        encoding: "utf8",
+      }
+    );
+
+    if (command === "pull") {
+      processPullOutput(output);
+    } else if (output) {
+      // For other commands, show full output
+      console.log(output);
+    }
+
+    return output;
   } catch (error) {
-    throw new Error(`Failed to run command "${command}": ${error}`);
+    logCommandError(error, command);
+    throw error;
   }
 }
 
@@ -120,22 +141,22 @@ function parseSchema(drizzlePath) {
 
 function compileSchemas(drizzlePath) {
   try {
-    console.log("Compiling Drizzle schemas to JavaScript...");
+    logger.debug("Compiling Drizzle schemas to JavaScript...");
     const drizzleDir = path.join(drizzlePath, "../drizzle");
-    execSync(
+    const output = execSync(
       `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
         drizzleDir,
         "relations.ts"
       )} --skipLibCheck --outDir ${drizzleDir}`,
       {
-        stdio: "inherit",
+        stdio: "pipe",
+        encoding: "utf8",
       }
     );
-    console.log("Schema compilation completed successfully.");
-    return true;
+
+    return logCompilationResult(output, null);
   } catch (error) {
-    console.error("Failed to compile schemas:", error);
-    return false;
+    return logCompilationResult(null, error);
   }
 }
 
@@ -143,23 +164,27 @@ function compileSchemas(drizzlePath) {
   try {
     const drizzlePath = getDrizzlePath();
     if (!drizzlePath) {
-      console.error("Drizzle path or schema path not found");
+      logger.error("Drizzle path or schema path not found");
       process.exit(1);
     }
-    console.log("Drizzle path", drizzlePath);
+
+    logger.info("Reading database schema...");
     runDrizzleCommand("pull", drizzlePath);
-    console.log("Schema pulled successfully.");
-    console.log("Parsing Drizzle schemas...");
+
+    logger.info("Validating schema...");
     parseSchema(drizzlePath);
-    console.log("Compiling TypeScript schemas...");
+    logger.info("Schema validation completed successfully.");
+
     const compiled = compileSchemas(drizzlePath);
     if (!compiled) {
-      console.warn(
+      logger.warn(
         "Schema compilation failed. The TypeScript schemas will still be available."
       );
     }
   } catch (error) {
-    console.error("An error occurred while syncing DB:", error);
+    // Error has already been logged by runDrizzleCommand
+    logger.error("An error occurred during schema pull and compilation.");
+    logger.info(error);
     process.exit(1);
   }
 })();

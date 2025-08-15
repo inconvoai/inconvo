@@ -4,12 +4,12 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
-    "sync": "npx sync-schema",
+    "pull": "npx pull-schema",
     "test:ecommerce": "jest",
     "dev": "tsup --watch"
   },
   "bin": {
-    "sync-schema": "dist/sync.js"
+    "pull-schema": "dist/pullSchema.js"
   },
   "repository": {
     "type": "git",
@@ -45,6 +45,8 @@
     "fast-levenshtein": "^3.0.0",
     "mysql2": "^3.14.1",
     "next": "^15.3.4",
+    "pino": "^9.9.0",
+    "pino-pretty": "^13.1.1",
     "postgres": "^3.4.7",
     "ts-morph": "^26.0.0",
     "typescript": "^5.8.3",
@@ -64,7 +66,8 @@
       "src/express/index.ts",
       "src/next/index.ts",
       "src/server/index.ts",
-      "drizzle.config.ts"
+      "drizzle.config.ts",
+      "src/drizzleOutputParser.ts"
     ],
     "minify": true,
     "bundle": true,
@@ -73,6 +76,6 @@
     "dts": true,
     "css": true,
     "outDir": "dist",
-    "onSuccess": "cp src/sync.js dist/sync.js"
+    "onSuccess": "cp src/pullSchema.js dist/pullSchema.js"
   }
 }

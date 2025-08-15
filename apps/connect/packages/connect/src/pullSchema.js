@@ -7,7 +7,7 @@ const fs = require("fs");
 const pino = require("pino");
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "info",
+  level: process.env.LOG_LEVEL || "debug",
   transport: {
     target: "pino-pretty",
     options: {
@@ -81,8 +81,10 @@ function parseDrizzlePullOutput(output) {
 function runDrizzleCommand(command, drizzlePath) {
   try {
     const configPath = path.join(drizzlePath, "drizzle.config.js");
+    logger.debug(`Running drizzle-kit ${command} with config: ${configPath}`);
+
     const output = execSync(
-      `npx drizzle-kit ${command} --config=${configPath}`,
+      `npx drizzle-kit ${command} --config=${configPath} 2>&1`,
       {
         env: process.env,
         cwd: drizzlePath,
@@ -91,8 +93,33 @@ function runDrizzleCommand(command, drizzlePath) {
       }
     );
 
-    if (output && command === "pull") {
-      // Parse and display cleaned output for pull command
+    if (command === "pull") {
+      // First check for errors before showing any progress
+      const lines = output.split("\n");
+      let hasError = false;
+      let errorMessage = "";
+
+      lines.forEach((line) => {
+        const trimmedLine = line.trim();
+
+        // Capture PostgreSQL errors
+        if (
+          trimmedLine.includes("PostgresError:") ||
+          trimmedLine.includes("Error:")
+        ) {
+          hasError = true;
+          errorMessage = trimmedLine;
+        }
+      });
+
+      // If there's an error, report it and throw without showing progress
+      if (hasError) {
+        throw new Error(`Error while pulling schema: ${errorMessage}`);
+      }
+
+      // Don't show fetching progress, only final results
+
+      // Parse and display cleaned output for successful pull
       const parsedLines = parseDrizzlePullOutput(output);
       if (parsedLines.length > 0) {
         logger.info("Database introspection completed:");
@@ -104,6 +131,9 @@ function runDrizzleCommand(command, drizzlePath) {
             logger.info(line);
           }
         });
+      } else if (!hasError) {
+        // Only warn if there wasn't already an error
+        logger.warn("No database objects were fetched.");
       }
     } else if (output) {
       // For other commands, show full output
@@ -112,18 +142,51 @@ function runDrizzleCommand(command, drizzlePath) {
 
     return output;
   } catch (error) {
+    // If the error message already contains our custom error message, just re-throw
+    if (
+      error.message &&
+      error.message.includes("Error while pulling schema:")
+    ) {
+      logger.error(error.message);
+      throw error;
+    }
+
+    // Otherwise, handle other types of errors
+    logger.error(`Failed to run drizzle-kit ${command}`);
+
+    // Check for common database connection errors
+    const errorString = (
+      error.stderr ||
+      error.stdout ||
+      error.message ||
+      ""
+    ).toString();
+
     // Log stderr if available
-    if (error.stderr) {
+    if (error.stderr && error.stderr.toString().trim()) {
+      logger.error("Error details:");
       error.stderr
         .toString()
         .split("\n")
         .forEach((line) => {
           if (line.trim()) {
-            logger.error(`[DRIZZLE]:${line.trim()}`);
+            logger.error(`  ${line.trim()}`);
           }
         });
     }
-    throw new Error(`Failed to run command "${command}": ${error.message}`);
+
+    // Log the full error for debugging
+    logger.debug(
+      {
+        command: `npx drizzle-kit ${command}`,
+        exitCode: error.status || error.code,
+        signal: error.signal,
+        error: error.message,
+      },
+      "Full error details"
+    );
+
+    throw error;
   }
 }
 
@@ -263,6 +326,7 @@ function compileSchemas(drizzlePath) {
       logger.error("Drizzle path or schema path not found");
       process.exit(1);
     }
+
     logger.info("Reading database schema...");
     runDrizzleCommand("pull", drizzlePath);
 
@@ -277,7 +341,7 @@ function compileSchemas(drizzlePath) {
       );
     }
   } catch (error) {
-    logger.error({ err: error }, "An error occurred while syncing DB");
+    // Error has already been logged by runDrizzleCommand
     process.exit(1);
   }
 })();

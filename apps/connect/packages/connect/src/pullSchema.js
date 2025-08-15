@@ -97,27 +97,66 @@ function runDrizzleCommand(command, drizzlePath) {
       // First check for errors before showing any progress
       const lines = output.split("\n");
       let hasError = false;
-      let errorMessage = "";
+      let errorMessages = [];
 
       lines.forEach((line) => {
         const trimmedLine = line.trim();
 
-        // Capture PostgreSQL errors
-        if (
-          trimmedLine.includes("PostgresError:") ||
-          trimmedLine.includes("Error:")
-        ) {
+        // Capture any error lines
+        if (trimmedLine.includes("Error:") || trimmedLine.includes("Error ")) {
           hasError = true;
-          errorMessage = trimmedLine;
+          if (trimmedLine && !errorMessages.includes(trimmedLine)) {
+            errorMessages.push(trimmedLine);
+          }
         }
       });
 
-      // If there's an error, report it and throw without showing progress
       if (hasError) {
-        throw new Error(`Error while pulling schema: ${errorMessage}`);
-      }
+        let errorDetail = errorMessages.join(" ");
+        logger.debug("Full error output from drizzle-kit pull:");
+        errorMessages.forEach((msg) => {
+          logger.debug(`  ${msg}`);
+        });
+        logger.debug(
+          {
+            command: `drizzle-kit pull`,
+            configPath: path.join(drizzlePath, "drizzle.config.js"),
+            errorCount: errorMessages.length,
+            rawErrors: errorMessages,
+          },
+          "Detailed error context"
+        );
 
-      // Don't show fetching progress, only final results
+        // Category 1: Connection errors - wrong host/port or database not accessible
+        if (
+          errorDetail.includes("ENOTFOUND") ||
+          errorDetail.includes("ECONNREFUSED") ||
+          errorDetail.includes("ETIMEDOUT") ||
+          errorDetail.includes("CONNECT_TIMEOUT")
+        ) {
+          errorDetail = `Cannot connect to database. Please verify your host, port, dialect and that the database is running and accessible.`;
+        }
+        // Category 2: Authentication errors - wrong username/password
+        else if (
+          errorDetail.includes("password authentication failed") ||
+          errorDetail.includes("Access denied")
+        ) {
+          errorDetail = `Authentication failed. Please check your database username and password.`;
+        }
+        // Category 3: Database doesn't exist - wrong database name
+        else if (
+          errorDetail.includes("database") &&
+          errorDetail.includes("does not exist")
+        ) {
+          const dbMatch = errorDetail.match(
+            /database\s+"([^"]+)"\s+does not exist/
+          );
+          const dbName = dbMatch ? dbMatch[1] : "specified database";
+          errorDetail = `Database "${dbName}" does not exist. Please check your database name.`;
+        }
+
+        throw new Error(`Error while pulling schema: ${errorDetail}`);
+      }
 
       // Parse and display cleaned output for successful pull
       const parsedLines = parseDrizzlePullOutput(output);

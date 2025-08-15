@@ -1,6 +1,6 @@
-const pino = require("pino");
+import pino from "pino";
 
-const logger = pino({
+export const logger = pino({
   level: process.env.LOG_LEVEL || "debug",
   transport: {
     target: "pino-pretty",
@@ -11,7 +11,7 @@ const logger = pino({
     },
   },
   formatters: {
-    level: (label) => {
+    level: (label: string) => {
       return { level: label.toUpperCase() };
     },
   },
@@ -19,12 +19,10 @@ const logger = pino({
 
 /**
  * Parses drizzle-kit pull output to extract fetched database objects
- * @param {string} output - Raw output from drizzle-kit pull command
- * @returns {string[]} Parsed lines showing what was fetched
  */
-function parseDrizzlePullOutput(output) {
+function parseDrizzlePullOutput(output: string): string[] {
   const lines = output.toString().split("\n");
-  const finalStateMap = new Map();
+  const finalStateMap = new Map<string, string>();
 
   // Process lines to find the last occurrence of each type
   lines.forEach((line) => {
@@ -32,12 +30,12 @@ function parseDrizzlePullOutput(output) {
       // Extract the type (tables, columns, enums, etc.)
       const match = line.match(/(\d+\s+\w+)\s+fetched/);
       if (match) {
-        finalStateMap.set(match[1].trim().split(/\s+/).pop(), line);
+        finalStateMap.set(match[1].trim().split(/\s+/).pop() as string, line);
       }
     }
   });
 
-  const result = [];
+  const result: string[] = [];
 
   // Add fetch results in a consistent order
   const order = [
@@ -53,7 +51,7 @@ function parseDrizzlePullOutput(output) {
 
   order.forEach((key) => {
     if (finalStateMap.has(key)) {
-      result.push(finalStateMap.get(key));
+      result.push(finalStateMap.get(key) as string);
     }
   });
 
@@ -62,10 +60,8 @@ function parseDrizzlePullOutput(output) {
 
 /**
  * Categorizes database errors into user-friendly messages
- * @param {string} errorDetail - Raw error details
- * @returns {string} Categorized error message
  */
-function categorizeError(errorDetail) {
+function categorizeError(errorDetail: string): string {
   // Category 1: Connection errors - wrong host/port or database not accessible
   if (
     errorDetail.includes("ENOTFOUND") ||
@@ -114,13 +110,11 @@ function categorizeError(errorDetail) {
 
 /**
  * Extracts error messages from drizzle-kit output
- * @param {string} output - Raw output from drizzle-kit command
- * @returns {{hasError: boolean, errorDetail: string}} Error information
  */
-function extractErrors(output) {
+function extractErrors(output: string): { hasError: boolean; errorDetail: string } {
   const lines = output.split("\n");
   let hasError = false;
-  let errorMessages = [];
+  const errorMessages: string[] = [];
   let captureErrorContext = false;
   let errorContextLines = 0;
 
@@ -152,10 +146,8 @@ function extractErrors(output) {
 
 /**
  * Processes and logs drizzle-kit pull output
- * @param {string} output - Raw output from drizzle-kit pull command
- * @throws {Error} If errors are detected in the output
  */
-function processPullOutput(output) {
+export function processPullOutput(output: string): void {
   // Always log the full output at debug level
   logger.debug("Full output from drizzle-kit pull:");
   output.split("\n").forEach((line) => {
@@ -192,10 +184,8 @@ function processPullOutput(output) {
 
 /**
  * Logs error details from a command execution error
- * @param {Error} error - The error object from command execution
- * @param {string} command - The command that was executed
  */
-function logCommandError(error, command) {
+export function logCommandError(error: any, command: string): void {
   // If the error message already contains our custom error message, just re-throw
   if (error.message && error.message.includes("Error while pulling schema:")) {
     logger.error(error.message);
@@ -211,7 +201,7 @@ function logCommandError(error, command) {
     error.stderr
       .toString()
       .split("\n")
-      .forEach((line) => {
+      .forEach((line: string) => {
         if (line.trim()) {
           logger.error(`  ${line.trim()}`);
         }
@@ -232,18 +222,15 @@ function logCommandError(error, command) {
 
 /**
  * Logs compilation output or errors
- * @param {string} output - Output from compilation
- * @param {Error} error - Error from compilation (if any)
- * @returns {boolean} Whether compilation was successful
  */
-function logCompilationResult(output, error) {
+export function logCompilationResult(output: string | null, error: any): boolean {
   if (error) {
     // Log stderr if available
     if (error.stderr) {
       error.stderr
         .toString()
         .split("\n")
-        .forEach((line) => {
+        .forEach((line: string) => {
           if (line.trim()) {
             logger.error(`${line.trim()}`);
           }
@@ -268,10 +255,3 @@ function logCompilationResult(output, error) {
   logger.info("Schema pulled successfully.");
   return true;
 }
-
-module.exports = {
-  logger,
-  processPullOutput,
-  logCommandError,
-  logCompilationResult,
-};

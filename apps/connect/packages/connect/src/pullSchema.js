@@ -9,7 +9,7 @@ const {
   processPullOutput,
   logCommandError,
   logCompilationResult,
-} = require("./drizzleOutputParser");
+} = require("./src/drizzleOutputParser");
 
 const userProjectDir = process.cwd();
 

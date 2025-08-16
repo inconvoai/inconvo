@@ -184,7 +184,7 @@ function compileSchemas(drizzlePath) {
   } catch (error) {
     // Error has already been logged by runDrizzleCommand
     logger.error("An error occurred during schema pull and compilation.");
-    logger.info(error);
+    logger.debug(error);
     process.exit(1);
   }
 })();

@@ -96,7 +96,7 @@ async function handlePostRequest(request: NextRequest) {
   } catch (error) {
     console.error("Error executing query", error);
     if (error instanceof ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 });
+      return NextResponse.json({ error: error }, { status: 400 });
     }
     return NextResponse.json(
       { error: "Failed to execute query" },

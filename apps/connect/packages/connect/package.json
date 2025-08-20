@@ -39,27 +39,27 @@
   "dependencies": {
     "@t3-oss/env-core": "^0.13.8",
     "date-fns": "^4.1.0",
-    "dotenv": "^16.5.0",
-    "drizzle-kit": "^0.31.2",
-    "drizzle-orm": "^0.44.2",
+    "dotenv": "^17.2.1",
+    "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.44.4",
     "fast-levenshtein": "^3.0.0",
-    "mysql2": "^3.14.1",
-    "next": "^15.3.4",
+    "mysql2": "^3.14.3",
+    "next": "^15.5.0",
     "pino": "^9.9.0",
     "pino-pretty": "^13.1.1",
     "postgres": "^3.4.7",
     "ts-morph": "^26.0.0",
-    "typescript": "^5.8.3",
-    "zod": "^3.25.67"
+    "typescript": "^5.9.2",
+    "zod": "^4.0.17"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^30.0.0",
-    "jest": "^30.0.3",
-    "ts-jest": "^29.4.0",
+    "jest": "^30.0.5",
+    "ts-jest": "^29.4.1",
     "tsup": "^8.5.0",
-    "tsx": "^4.20.3"
+    "tsx": "^4.20.4"
   },
   "tsup": {
     "entry": [

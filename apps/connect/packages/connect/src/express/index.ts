@@ -95,7 +95,7 @@ export async function inconvo() {
         return res
           .status(400)
           .setHeader("Content-Type", "application/json")
-          .send(safeJsonStringify({ error: error.errors }));
+          .send(safeJsonStringify({ error: error }));
       }
       console.error(error);
       res

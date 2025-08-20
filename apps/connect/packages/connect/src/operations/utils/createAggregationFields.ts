@@ -1,12 +1,13 @@
 import { SQL } from "drizzle-orm";
 import { getColumnFromTable } from "./getColumnFromTable";
 import assert from "assert";
+import { ComputedColumn } from "~/types/querySchema";
 
 export function createAggregationFields<T>(
   columns: string[] | undefined,
   aggregationFn: (column: SQL<any>) => SQL<T>,
   drizzleSchema: any,
-  computedColumns: any
+  computedColumns?: ComputedColumn[]
 ): [string, SQL<T>][] | undefined {
   return columns?.map((columnIdentifier) => {
     assert(

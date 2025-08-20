@@ -17,13 +17,16 @@ export function getColumnFromTable({
   computedColumns,
 }: GetColumnFromTableParams) {
   const tableSchema = drizzleSchema[tableName];
+  const computedColumnsForTable = computedColumns?.filter(
+    (cc) => cc.table.name === tableName
+  );
 
   if (tableSchema[columnName]) {
     return tableSchema[columnName];
   }
 
-  if (computedColumns) {
-    for (const computedColumn of computedColumns) {
+  if (computedColumnsForTable) {
+    for (const computedColumn of computedColumnsForTable) {
       if (computedColumn.name === columnName) {
         return generateComputedColumnAsSQL(
           computedColumn.ast,

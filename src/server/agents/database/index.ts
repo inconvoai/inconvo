@@ -368,7 +368,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       table: state.tableName,
       operation: state.operation,
       operationParameters: state.operationParams,
-      computedColumns: [],
     };
 
     const queryWithConditions = formatAllConditions(
@@ -378,7 +377,14 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       state.dateCondition
     );
 
-    const computedColumns = state.tableSchema.computedColumns ?? [];
+    const relatedTableNames = new Set([
+      state.tableName,
+      ...state.tableSchema.outwardRelations.map((r) => r.targetTable.name),
+    ]);
+
+    const computedColumns = state.schema
+      .filter((t) => relatedTableNames.has(t.name) && t.computedColumns?.length)
+      .flatMap((t) => t.computedColumns);
 
     if (computedColumns.length > 0) {
       queryWithConditions.computedColumns = computedColumns;

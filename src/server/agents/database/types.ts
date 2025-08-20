@@ -1,4 +1,7 @@
-import type { WhereAndArray } from "~/server/userDatabaseConnector/types";
+import type {
+  ComputedColumn,
+  WhereAndArray,
+} from "~/server/userDatabaseConnector/types";
 
 export type Operation =
   | "findMany"
@@ -16,6 +19,6 @@ export interface DBQuery {
   operation: string;
   operationParameters: Record<string, unknown>;
   whereAndArray?: WhereAndArray;
-  computedColumns?: Record<string, unknown>[];
+  computedColumns?: ComputedColumn[];
   jsonColumnSchema?: unknown;
 }

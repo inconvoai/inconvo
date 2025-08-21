@@ -150,9 +150,13 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
 
 export async function inconvoAgent(params: QuestionAgentParams) {
   const AgentState = Annotation.Root({
-    userQuestion: Annotation<HumanMessage>({
+    userQuestion: Annotation<string>({
       reducer: (x, y) => y,
-      default: () => new HumanMessage(""),
+      default: () => "",
+    }),
+    runId: Annotation<string>({
+      reducer: (x, y) => y,
+      default: () => "",
     }),
     // Messages in the current run
     messages: Annotation<BaseMessage[] | null>({
@@ -317,7 +321,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       chatHistory: state.chatHistory,
       date: new Date().toISOString(),
       requestContext: JSON.stringify(state.requestContext),
-      userQuestion: state.userQuestion,
+      userQuestion: new HumanMessage(state.userQuestion),
       messages: state.messages,
     });
     return { messages: [response] };
@@ -346,7 +350,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         return {
           answer: parsedMessage.data,
           chatHistory: [
-            state.userQuestion,
+            new HumanMessage(state.userQuestion),
             ...databaseRelatedMessages,
             new AIMessage(JSON.stringify(parsedMessage.data, null, 2)),
           ],
@@ -461,7 +465,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     return {
       answer: response,
       chatHistory: [
-        state.userQuestion,
+        new HumanMessage(state.userQuestion),
         ...databaseRelatedMessages,
         new AIMessage(JSON.stringify(response, null, 2)),
       ],
@@ -477,7 +481,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       name: "conversation/title",
       data: {
         conversationId: params.conversation.id,
-        encrypted: { message: state.userQuestion.text },
+        encrypted: { message: state.userQuestion },
       },
     });
     return {};

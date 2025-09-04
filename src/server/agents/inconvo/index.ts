@@ -24,7 +24,7 @@ import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { Schema } from "~/server/db/schema";
 import { getPrompt } from "../utils/getPrompt";
 import { databaseRetrieverAgent } from "../database";
-import { Calculator } from "@langchain/community/tools/calculator";
+import { Calculator } from "~/server/agents/tools/calculator";
 import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";

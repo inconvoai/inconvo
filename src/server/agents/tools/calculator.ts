@@ -4,9 +4,10 @@ import { Tool } from "@langchain/core/tools";
 /**
  * The Calculator class is a tool used to evaluate mathematical
  * expressions. It extends the base Tool class.
+ * duped from the langchain community calculator tool to avoid the entire community package
  * @example
  * ```typescript
- * import { Calculator } from "@langchain/community/tools/calculator";
+ * import { Calculator } from "~/server/agents/tools/calculator";
  *
  * const calculator = new Calculator();
  * const sum = await calculator.invoke("99 + 99");

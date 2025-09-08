@@ -14,12 +14,12 @@ export interface ModelOptions {
 const DEFAULT_OPTIONS: Record<AIProvider, ModelOptions> = {
   azure: {
     temperature: 0,
-    timeout: 5000, // 5 second timeout
+    timeout: 15000,
     maxRetries: 2,
   },
   openai: {
     temperature: 0,
-    timeout: 10000, // 10 second timeout
+    timeout: 15000,
     maxRetries: 2,
   },
 };

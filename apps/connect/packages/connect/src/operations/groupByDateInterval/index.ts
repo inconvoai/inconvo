@@ -37,6 +37,12 @@ export async function groupByDateInterval(db: any, query: Query) {
       case "month":
         intervalExpression = sql`DATE_FORMAT(${dateColumn}, '%Y-%m')`;
         break;
+      case "quarter":
+        intervalExpression = sql`CONCAT(YEAR(${dateColumn}), '-Q', QUARTER(${dateColumn}))`;
+        break;
+      case "hour":
+        intervalExpression = sql`DATE_FORMAT(${dateColumn}, '%Y-%m-%d %H:00')`;
+        break;
       case "year":
         intervalExpression = sql`YEAR(${dateColumn})`;
         break;
@@ -51,6 +57,12 @@ export async function groupByDateInterval(db: any, query: Query) {
         break;
       case "month":
         intervalExpression = sql`to_char(${dateColumn}::date, 'YYYY-MM')`;
+        break;
+      case "quarter":
+        intervalExpression = sql`to_char(${dateColumn}::date, 'YYYY') || '-Q' || EXTRACT(QUARTER FROM ${dateColumn})`;
+        break;
+      case "hour":
+        intervalExpression = sql`to_char(date_trunc('hour', ${dateColumn}), 'YYYY-MM-DD HH24:00')`;
         break;
       case "year":
         intervalExpression = sql`to_char(${dateColumn}::date, 'YYYY')`;

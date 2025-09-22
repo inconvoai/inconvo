@@ -330,7 +330,7 @@ const groupByDateIntervalSchema = z
     operationParameters: z
       .object({
         dateColumn: z.string(),
-        interval: z.enum(["day", "week", "month", "year"]),
+        interval: z.enum(["day", "week", "month", "quarter", "year", "hour"]),
         count: z.array(z.string()).nullable(),
         sum: z.array(z.string()).nullable(),
         min: z.array(z.string()).nullable(),

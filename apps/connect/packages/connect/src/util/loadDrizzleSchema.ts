@@ -1,28 +1,44 @@
 import path from "path";
+import fs from "fs";
 
 export async function loadDrizzleSchema(): Promise<Record<string, any>> {
-  try {
-    // For testing use one less ../
-    const basePath = path.resolve(__dirname, "../../../drizzle");
+  const candidateBasePaths = [
+    // Original expected location when running inside the connect package
+    path.resolve(__dirname, "../../../drizzle"),
+    // Fallback when ts-jest transpilation changes relative depth (observed in parity-tests)
+    path.resolve(__dirname, "../../../../packages/connect/drizzle"),
+  ];
 
-    const schemaJsPath = path.join(basePath, "schema.js");
-    const relationsJsPath = path.join(basePath, "relations.js");
+  let lastError: unknown;
+  for (const basePath of candidateBasePaths) {
+    try {
+      const schemaJsPath = path.join(basePath, "schema.js");
+      const relationsJsPath = path.join(basePath, "relations.js");
 
-    const schemaModule = await import(schemaJsPath);
-    const relationsModule = await import(relationsJsPath);
+      if (!fs.existsSync(schemaJsPath) || !fs.existsSync(relationsJsPath)) {
+        continue; // try next candidate
+      }
 
-    // Extract the actual exports, handling both default and named exports
-    const schema = schemaModule.default || schemaModule;
-    const relations = relationsModule.default || relationsModule;
+      const schemaModule = await import(schemaJsPath);
+      const relationsModule = await import(relationsJsPath);
 
-    const tablesModule = {
-      ...schema,
-      ...relations,
-    };
+      const schema = (schemaModule as any).default || schemaModule;
+      const relations = (relationsModule as any).default || relationsModule;
 
-    return tablesModule as Record<string, any>;
-  } catch (error) {
-    console.error("Failed to load Drizzle schema:", error);
-    throw error;
+      return {
+        ...schema,
+        ...relations,
+      } as Record<string, any>;
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
   }
+
+  console.error(
+    "Failed to load Drizzle schema after trying candidates:",
+    candidateBasePaths,
+    lastError
+  );
+  throw lastError;
 }

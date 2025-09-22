@@ -9,7 +9,7 @@ import { env } from "~/env";
 const globalForDb = globalThis as unknown as {
   pgConn?: postgres.Sql;
   mysqlConn?: Pool;
-  db?: any;
+  __INCONVO_DRIZZLE_DB__?: any;
 };
 
 class MyLogger implements Logger {
@@ -20,8 +20,8 @@ class MyLogger implements Logger {
 
 export async function getDb() {
   // Return cached db instance if it exists
-  if (globalForDb.db) {
-    return globalForDb.db;
+  if (globalForDb.__INCONVO_DRIZZLE_DB__) {
+    return globalForDb.__INCONVO_DRIZZLE_DB__;
   }
 
   const drizzleSchema = await loadDrizzleSchema();
@@ -50,8 +50,8 @@ export async function getDb() {
     );
   }
 
-  // Cache the db instance
-  globalForDb.db = db;
+  // Cache the db instance with a distinct key to avoid collisions
+  globalForDb.__INCONVO_DRIZZLE_DB__ = db;
 
   return db;
 }

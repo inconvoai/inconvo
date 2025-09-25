@@ -1,10 +1,15 @@
 import pino from "pino";
 
+// Strips ANSI color codes emitted by drizzle-kit so downstream logging stays plain
+const stripAnsiCodes = (value: string): string =>
+  value.replace(/\x1B\[[0-?]*[ -\/]*[@-~]/g, "");
+
 export const logger = pino({
   level: process.env.LOG_LEVEL || "debug",
   transport: {
     target: "pino-pretty",
     options: {
+      colorize: false,
       translateTime: "HH:MM:ss",
       ignore: "pid,hostname,time,level",
       messageFormat: "[{level}]:{msg}",
@@ -26,11 +31,15 @@ function parseDrizzlePullOutput(output: string): string[] {
 
   // Process lines to find the last occurrence of each type
   lines.forEach((line) => {
-    if (line.includes("[✓]") && line.includes("fetched")) {
+    const cleanLine = stripAnsiCodes(line);
+    if (cleanLine.includes("fetched")) {
       // Extract the type (tables, columns, enums, etc.)
-      const match = line.match(/(\d+\s+\w+)\s+fetched/);
+      const match = cleanLine.match(/(\d+\s+\w+)\s+fetched/);
       if (match) {
-        finalStateMap.set(match[1].trim().split(/\s+/).pop() as string, line);
+        finalStateMap.set(
+          match[1].trim().split(/\s+/).pop() as string,
+          cleanLine
+        );
       }
     }
   });
@@ -71,7 +80,7 @@ function categorizeError(errorDetail: string): string {
   ) {
     return `Cannot connect to database. Please verify your host, port, dialect and that the database is running and accessible.`;
   }
-  
+
   // Category 2: Authentication errors - wrong username/password
   if (
     errorDetail.includes("password authentication failed") ||
@@ -79,31 +88,32 @@ function categorizeError(errorDetail: string): string {
   ) {
     return `Authentication failed. Please check your database username and password.`;
   }
-  
+
   // Category 3: Database doesn't exist - wrong database name
   if (
-    (errorDetail.includes("database") && errorDetail.includes("does not exist")) ||
+    (errorDetail.includes("database") &&
+      errorDetail.includes("does not exist")) ||
     errorDetail.includes("Unknown database") ||
     errorDetail.includes("ER_BAD_DB_ERROR")
   ) {
     // Try to extract database name from different error formats
     let dbName = "specified database";
-    
+
     // PostgreSQL format: database "name" does not exist
     const pgMatch = errorDetail.match(/database\s+"([^"]+)"\s+does not exist/);
     if (pgMatch) {
       dbName = pgMatch[1];
     }
-    
+
     // MySQL format: Unknown database 'name'
     const mysqlMatch = errorDetail.match(/Unknown database '([^']+)'/);
     if (mysqlMatch) {
       dbName = mysqlMatch[1];
     }
-    
+
     return `Database "${dbName}" does not exist. Please check your database name.`;
   }
-  
+
   // Return original error if no category matches
   return errorDetail;
 }
@@ -111,7 +121,10 @@ function categorizeError(errorDetail: string): string {
 /**
  * Extracts error messages from drizzle-kit output
  */
-function extractErrors(output: string): { hasError: boolean; errorDetail: string } {
+function extractErrors(output: string): {
+  hasError: boolean;
+  errorDetail: string;
+} {
   const lines = output.split("\n");
   let hasError = false;
   const errorMessages: string[] = [];
@@ -119,7 +132,8 @@ function extractErrors(output: string): { hasError: boolean; errorDetail: string
   let errorContextLines = 0;
 
   lines.forEach((line) => {
-    const trimmedLine = line.trim();
+    const cleanLine = stripAnsiCodes(line);
+    const trimmedLine = cleanLine.trim();
 
     // Start capturing when we see an Error
     if (trimmedLine.includes("Error:") || trimmedLine.includes("Error")) {
@@ -151,14 +165,15 @@ export function processPullOutput(output: string): void {
   // Always log the full output at debug level
   logger.debug("Full output from drizzle-kit pull:");
   output.split("\n").forEach((line) => {
-    if (line.trim()) {
-      logger.debug(`  ${line.trim()}`);
+    const cleanLine = stripAnsiCodes(line);
+    if (cleanLine.trim()) {
+      logger.debug(`  ${cleanLine.trim()}`);
     }
   });
 
   // Check for errors
   const { hasError, errorDetail } = extractErrors(output);
-  
+
   if (hasError) {
     const categorizedError = categorizeError(errorDetail);
     throw new Error(`Error while pulling schema: ${categorizedError}`);
@@ -223,7 +238,10 @@ export function logCommandError(error: any, command: string): void {
 /**
  * Logs compilation output or errors
  */
-export function logCompilationResult(output: string | null, error: any): boolean {
+export function logCompilationResult(
+  output: string | null,
+  error: any
+): boolean {
   if (error) {
     // Log stderr if available
     if (error.stderr) {

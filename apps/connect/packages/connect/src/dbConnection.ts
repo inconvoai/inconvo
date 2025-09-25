@@ -1,14 +1,14 @@
-import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+import { drizzle as drizzlePostgres } from "drizzle-orm/node-postgres";
 import { drizzle as drizzleMysql } from "drizzle-orm/mysql2";
 import { Logger } from "drizzle-orm";
-import postgres from "postgres";
-import { createPool, type Pool } from "mysql2/promise";
+import { Pool as PgPool } from "pg";
+import { createPool, type Pool as MysqlPool } from "mysql2/promise";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { env } from "~/env";
 
 const globalForDb = globalThis as unknown as {
-  pgConn?: postgres.Sql;
-  mysqlConn?: Pool;
+  pgConn?: PgPool;
+  mysqlConn?: MysqlPool;
   __INCONVO_DRIZZLE_DB__?: any;
 };
 
@@ -38,7 +38,9 @@ export async function getDb() {
       mode: "default",
     });
   } else if (env.DATABASE_DIALECT === "postgresql") {
-    const pgConn = globalForDb.pgConn ?? postgres(env.INCONVO_DATABASE_URL);
+    const pgConn =
+      globalForDb.pgConn ??
+      new PgPool({ connectionString: env.INCONVO_DATABASE_URL });
     globalForDb.pgConn = pgConn;
     db = drizzlePostgres(pgConn, {
       schema: drizzleSchema,

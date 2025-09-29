@@ -1,6 +1,6 @@
 {
   "name": "@ten-dev/inconvo",
-  "version": "0.0.72",
+  "version": "0.0.73",
   "engines": {
     "node": ">=22.0.0"
   },

@@ -141,13 +141,15 @@ function parseSchema(drizzlePath) {
 
 function compileSchemas(drizzlePath) {
   try {
-    logger.debug("Compiling Drizzle schemas to JavaScript...");
+    logger.debug("Transpiling Drizzle schemas to JavaScript...");
     const drizzleDir = path.join(drizzlePath, "../drizzle");
+
+    // Use esbuild for transpilation (no type-checking, faster, handles errors gracefully)
     const output = execSync(
-      `npx tsc ${path.join(drizzleDir, "schema.ts")} ${path.join(
+      `npx esbuild ${path.join(drizzleDir, "schema.ts")} ${path.join(
         drizzleDir,
         "relations.ts"
-      )} --skipLibCheck --outDir ${drizzleDir}`,
+      )} --format=cjs --outdir=${drizzleDir} --platform=node`,
       {
         stdio: "pipe",
         encoding: "utf8",

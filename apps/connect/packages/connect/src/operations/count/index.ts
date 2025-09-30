@@ -1,5 +1,9 @@
 import { type Query } from "~/types/querySchema";
-import { count as dCount, SQL } from "drizzle-orm";
+import {
+  count as dCount,
+  countDistinct as dDistinctCount,
+  SQL,
+} from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import assert from "assert";
@@ -12,8 +16,8 @@ export async function count(db: any, query: Query) {
 
   const drizzleSchema = await loadDrizzleSchema();
 
-  const countColumns: [string, SQL<unknown>][] =
-    operationParameters.columns.map((columnName) => {
+  const countColumns: [string, SQL<unknown>][] = operationParameters.count.map(
+    (columnName) => {
       if (columnName === "_all") {
         return [columnName, dCount()];
       }
@@ -28,11 +32,30 @@ export async function count(db: any, query: Query) {
           })
         ),
       ];
-    });
+    }
+  );
+
+  const distinctColumns: [string, SQL<unknown>][] | null =
+    operationParameters.countDistinct?.map((columnName) => {
+      return [
+        columnName,
+        dDistinctCount(
+          getColumnFromTable({
+            columnName,
+            tableName: table,
+            drizzleSchema,
+            computedColumns,
+          })
+        ),
+      ];
+    }) ?? null;
 
   const dbQuery = db
     .select({
       ["_count"]: buildJsonObjectSelect(countColumns),
+      ...(distinctColumns
+        ? { ["_countDistinct"]: buildJsonObjectSelect(distinctColumns) }
+        : {}),
     })
     .from(drizzleSchema[table])
     .where((columns: Record<string, unknown>) =>

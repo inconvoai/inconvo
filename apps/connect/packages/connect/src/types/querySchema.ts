@@ -253,7 +253,8 @@ const countSchema = z
     operation: z.literal("count"),
     operationParameters: z
       .object({
-        columns: z.array(z.string()),
+        count: z.array(z.string()),
+        countDistinct: z.array(z.string()).nullable(),
       })
       .strict(),
   })

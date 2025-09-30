@@ -711,11 +711,15 @@ export function operationParametersAgent(params: RequestParams) {
 
   const count = async (state: typeof OperationParametersState.State) => {
     const schema = z.object({
-      columns: z
+      count: z
         .array(stringArrayToZodEnum(state.columnNames.concat(["_all"])))
         .describe(
           "_all is a count of all rows, A column is a count of non-null values in the column"
         ),
+      countDistinct: z
+        .array(stringArrayToZodEnum(state.columnNames))
+        .nullable()
+        .describe("The columns to count distinct values for"),
     });
     const operationParameters = await determineParamsForSchema({ schema });
     return {

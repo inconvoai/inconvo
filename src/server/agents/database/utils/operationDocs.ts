@@ -61,18 +61,22 @@ export const operationDocs = {
   },
   count: {
     description:
-      "Returns the number of non-null records for the specified columns in a table. You can also count all records by using the _all option which will run a count(*) on the table.",
+      "Returns the count and/or count distinct of specified columns in a table. Use `count` for regular counts (including _all for count(*)), and `countDistinct` for counting unique values. Set countDistinct to null if not needed.",
     example: {
       question:
-        "Count the number of non-null records for each column in the user table.",
+        "Count the number of orders and the number of distinct customers who placed orders.",
       query: {
-        table: "user",
+        table: "order",
         operation: "count",
         operationParameters: {
-          columns: ["id", "name"],
+          count: ["id", "_all"],
+          countDistinct: ["customerId"],
         },
       },
-      response: { _count: { id: 41, name: 40 } },
+      response: {
+        _count: { id: 100, _all: 100 },
+        _countDistinct: { customerId: 45 },
+      },
     },
   },
   countWithJoin: {

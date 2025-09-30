@@ -162,15 +162,6 @@ function extractErrors(output: string): {
  * Processes and logs drizzle-kit pull output
  */
 export function processPullOutput(output: string): void {
-  // Always log the full output at debug level
-  logger.debug("Full output from drizzle-kit pull:");
-  output.split("\n").forEach((line) => {
-    const cleanLine = stripAnsiCodes(line);
-    if (cleanLine.trim()) {
-      logger.debug(`  ${cleanLine.trim()}`);
-    }
-  });
-
   // Check for errors
   const { hasError, errorDetail } = extractErrors(output);
 
@@ -212,15 +203,16 @@ export function logCommandError(error: any, command: string): void {
 
   // Log stderr if available
   if (error.stderr && error.stderr.toString().trim()) {
-    logger.error("Error details:");
-    error.stderr
+    const errorLines = error.stderr
       .toString()
       .split("\n")
-      .forEach((line: string) => {
-        if (line.trim()) {
-          logger.error(`  ${line.trim()}`);
-        }
-      });
+      .filter((line: string) => line.trim())
+      .map((line: string) => `  ${line.trim()}`)
+      .join("\n");
+
+    if (errorLines) {
+      logger.error(`Error details:\n${errorLines}`);
+    }
   }
 
   // Log the full error for debugging
@@ -245,29 +237,33 @@ export function logCompilationResult(
   if (error) {
     // Log stderr if available
     if (error.stderr) {
-      error.stderr
+      const errorLines = error.stderr
         .toString()
         .split("\n")
-        .forEach((line: string) => {
-          if (line.trim()) {
-            logger.error(`${line.trim()}`);
-          }
-        });
+        .filter((line: string) => line.trim())
+        .map((line: string) => line.trim())
+        .join("\n");
+
+      if (errorLines) {
+        logger.error(errorLines);
+      }
     }
     logger.error({ err: error }, "Failed to compile schemas");
     return false;
   }
 
   if (output) {
-    // Split output by lines and log each non-empty line
-    output
+    // Batch log output to avoid overwhelming pino's buffer
+    const outputLines = output
       .toString()
       .split("\n")
-      .forEach((line) => {
-        if (line.trim()) {
-          logger.info(`${line.trim()}`);
-        }
-      });
+      .filter((line) => line.trim())
+      .map((line) => line.trim())
+      .join("\n");
+
+    if (outputLines) {
+      logger.info(outputLines);
+    }
   }
 
   logger.info("Schema pulled successfully.");

@@ -39,6 +39,7 @@ function runDrizzleCommand(command, drizzlePath) {
         cwd: drizzlePath,
         stdio: "pipe",
         encoding: "utf8",
+        maxBuffer: 50 * 1024 * 1024,
       }
     );
 
@@ -153,6 +154,7 @@ function compileSchemas(drizzlePath) {
       {
         stdio: "pipe",
         encoding: "utf8",
+        maxBuffer: 50 * 1024 * 1024,
       }
     );
 

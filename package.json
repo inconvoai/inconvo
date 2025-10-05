@@ -47,6 +47,7 @@
     "@trpc/react-query": "^11.5.1",
     "@trpc/server": "^11.5.1",
     "axios": "^1.12.2",
+    "cloudflare": "^5.1.0",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.18",
     "dotenv": "^17.2.2",

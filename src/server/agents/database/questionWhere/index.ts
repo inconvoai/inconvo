@@ -26,6 +26,67 @@ import type { BaseMessage, ToolMessage } from "@langchain/core/messages";
 import assert from "assert";
 import { buildConditionsForTable } from "../utils/buildConditionsForTable";
 
+const getDisplayColumnName = (
+  column: Schema[number]["columns"][number]
+): string => {
+  return column.rename?.trim() ? column.rename : column.name;
+};
+
+const canonicalizeColumnName = (
+  column: string,
+  params: RequestParams,
+  options?: {
+    tableName?: string;
+    tableSchema?: Schema[number];
+  }
+): string => {
+  const trimmedColumn = column.trim();
+  if (!trimmedColumn) {
+    return trimmedColumn;
+  }
+
+  const targetTableName = options?.tableName ?? params.tableName;
+  const targetSchema =
+    options?.tableSchema ??
+    params.schema.find((table) => table.name === targetTableName);
+
+  const mapped = params.columnNameMap[trimmedColumn];
+  if (mapped && targetSchema && targetTableName === params.tableName) {
+    if (mapped.includes(".")) {
+      const [mappedTable, mappedColumn] = mapped.split(".", 2);
+      if (mappedTable === targetTableName && mappedColumn) {
+        return mappedColumn;
+      }
+      return mapped;
+    }
+    return mapped;
+  }
+
+  const isQualified = trimmedColumn.includes(".");
+  const [providedTableName, providedColumnLabel] = isQualified
+    ? trimmedColumn.split(".", 2)
+    : [targetTableName, trimmedColumn];
+
+  if (providedTableName !== targetTableName) {
+    return trimmedColumn;
+  }
+
+  if (!targetSchema) {
+    return trimmedColumn;
+  }
+
+  const schemaColumn = targetSchema.columns.find((col) => {
+    const display = getDisplayColumnName(col);
+    return col.name === providedColumnLabel || display === providedColumnLabel;
+  });
+
+  if (!schemaColumn) {
+    return trimmedColumn;
+  }
+
+  return schemaColumn.name;
+};
+
 interface RequestParams {
   question: string;
   tableName: string;
@@ -39,6 +100,7 @@ interface RequestParams {
   requestContext: Record<string, string | number>;
   connectorUrl: string;
   connectorSigningKey: string;
+  columnNameMap: Record<string, string>;
 }
 
 export const scalarCond = (
@@ -201,28 +263,81 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   /************* 2. Data Prep *****************************************/
   const tableConditionColumns =
-    params.tableConditions?.map((condition) => condition.column) ?? [];
+    params.tableConditions?.map((condition) =>
+      canonicalizeColumnName(condition.column, params)
+    ) ?? [];
   const columns = params.tableSchema.columns;
   const relations = params.tableSchema?.outwardRelations ?? [];
   const computedColumnNames =
     params.tableSchema?.computedColumns.map((col) => col.name) ?? [];
+  const excludedColumns = new Set(tableConditionColumns);
+
+  const buildColumnOptions = (
+    sourceColumns: Schema[number]["columns"]
+  ): string[] => {
+    const options: string[] = [];
+    sourceColumns.forEach((column) => {
+      const canonical = column.name;
+      if (excludedColumns.has(canonical)) {
+        return;
+      }
+      if (!options.includes(canonical)) {
+        options.push(canonical);
+      }
+      const display = getDisplayColumnName(column);
+      if (display !== canonical && !options.includes(display)) {
+        options.push(display);
+      }
+    });
+    return options;
+  };
+
+  const allColumnOptions = buildColumnOptions(columns);
   const numericalColumnNames = columns
     .filter((column) => ["number"].includes(column.type))
-    .map((column) => column.name)
-    .concat(computedColumnNames)
-    .filter((name) => !tableConditionColumns.includes(name));
+    .reduce<string[]>((acc, column) => {
+      const columnOptions = buildColumnOptions([column]);
+      columnOptions.forEach((option) => {
+        if (!acc.includes(option)) {
+          acc.push(option);
+        }
+      });
+      return acc;
+    }, [])
+    .concat(computedColumnNames.filter((name) => !excludedColumns.has(name)));
   const stringColumnNames = columns
     .filter((column) => ["string"].includes(column.type))
-    .map((column) => column.name)
-    .filter((name) => !tableConditionColumns.includes(name));
+    .reduce<string[]>((acc, column) => {
+      const columnOptions = buildColumnOptions([column]);
+      columnOptions.forEach((option) => {
+        if (!acc.includes(option)) {
+          acc.push(option);
+        }
+      });
+      return acc;
+    }, []);
   const booleanColumnNames = columns
     .filter((column) => ["boolean"].includes(column.type))
-    .map((column) => column.name)
-    .filter((name) => !tableConditionColumns.includes(name));
+    .reduce<string[]>((acc, column) => {
+      const columnOptions = buildColumnOptions([column]);
+      columnOptions.forEach((option) => {
+        if (!acc.includes(option)) {
+          acc.push(option);
+        }
+      });
+      return acc;
+    }, []);
   const dateColumnNames = columns
     .filter((column) => ["DateTime"].includes(column.type))
-    .map((column) => column.name)
-    .filter((name) => !tableConditionColumns.includes(name));
+    .reduce<string[]>((acc, column) => {
+      const columnOptions = buildColumnOptions([column]);
+      columnOptions.forEach((option) => {
+        if (!acc.includes(option)) {
+          acc.push(option);
+        }
+      });
+      return acc;
+    }, []);
   const relationToOneNames = relations
     .filter((relation) => relation.isList === false)
     .map((relation) => relation.name);
@@ -260,7 +375,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: null;
         }) => {
           const { column, operation, value } = input;
-          const filter = scalarCond(column, operation, value);
+          const canonicalColumn = canonicalizeColumnName(column, params);
+          const filter = scalarCond(canonicalColumn, operation, value);
           filters.push(filter);
           return filter;
         },
@@ -269,7 +385,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           description:
             "Filter for null values. Use 'equals' to find null values, 'not' to exclude null values.",
           schema: z.object({
-            column: stringArrayToZodEnum(columns.map((col) => col.name)),
+            column: stringArrayToZodEnum(allColumnOptions),
             operation: z.enum(["equals", "not"]),
             value: z.null(),
           }),
@@ -286,7 +402,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: string;
         }) => {
           const { column, operator, value } = input;
-          const filter = scalarCond(column, operator, value);
+          const canonicalColumn = canonicalizeColumnName(column, params);
+          const filter = scalarCond(canonicalColumn, operator, value);
           filters.push(filter);
           return filter;
         },
@@ -316,12 +433,13 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: number | number[];
         }) => {
           const { column, operator, value } = input;
+          const canonicalColumn = canonicalizeColumnName(column, params);
           if (Array.isArray(value)) {
-            const filter = scalarCond(column, operator, value);
+            const filter = scalarCond(canonicalColumn, operator, value);
             filters.push(filter);
             return filter;
           }
-          const filter = scalarCond(column, operator, value);
+          const filter = scalarCond(canonicalColumn, operator, value);
           filters.push(filter);
           return filter;
         },
@@ -347,7 +465,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: boolean;
         }) => {
           const { column, operator, value } = input;
-          const filter = scalarCond(column, operator, value);
+          const canonicalColumn = canonicalizeColumnName(column, params);
+          const filter = scalarCond(canonicalColumn, operator, value);
           filters.push(filter);
           return filter;
         },
@@ -378,17 +497,18 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: string | string[];
         }) => {
           const { column, operator, value } = input;
+          const canonicalColumn = canonicalizeColumnName(column, params);
           if (
             Array.isArray(value) ||
             operator === "contains" ||
             operator === "contains_insensitive"
           ) {
-            const filter = scalarCond(column, operator, value);
+            const filter = scalarCond(canonicalColumn, operator, value);
             filters.push(filter);
             return filter;
           }
           const correctedValue = await getCorrectedValueForStringColumn({
-            columnName: column,
+            columnName: canonicalColumn,
             value: value,
             tableName: params.tableName,
             tableConditions: params.tableConditions,
@@ -398,7 +518,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             connectorSigningKey: params.connectorSigningKey,
             question: params.question,
           });
-          const filter = scalarCond(column, operator, correctedValue);
+          const filter = scalarCond(canonicalColumn, operator, correctedValue);
           filters.push(filter);
           return filter;
         },
@@ -441,21 +561,6 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: string | number | boolean | null;
         }) => {
           const { relation, filterOption, column, operator, value } = input;
-          if (
-            Array.isArray(value) ||
-            operator === "contains" ||
-            operator === "contains_insensitive"
-          ) {
-            const filter = relationCond(
-              relation,
-              filterOption,
-              column,
-              operator,
-              value
-            );
-            filters.push(filter);
-            return filter;
-          }
           const relatedTableName = params.tableSchema.outwardRelations.find(
             (rel) => rel.name === relation
           )?.targetTable.name;
@@ -467,8 +572,27 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             relationSchema,
             `Table ${relatedTableName} not found in schema`
           );
+          const canonicalColumn = canonicalizeColumnName(column, params, {
+            tableName: relatedTableName,
+            tableSchema: relationSchema,
+          });
+          if (
+            Array.isArray(value) ||
+            operator === "contains" ||
+            operator === "contains_insensitive"
+          ) {
+            const filter = relationCond(
+              relation,
+              filterOption,
+              canonicalColumn,
+              operator,
+              value
+            );
+            filters.push(filter);
+            return filter;
+          }
           const relationColumn = relationSchema.columns.find(
-            (col) => col.name === column
+            (col) => col.name === canonicalColumn
           );
           assert(
             relationColumn,
@@ -476,7 +600,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           );
           if (relationColumn.type === "string") {
             const correctedValue = await getCorrectedValueForStringColumn({
-              columnName: column,
+              columnName: canonicalColumn,
               value: value as string,
               tableName: relatedTableName,
               tableConditions: buildConditionsForTable(
@@ -492,7 +616,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             const filter = relationCond(
               relation,
               filterOption,
-              column,
+              canonicalColumn,
               operator,
               correctedValue
             );
@@ -503,7 +627,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           const filter = relationCond(
             relation,
             filterOption,
-            column,
+            canonicalColumn,
             operator,
             value
           );
@@ -585,21 +709,6 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           value: string | number | boolean;
         }) => {
           const { relation, filterOption, column, operator, value } = input;
-          if (
-            Array.isArray(value) ||
-            operator === "contains" ||
-            operator === "contains_insensitive"
-          ) {
-            const filter = relationCond(
-              relation,
-              filterOption,
-              column,
-              operator,
-              value
-            );
-            filters.push(filter);
-            return filter;
-          }
           const relatedTableName = params.tableSchema.outwardRelations.find(
             (rel) => rel.name === relation
           )?.targetTable.name;
@@ -611,8 +720,27 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             relationSchema,
             `Table ${relatedTableName} not found in schema`
           );
+          const canonicalColumn = canonicalizeColumnName(column, params, {
+            tableName: relatedTableName,
+            tableSchema: relationSchema,
+          });
+          if (
+            Array.isArray(value) ||
+            operator === "contains" ||
+            operator === "contains_insensitive"
+          ) {
+            const filter = relationCond(
+              relation,
+              filterOption,
+              canonicalColumn,
+              operator,
+              value
+            );
+            filters.push(filter);
+            return filter;
+          }
           const relationColumn = relationSchema.columns.find(
-            (col) => col.name === column
+            (col) => col.name === canonicalColumn
           );
           assert(
             relationColumn,
@@ -620,7 +748,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           );
           if (relationColumn.type === "string") {
             const correctedValue = await getCorrectedValueForStringColumn({
-              columnName: column,
+              columnName: canonicalColumn,
               value: value as string,
               tableName: relatedTableName,
               tableConditions: buildConditionsForTable(
@@ -636,7 +764,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
             const filter = relationCond(
               relation,
               filterOption,
-              column,
+              canonicalColumn,
               operator,
               correctedValue
             );
@@ -647,7 +775,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
           const filter = relationCond(
             relation,
             filterOption,
-            column,
+            canonicalColumn,
             operator,
             value
           );

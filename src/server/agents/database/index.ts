@@ -46,6 +46,40 @@ interface RequestParams {
   connectorSigningKey: string;
 }
 
+const buildColumnRenameMarkdownTables = (schema: Schema): string | null => {
+  const tables: string[] = [];
+
+  for (const table of schema ?? []) {
+    const renamedColumns: Array<{ original: string; alternate: string }> = [];
+
+    for (const column of table.columns ?? []) {
+      const rename = column.rename?.trim();
+      if (!rename || rename === column.name) {
+        continue;
+      }
+
+      renamedColumns.push({
+        original: column.name,
+        alternate: rename,
+      });
+    }
+
+    if (renamedColumns.length > 0) {
+      let tableMarkdown = `## ${table.name}\n`;
+      tableMarkdown += `| Original | Alternate |\n`;
+      tableMarkdown += `|----------|-----------|`;
+
+      for (const col of renamedColumns) {
+        tableMarkdown += `\n| ${col.original} | ${col.alternate} |`;
+      }
+
+      tables.push(tableMarkdown);
+    }
+  }
+
+  return tables.length > 0 ? tables.join("\n\n") : null;
+};
+
 export const formatAllConditions = (
   query: DBQuery,
   tableConditions: TableConditions,
@@ -117,6 +151,10 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     }),
     operationParams: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
+    }),
+    columnNameMap: Annotation<Record<string, string>>({
+      reducer: (x, y) => y,
+      default: () => ({}),
     }),
     tableConditions: Annotation<TableConditions>({
       reducer: (x, y) => y,
@@ -340,7 +378,10 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       tableName: state.tableName,
       question: state.question,
     }).invoke({});
-    return { operationParams: operationParamsResponse.operationParameters };
+    return {
+      operationParams: operationParamsResponse.operationParameters,
+      columnNameMap: operationParamsResponse.columnNameMap ?? state.columnNameMap,
+    };
   };
 
   const setMessageDerivedFilters = async (
@@ -359,6 +400,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       requestContext: params.requestContext,
       connectorUrl: params.connectorUrl,
       connectorSigningKey: params.connectorSigningKey,
+      columnNameMap: state.columnNameMap,
     });
     return { questionConditions: questionWhereAgentResponse };
   };
@@ -421,7 +463,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
   const decideComplete = async (state: typeof DatabaseAgentState.State) => {
     const nextStepPrompt = await getPrompt(
-      "decide_database_next_step:f8a087f4"
+      "decide_database_next_step:89551fd0"
     );
     const nextStepSchema = model.withStructuredOutput(
       z.object({
@@ -434,12 +476,19 @@ export async function databaseRetrieverAgent(params: RequestParams) {
           .describe("The next step to take"),
       })
     );
-    const response = await nextStepPrompt.pipe(nextStepSchema).invoke({
+    const columnRenameTables = buildColumnRenameMarkdownTables(state.schema);
+
+    const promptInput = {
       question: params.userQuestion,
       requestContext: params.requestContext,
       database_sql: state.databaseResponse.query,
       date: new Date().toISOString(),
-    });
+      columnRenameTables: columnRenameTables ?? "No column renames",
+    } as const;
+
+    const response = await nextStepPrompt
+      .pipe(nextStepSchema)
+      .invoke(promptInput);
 
     if (response.next === "generate_follow_up_question") {
       return {

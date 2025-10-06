@@ -31,6 +31,8 @@ export function mapJsonToSchema(
     const type = typeof value === "string" ? "String" : "Number";
     return {
       name: key,
+      rename: null,
+      notes: null,
       relation: [],
       type: type,
       unit: null,

@@ -13,7 +13,11 @@ export function buildTableSchemaStringFromTableSchema(
   const columns = tableSchema.columns
     .map((column) => {
       const unitSuffix = column.unit ? ` [${column.unit}]` : "";
-      return `\t\t- ${column.name} (${column.type}${unitSuffix})`;
+      const displayName = column.rename?.trim()
+        ? column.rename
+        : column.name;
+      const notesSuffix = column.notes ? ` - Notes: ${column.notes}` : "";
+      return `\t\t- ${displayName} (${column.type}${unitSuffix})${notesSuffix}`;
     })
     .join("\n")
     .replace(/^/, `\tColumns:\n`);

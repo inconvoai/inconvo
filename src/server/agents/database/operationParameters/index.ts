@@ -30,9 +30,23 @@ interface RequestParams {
   question: string;
 }
 
-// Helper function to transform an array value to null if it's empty
-const transformEmptyArrayToNull = (value: string[] | null): string[] | null => {
-  return Array.isArray(value) && value.length === 0 ? null : value;
+const getDisplayColumnName = (
+  column: Schema[number]["columns"][number]
+): string => {
+  return column.rename?.trim() ? column.rename : column.name;
+};
+
+const buildColumnNameMap = (
+  tableName: string,
+  columns: Schema[number]["columns"]
+): Record<string, string> => {
+  return columns.reduce<Record<string, string>>((acc, column) => {
+    const displayName = getDisplayColumnName(column);
+    const canonicalName = column.name;
+    acc[displayName] = canonicalName;
+    acc[`${tableName}.${displayName}`] = `${tableName}.${canonicalName}`;
+    return acc;
+  }, {});
 };
 
 export function operationParametersAgent(params: RequestParams) {
@@ -55,15 +69,79 @@ export function operationParametersAgent(params: RequestParams) {
     relationListNames: Annotation<string[]>({
       reducer: (x, y) => y,
     }),
+    columnNameMap: Annotation<Record<string, string>>({
+      reducer: (x, y) => y,
+    }),
   });
 
   const OutputAnnotation = Annotation.Root({
+    ...OperationParametersState.spec,
     operationParameters: Annotation<Record<string, unknown>>({
       reducer: (x, y) => ({ ...x, ...y }),
     }),
   });
 
   const model = getAIModel("azure:gpt-4.1");
+
+  const canonicalizeColumn = (
+    value: string | null | undefined,
+    map: Record<string, string>
+  ): string | null => {
+    if (value == null) {
+      return null;
+    }
+
+    const direct = map[value];
+    if (direct) {
+      return direct;
+    }
+
+    const [tableName, columnLabel] = value.includes(".")
+      ? (value.split(".", 2) as [string, string])
+      : [params.tableName, value];
+
+    const tableSchema = params.schema.find((table) => table.name === tableName);
+    if (!tableSchema) {
+      return value;
+    }
+
+    const column = tableSchema.columns.find((col) => {
+      const displayName = getDisplayColumnName(col);
+      return col.name === columnLabel || displayName === columnLabel;
+    });
+
+    if (!column) {
+      return value;
+    }
+
+    const canonicalColumnName = column.name;
+    const canonicalValue =
+      tableName === params.tableName
+        ? canonicalColumnName
+        : `${tableName}.${canonicalColumnName}`;
+
+    map[value] = canonicalValue;
+    if (value.includes(".")) {
+      map[`${tableName}.${getDisplayColumnName(column)}`] = canonicalValue;
+    } else {
+      map[getDisplayColumnName(column)] = canonicalColumnName;
+      map[
+        `${tableName}.${getDisplayColumnName(column)}`
+      ] = `${tableName}.${canonicalColumnName}`;
+    }
+
+    return canonicalValue;
+  };
+
+  const canonicalizeColumnArray = (
+    values: string[] | null | undefined,
+    map: Record<string, string>
+  ): string[] | null => {
+    if (!values || values.length === 0) {
+      return null;
+    }
+    return values.map((value) => canonicalizeColumn(value, map) ?? value);
+  };
 
   const prepareForOperation = async (
     _state: typeof OperationParametersState.State
@@ -75,15 +153,16 @@ export function operationParametersAgent(params: RequestParams) {
     } = params.tableSchema;
     assert(columns.length > 0, "Table has no columns");
 
-    const columnNames = columns.map(({ name }) => name);
+    const columnNameMap = buildColumnNameMap(params.tableName, columns);
+    const columnNames = columns.map((column) => getDisplayColumnName(column));
     const computedColumnNames = computedColumns.map(({ name }) => name);
     const dateColumnNames = columns
       .filter(({ type }) => type === "DateTime")
-      .map(({ name }) => name);
+      .map((column) => getDisplayColumnName(column));
     const numericalColumnNames = [
       ...columns
         .filter(({ type }) => ["number"].includes(type))
-        .map(({ name }) => name),
+        .map((column) => getDisplayColumnName(column)),
       ...computedColumns.map(({ name }) => name),
     ];
     // - To Many relations
@@ -98,6 +177,7 @@ export function operationParametersAgent(params: RequestParams) {
       dateColumnNames,
       numericalColumnNames,
       relationListNames,
+      columnNameMap,
     };
   };
 
@@ -240,10 +320,21 @@ export function operationParametersAgent(params: RequestParams) {
         schema: orderBySchema,
       }),
     ]);
+    const normalizedOrderBy = orderByResult.orderBy
+      ? {
+          ...orderByResult.orderBy,
+          column:
+            canonicalizeColumn(
+              orderByResult.orderBy.column,
+              state.columnNameMap
+            ) ?? orderByResult.orderBy.column,
+        }
+      : null;
     return {
       operationParameters: {
         ...selectResult,
         ...orderByResult,
+        orderBy: normalizedOrderBy,
       } satisfies FindManyQuery["operationParameters"],
     };
   };
@@ -627,6 +718,9 @@ export function operationParametersAgent(params: RequestParams) {
     });
 
     const operationParameters = await determineParamsForSchema({ schema });
+    const normalizedColumns = operationParameters.columns.map(
+      (column) => canonicalizeColumn(column, state.columnNameMap) ?? column
+    );
 
     const relationsToCount = await Promise.all(
       operationParameters.relations.map(async (relationName) => {
@@ -662,6 +756,7 @@ export function operationParametersAgent(params: RequestParams) {
     return {
       operationParameters: {
         ...restParameters,
+        columns: normalizedColumns,
         relationsToCount,
       } satisfies CountRelationsQuery["operationParameters"],
     };
@@ -695,12 +790,30 @@ export function operationParametersAgent(params: RequestParams) {
     const rawOperationParameters = await determineParamsForSchema({ schema });
 
     const operationParameters: AggregateQuery["operationParameters"] = {
-      avg: transformEmptyArrayToNull(rawOperationParameters.avg),
-      sum: transformEmptyArrayToNull(rawOperationParameters.sum),
-      min: transformEmptyArrayToNull(rawOperationParameters.min),
-      max: transformEmptyArrayToNull(rawOperationParameters.max),
-      count: transformEmptyArrayToNull(rawOperationParameters.count),
-      median: transformEmptyArrayToNull(rawOperationParameters.median),
+      avg: canonicalizeColumnArray(
+        rawOperationParameters.avg,
+        state.columnNameMap
+      ),
+      sum: canonicalizeColumnArray(
+        rawOperationParameters.sum,
+        state.columnNameMap
+      ),
+      min: canonicalizeColumnArray(
+        rawOperationParameters.min,
+        state.columnNameMap
+      ),
+      max: canonicalizeColumnArray(
+        rawOperationParameters.max,
+        state.columnNameMap
+      ),
+      count: canonicalizeColumnArray(
+        rawOperationParameters.count,
+        state.columnNameMap
+      ),
+      median: canonicalizeColumnArray(
+        rawOperationParameters.median,
+        state.columnNameMap
+      ),
     };
 
     return {
@@ -722,6 +835,16 @@ export function operationParametersAgent(params: RequestParams) {
         .describe("The columns to count distinct values for"),
     });
     const operationParameters = await determineParamsForSchema({ schema });
+    const normalizedCountColumns =
+      canonicalizeColumnArray(operationParameters.count, state.columnNameMap) ??
+      [];
+    const normalizedCountDistinctColumns =
+      canonicalizeColumnArray(
+        operationParameters.countDistinct,
+        state.columnNameMap
+      ) ?? [];
+    operationParameters.count = normalizedCountColumns;
+    operationParameters.countDistinct = normalizedCountDistinctColumns;
     return {
       operationParameters:
         operationParameters satisfies CountQuery["operationParameters"],
@@ -772,6 +895,30 @@ export function operationParametersAgent(params: RequestParams) {
       }),
     ]);
 
+    const canonicalDateColumn =
+      canonicalizeColumn(aggregateParams.dateColumn, state.columnNameMap) ??
+      aggregateParams.dateColumn;
+    const canonicalAvg = canonicalizeColumnArray(
+      aggregateParams.avg,
+      state.columnNameMap
+    );
+    const canonicalSum = canonicalizeColumnArray(
+      aggregateParams.sum,
+      state.columnNameMap
+    );
+    const canonicalMin = canonicalizeColumnArray(
+      aggregateParams.min,
+      state.columnNameMap
+    );
+    const canonicalMax = canonicalizeColumnArray(
+      aggregateParams.max,
+      state.columnNameMap
+    );
+    const canonicalCount = canonicalizeColumnArray(
+      aggregateParams.count,
+      state.columnNameMap
+    );
+
     const orderBySchema = z.object({
       orderBy: z.union([
         z.enum(["chronological", "reverseChronological"]),
@@ -792,14 +939,32 @@ export function operationParametersAgent(params: RequestParams) {
       queryCurrentState: YAML.stringify(aggregateParams),
     });
 
+    const normalizedOrderBy = (() => {
+      if (
+        orderByOperationParams.orderBy === "chronological" ||
+        orderByOperationParams.orderBy === "reverseChronological"
+      ) {
+        return orderByOperationParams.orderBy;
+      }
+      const orderByObject = orderByOperationParams.orderBy;
+      return {
+        ...orderByObject,
+        column:
+          canonicalizeColumn(orderByObject.column, state.columnNameMap) ??
+          orderByObject.column,
+      };
+    })();
+
     const operationParameters = {
-      ...aggregateParams,
-      avg: transformEmptyArrayToNull(aggregateParams.avg),
-      sum: transformEmptyArrayToNull(aggregateParams.sum),
-      min: transformEmptyArrayToNull(aggregateParams.min),
-      max: transformEmptyArrayToNull(aggregateParams.max),
-      count: transformEmptyArrayToNull(aggregateParams.count),
-      ...orderByOperationParams,
+      interval: aggregateParams.interval,
+      dateColumn: canonicalDateColumn,
+      avg: canonicalAvg,
+      sum: canonicalSum,
+      min: canonicalMin,
+      max: canonicalMax,
+      count: canonicalCount,
+      orderBy: normalizedOrderBy,
+      limit: orderByOperationParams.limit,
     };
 
     return {
@@ -817,8 +982,12 @@ export function operationParametersAgent(params: RequestParams) {
     });
     const operationParameters = await determineParamsForSchema({ schema });
     return {
-      operationParameters:
-        operationParameters satisfies CountByTemporalComponentQuery["operationParameters"],
+      operationParameters: {
+        ...operationParameters,
+        dateColumn:
+          state.columnNameMap[operationParameters.dateColumn] ??
+          operationParameters.dateColumn,
+      } satisfies CountByTemporalComponentQuery["operationParameters"],
     };
   };
 
@@ -830,8 +999,11 @@ export function operationParametersAgent(params: RequestParams) {
     });
     const operationParameters = await determineParamsForSchema({ schema });
     return {
-      operationParameters:
-        operationParameters satisfies FindDistinctQuery["operationParameters"],
+      operationParameters: {
+        column:
+          state.columnNameMap[operationParameters.column] ??
+          operationParameters.column,
+      } satisfies FindDistinctQuery["operationParameters"],
     };
   };
 

@@ -1,30 +1,24 @@
-import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
+import {
+  AzureChatOpenAI,
+  ChatOpenAI,
+  type ChatOpenAIFields,
+} from "@langchain/openai";
 
 export type AIProvider = "azure" | "openai";
-export type AzureModel = "gpt-4.1" | "gpt-4.1-nano" | "gpt-4.1-mini";
-export type OpenAIModel = "gpt-4.1" | "gpt-4o";
+export type AzureModel =
+  | "gpt-4.1"
+  | "gpt-4.1-nano"
+  | "gpt-4.1-mini"
+  | "gpt-5"
+  | "gpt-5-mini"
+  | "gpt-5-nano";
+export type OpenAIModel = "gpt-4.1" | "gpt-5" | "gpt-5-mini" | "gpt-5-nano";
 export type ModelString = `azure:${AzureModel}` | `openai:${OpenAIModel}`;
 
-export interface ModelOptions {
-  temperature?: number;
-  timeout?: number;
-  maxRetries?: number;
-}
-
-const DEFAULT_OPTIONS: Record<AIProvider, ModelOptions> = {
-  azure: {
-    temperature: 0,
-    timeout: 15000,
-    maxRetries: 2,
-  },
-  openai: {
-    temperature: 0,
-    timeout: 15000,
-    maxRetries: 2,
-  },
-};
-
-export function getAIModel(modelString: ModelString, options?: ModelOptions) {
+export function getAIModel(
+  modelString: ModelString,
+  options?: ChatOpenAIFields
+) {
   if (!modelString.includes(":")) {
     throw new Error(
       `Invalid model string format. Expected "provider:model", got "${modelString}"`
@@ -33,6 +27,26 @@ export function getAIModel(modelString: ModelString, options?: ModelOptions) {
 
   // Github Copilot PR Review Let me know if you see the provider overwritten. It should come from the modelString.
   const [provider, model] = modelString.split(":") as [string, string];
+  // provider = "openai"; // Temporary override for testing
+
+  const isGPT5 = model.startsWith("gpt-5");
+  const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {
+    azure: {
+      ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
+      ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
+      timeout: 15000,
+      maxRetries: 2,
+      useResponsesApi: false,
+    },
+    openai: {
+      ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
+      ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
+      ...(isGPT5 ? { verbosity: "low" } : {}),
+      timeout: 15000,
+      maxRetries: 2,
+      useResponsesApi: false,
+    },
+  };
 
   if (!provider || !model) {
     throw new Error(
@@ -50,17 +64,14 @@ export function getAIModel(modelString: ModelString, options?: ModelOptions) {
       return new AzureChatOpenAI({
         model: model,
         deploymentName: model,
-        temperature: mergedOptions.temperature,
-        timeout: mergedOptions.timeout,
-        maxRetries: mergedOptions.maxRetries,
+        ...mergedOptions,
       });
 
     case "openai":
       return new ChatOpenAI({
         model: model,
         temperature: mergedOptions.temperature,
-        timeout: mergedOptions.timeout,
-        maxRetries: mergedOptions.maxRetries,
+        ...mergedOptions,
       });
 
     default:

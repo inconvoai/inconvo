@@ -33,6 +33,7 @@ import { inconvoResponseSchema } from "~/server/userDatabaseConnector/types";
 import { tryCatchSync } from "~/server/api/utils/tryCatch";
 import { inngest } from "~/server/inngest/client";
 import type { Conversation } from "@prisma/client";
+import { databaseRetrieverToolDescription } from "../database/utils/databaseRetrieverToolDescription";
 
 interface Chart {
   type: "bar" | "line";
@@ -46,8 +47,8 @@ interface Chart {
 }
 
 type Table = {
-  headers: string[];
-  rows: [][];
+  head: string[];
+  body: [][];
 };
 
 interface Answer {
@@ -83,55 +84,42 @@ const messageReducer = (
 };
 
 /**
- * Extracts database retriever tool calls and their corresponding tool messages
- * from a list of messages.
+ * Extracts tool calls (for a specific tool name) and their corresponding tool messages
+ * from a list of messages. Returns an ordered list containing each AI message that
+ * invoked the tool followed immediately by its matching ToolMessage (if present).
  */
-function extractDatabaseRelatedMessages(messages: BaseMessage[]) {
-  const databaseRelatedMessages: BaseMessage[] = [];
+function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
+  const relatedMessages: BaseMessage[] = [];
   const messageMap = new Map<string, ToolMessage>();
 
-  // First pass: create a map of tool_call_id to ToolMessage for O(1) lookup
+  // First pass: map tool_call_id -> ToolMessage for O(1) lookup
   messages.forEach((msg) => {
     if (isToolMessage(msg) && msg.tool_call_id) {
       messageMap.set(msg.tool_call_id, msg);
     }
   });
 
-  // Second pass: find AI messages with database retriever calls and their responses
+  // Second pass: find AI messages with the specified tool calls and their responses
   messages.forEach((msg) => {
     if (isAIMessage(msg)) {
-      const databaseRetrieverCalls = [
+      const matchingCalls = [
         ...(msg.tool_calls ?? []),
         ...(msg.invalid_tool_calls ?? []),
-      ].filter((call) => call.name === "databaseRetriever");
+      ].filter((call) => call.name === toolName);
 
-      if (databaseRetrieverCalls.length > 0) {
-        databaseRelatedMessages.push(msg);
-        databaseRetrieverCalls.forEach((call) => {
+      if (matchingCalls.length > 0) {
+        relatedMessages.push(msg);
+        matchingCalls.forEach((call) => {
           if (call.id) {
             const toolMessage = messageMap.get(call.id);
-            if (toolMessage) {
-              databaseRelatedMessages.push(toolMessage);
-            }
+            if (toolMessage) relatedMessages.push(toolMessage);
           }
         });
       }
     }
   });
 
-  return databaseRelatedMessages;
-}
-
-/**
- * Checks if a message contains tool calls
- */
-function hasToolCalls(msg: BaseMessage): boolean {
-  if (!isAIMessage(msg)) return false;
-
-  return Boolean(
-    (msg.tool_calls && msg.tool_calls.length > 0) ??
-      (msg.invalid_tool_calls && msg.invalid_tool_calls.length > 0)
-  );
+  return relatedMessages;
 }
 
 /**
@@ -167,15 +155,39 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     chatHistory: Annotation<BaseMessage[]>({
       reducer: (x, y) => {
         // When new messages contain database retriever calls,
-        // we filter out all tool-related messages from history
-        // to avoid duplication and keep only human/AI conversation pairs
+        // we filter out ONLY the tool messages and AI messages associated
+        // with databaseRetriever tool calls (instead of removing every tool message)
         if (hasDatabaseRetrieverCall(y)) {
+          // 1. Collect all databaseRetriever tool_call ids present in the current history
+          const dbToolCallIds = new Set<string>();
+          x.forEach((msg) => {
+            if (isAIMessage(msg)) {
+              const calls = [
+                ...(msg.tool_calls ?? []),
+                ...(msg.invalid_tool_calls ?? []),
+              ];
+              calls.forEach((call) => {
+                if (call.name === "databaseRetriever" && call.id) {
+                  dbToolCallIds.add(call.id);
+                }
+              });
+            }
+          });
+
           const filteredHistory = x.filter((msg) => {
-            // Remove all tool messages
-            if (isToolMessage(msg)) return false;
-            // Remove AI messages that contain tool calls
-            if (hasToolCalls(msg)) return false;
-            // Keep human messages and AI responses without tool calls
+            // Remove only tool messages whose tool_call_id maps to a databaseRetriever call
+            if (isToolMessage(msg) && msg.tool_call_id) {
+              if (dbToolCallIds.has(msg.tool_call_id)) return false;
+            }
+            // Remove AI messages that contain databaseRetriever tool calls
+            if (isAIMessage(msg)) {
+              const hasDbCall =
+                msg.tool_calls?.some((c) => c.name === "databaseRetriever") ??
+                msg.invalid_tool_calls?.some(
+                  (c) => c.name === "databaseRetriever"
+                );
+              if (hasDbCall) return false;
+            }
             return true;
           });
           return filteredHistory.concat(y);
@@ -208,7 +220,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     [];
   const toolNode = new ToolNode(tools);
 
-  const model = getAIModel("azure:gpt-4.1");
+  const model = getAIModel("azure:gpt-5");
 
   const tableContext = params.schema
     .filter((table) => table.context)
@@ -262,7 +274,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       },
       {
         name: "databaseRetriever",
-        description: "Call this tool to retrieve data from the database.",
+        description: databaseRetrieverToolDescription,
         schema: z.object({
           question: z.string().describe("The question to ask the database"),
         }),
@@ -313,7 +325,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent:65ac33f3");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:214991da");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -327,8 +339,74 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     return { messages: [response] };
   }
 
+  function addDatabaseRetrieverGuidanceMessage(state: typeof AgentState.State) {
+    const messages = state.messages ?? [];
+    if (messages.length === 0) {
+      return {};
+    }
+
+    let lastAiMessageIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const candidate = messages[i];
+      if (!candidate) {
+        continue;
+      }
+      if (isAIMessage(candidate)) {
+        lastAiMessageIndex = i;
+        break;
+      }
+    }
+
+    if (lastAiMessageIndex === -1) {
+      return {};
+    }
+
+    const lastAiMessage = messages[lastAiMessageIndex] as AIMessage;
+    const databaseToolCallIds = [
+      ...(lastAiMessage.tool_calls ?? []),
+      ...(lastAiMessage.invalid_tool_calls ?? []),
+    ]
+      .filter((call) => call.name === "databaseRetriever" && call.id)
+      .map((call) => call.id!);
+
+    if (databaseToolCallIds.length === 0) {
+      return {};
+    }
+
+    let hasDatabaseRetrieverToolMessage = false;
+    for (let i = lastAiMessageIndex + 1; i < messages.length; i += 1) {
+      const message = messages[i];
+      if (!message) {
+        continue;
+      }
+      if (
+        isToolMessage(message) &&
+        message.tool_call_id &&
+        databaseToolCallIds.includes(message.tool_call_id)
+      ) {
+        hasDatabaseRetrieverToolMessage = true;
+        break;
+      }
+    }
+
+    if (!hasDatabaseRetrieverToolMessage) {
+      return {};
+    }
+
+    const guidanceText =
+      "Format this if it is sufficient otherwise make another request to the database.";
+
+    return {
+      messages: [new AIMessage(guidanceText)],
+    };
+  }
+
   async function formatResponse(state: typeof AgentState.State) {
     // try to zod parse the last message before using the LLM to format it
+    // const potentiallyFormattedMessage =
+    //   // @ts-ignore-next-line This will be fixed when we use the new langchain package
+    //   // with better types for message and message content
+    //   state.messages?.at(-1)?.content?.at(-1)?.text ?? "";
     const potentiallyFormattedMessage = state.messages?.at(-1)?.content ?? "";
     const messageContent =
       typeof potentiallyFormattedMessage === "string"
@@ -339,8 +417,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     ) as { data: unknown; error: Error | null };
 
     const stateMessages = state.messages ?? [];
-    const databaseRelatedMessages =
-      extractDatabaseRelatedMessages(stateMessages);
+    const databaseRelatedMessages = extractToolRelatedMessages(
+      stateMessages,
+      "databaseRetriever"
+    );
+    const getSchemaRelatedMessages = extractToolRelatedMessages(
+      stateMessages,
+      "getSchemasForTables"
+    );
 
     if (potentiallyFormattedMessageAsJson) {
       const parsedMessage = inconvoResponseSchema.safeParse(
@@ -351,121 +435,85 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           answer: parsedMessage.data,
           chatHistory: [
             new HumanMessage(state.userQuestion),
+            ...getSchemaRelatedMessages,
             ...databaseRelatedMessages,
             new AIMessage(JSON.stringify(parsedMessage.data, null, 2)),
           ],
         };
+      } else {
+        console.log(
+          "Failed to parse message as inconvoResponseSchema",
+          parsedMessage.error
+        );
       }
     }
 
-    // Fallback to using the LLM to format the response
-    const prompt = await getPrompt("format_response_type:0b4217c5");
-    let selectedType = "text";
-    const outputTypeSelectSchema = model.withStructuredOutput(
-      z
-        .object({
-          type: z.enum(["text", "chart", "table"]),
-        })
-        .describe("The type of output to display"),
-      {
-        strict: true,
-        method: "function_calling",
-      }
-    );
+    const outputFormatterPrompt = await getPrompt("format_response:84092a5b");
 
-    const selectedTypeResponse = await prompt
-      .pipe(outputTypeSelectSchema)
-      .invoke({
-        messageToFormat: state.messages?.at(-1)?.content ?? "",
-      });
+    const variantUnion = z.discriminatedUnion("type", [
+      z.object({
+        type: z.literal("text"),
+        message: z.string().describe("Plain text answer"),
+      }),
+      z.object({
+        type: z.literal("chart"),
+        message: z
+          .string()
+          .describe(
+            "Explanation accompanying the chart highlighting key insights"
+          ),
+        chart: z.object({
+          type: z.enum(["line", "bar"]).describe("Chart type"),
+          data: z
+            .array(
+              z.object({
+                label: z.string().describe("X axis label"),
+                value: z.number().describe("Y axis value"),
+              })
+            )
+            .min(1),
+          title: z.string(),
+          xLabel: z.string(),
+          yLabel: z.string(),
+        }),
+      }),
+      z.object({
+        type: z.literal("table"),
+        message: z.string().describe("Summary of what the table shows"),
+        table: z.object({
+          head: z.array(z.string()).min(1).describe("Column headers"),
+          body: z
+            .array(z.array(z.string()).min(1))
+            .min(1)
+            .describe("Table rows aligned with headers"),
+        }),
+      }),
+    ]);
 
-    selectedType = selectedTypeResponse.type;
-    let outputFormatterSchema = model.withStructuredOutput(
-      z
-        .object({
-          type: z.literal(selectedType),
-          message: z
-            .string()
-            .describe(
-              "The message to display. When including durations, convert them to an easy to read human format."
-            ),
-        })
-        .describe("The formatted output"),
-      {
-        strict: true,
-        method: "function_calling",
-      }
-    );
-    if (selectedType === "chart") {
-      outputFormatterSchema = model.withStructuredOutput(
-        z
-          .object({
-            type: z.literal(selectedType),
-            message: z
-              .string()
-              .describe(
-                "The message to display. When including durations, convert them to an easy to read human format."
-              ),
-            chart: z
-              .object({
-                type: z.enum(["bar", "line"]).describe("The type of chart"),
-                data: z.array(
-                  z.object({
-                    label: z.string().describe("The label for the x axis"),
-                    value: z.number().describe("The value for the y axis"),
-                  })
-                ),
-                title: z.string().describe("The title of the chart"),
-                xLabel: z.string().describe("The label for the x axis"),
-                yLabel: z.string().describe("The label for the y axis"),
-              })
-              .describe(`Data used to display chart if type is bar_chart.`),
-          })
-          .describe("The formatted output"),
-        {
-          strict: true,
-          method: "function_calling",
-        }
-      );
-    } else if (selectedType === "table") {
-      outputFormatterSchema = model.withStructuredOutput(
-        z
-          .object({
-            type: z.literal(selectedType),
-            message: z
-              .string()
-              .describe(
-                "The message to display. When including durations, convert them to an easy to read human format."
-              ),
-            table: z
-              .object({
-                head: z.array(z.string()).describe("The table column names"),
-                body: z
-                  .array(z.array(z.string()))
-                  .describe(
-                    "The table rows, each row is an array of strings, the item in the row array much be the same length as the head array"
-                  ),
-              })
-              .describe(`Data used to display table if type is table.`),
-          })
-          .describe("The formatted output"),
-        {
-          strict: true,
-          method: "function_calling",
-        }
-      );
-    }
-    const outputFormatterPrompt = await getPrompt("format_response:c7276066");
-    const response = await outputFormatterPrompt
+    const wrappedSchema = z.object({
+      data: variantUnion.describe(
+        "Discriminated union payload. Use type to decide which shape to return."
+      ),
+    });
+
+    const outputFormatterSchema = model.withStructuredOutput(wrappedSchema, {
+      strict: true,
+      method: "jsonSchema",
+    });
+
+    const wrapped = await outputFormatterPrompt
       .pipe(outputFormatterSchema)
       .invoke({
-        messageToFormat: state.messages?.at(-1)?.content ?? "",
+        messageToFormat: potentiallyFormattedMessage,
       });
+
+    const response = wrapped.data as z.infer<typeof variantUnion>;
 
     return {
       answer: response,
       chatHistory: [
         new HumanMessage(state.userQuestion),
+        ...getSchemaRelatedMessages,
         ...databaseRelatedMessages,
         new AIMessage(JSON.stringify(response, null, 2)),
       ],
@@ -493,6 +541,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     .addNode("build_tools", buildTools)
     .addNode("inconvo_agent", callModel)
     .addNode("inconvo_agent_tools", toolNode)
+    .addNode(
+      "post_database_retriever_guidance",
+      addDatabaseRetrieverGuidanceMessage
+    )
     .addNode("format_response", formatResponse)
     .addEdge(START, "reset_state")
     .addEdge("reset_state", "build_tools")
@@ -502,7 +554,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       continue: "inconvo_agent_tools",
       formatResponse: "format_response",
     })
-    .addEdge("inconvo_agent_tools", "inconvo_agent")
+    .addEdge("inconvo_agent_tools", "post_database_retriever_guidance")
+    .addEdge("post_database_retriever_guidance", "inconvo_agent")
     .addEdge("format_response", END);
 
   const graph = workflow.compile({ checkpointer: params.checkpointer });

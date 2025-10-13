@@ -20,7 +20,10 @@ import type {
   FindManyQuery,
   GroupByQuery,
 } from "~/server/userDatabaseConnector/types";
-import { generateJoinedTables } from "../utils/tableRelations";
+import { defineFindManyOperationParameters } from "./findMany";
+import { defineGroupByOperationParameters } from "./groupBy";
+import { defineCountWithJoinOperationParameters } from "./countWithJoin";
+import { defineCountRelationsOperationParameters } from "./countRelations";
 
 interface RequestParams {
   operation: Exclude<Operation, "findDistinctByEditDistance">;
@@ -30,23 +33,9 @@ interface RequestParams {
   question: string;
 }
 
-const getDisplayColumnName = (
-  column: Schema[number]["columns"][number]
-): string => {
-  return column.rename?.trim() ? column.rename : column.name;
-};
-
-const buildColumnNameMap = (
-  tableName: string,
-  columns: Schema[number]["columns"]
-): Record<string, string> => {
-  return columns.reduce<Record<string, string>>((acc, column) => {
-    const displayName = getDisplayColumnName(column);
-    const canonicalName = column.name;
-    acc[displayName] = canonicalName;
-    acc[`${tableName}.${displayName}`] = `${tableName}.${canonicalName}`;
-    return acc;
-  }, {});
+// Helper function to transform an array value to null if it's empty
+const transformEmptyArrayToNull = (value: string[] | null): string[] | null => {
+  return Array.isArray(value) && value.length === 0 ? null : value;
 };
 
 export function operationParametersAgent(params: RequestParams) {
@@ -69,79 +58,15 @@ export function operationParametersAgent(params: RequestParams) {
     relationListNames: Annotation<string[]>({
       reducer: (x, y) => y,
     }),
-    columnNameMap: Annotation<Record<string, string>>({
-      reducer: (x, y) => y,
-    }),
   });
 
   const OutputAnnotation = Annotation.Root({
-    ...OperationParametersState.spec,
     operationParameters: Annotation<Record<string, unknown>>({
       reducer: (x, y) => ({ ...x, ...y }),
     }),
   });
 
   const model = getAIModel("azure:gpt-4.1");
-
-  const canonicalizeColumn = (
-    value: string | null | undefined,
-    map: Record<string, string>
-  ): string | null => {
-    if (value == null) {
-      return null;
-    }
-
-    const direct = map[value];
-    if (direct) {
-      return direct;
-    }
-
-    const [tableName, columnLabel] = value.includes(".")
-      ? (value.split(".", 2) as [string, string])
-      : [params.tableName, value];
-
-    const tableSchema = params.schema.find((table) => table.name === tableName);
-    if (!tableSchema) {
-      return value;
-    }
-
-    const column = tableSchema.columns.find((col) => {
-      const displayName = getDisplayColumnName(col);
-      return col.name === columnLabel || displayName === columnLabel;
-    });
-
-    if (!column) {
-      return value;
-    }
-
-    const canonicalColumnName = column.name;
-    const canonicalValue =
-      tableName === params.tableName
-        ? canonicalColumnName
-        : `${tableName}.${canonicalColumnName}`;
-
-    map[value] = canonicalValue;
-    if (value.includes(".")) {
-      map[`${tableName}.${getDisplayColumnName(column)}`] = canonicalValue;
-    } else {
-      map[getDisplayColumnName(column)] = canonicalColumnName;
-      map[
-        `${tableName}.${getDisplayColumnName(column)}`
-      ] = `${tableName}.${canonicalColumnName}`;
-    }
-
-    return canonicalValue;
-  };
-
-  const canonicalizeColumnArray = (
-    values: string[] | null | undefined,
-    map: Record<string, string>
-  ): string[] | null => {
-    if (!values || values.length === 0) {
-      return null;
-    }
-    return values.map((value) => canonicalizeColumn(value, map) ?? value);
-  };
 
   const prepareForOperation = async (
     _state: typeof OperationParametersState.State
@@ -153,16 +78,15 @@ export function operationParametersAgent(params: RequestParams) {
     } = params.tableSchema;
     assert(columns.length > 0, "Table has no columns");
 
-    const columnNameMap = buildColumnNameMap(params.tableName, columns);
-    const columnNames = columns.map((column) => getDisplayColumnName(column));
+    const columnNames = columns.map(({ name }) => name);
     const computedColumnNames = computedColumns.map(({ name }) => name);
     const dateColumnNames = columns
       .filter(({ type }) => type === "DateTime")
-      .map((column) => getDisplayColumnName(column));
+      .map(({ name }) => name);
     const numericalColumnNames = [
       ...columns
         .filter(({ type }) => ["number"].includes(type))
-        .map((column) => getDisplayColumnName(column)),
+        .map(({ name }) => name),
       ...computedColumns.map(({ name }) => name),
     ];
     // - To Many relations
@@ -177,7 +101,6 @@ export function operationParametersAgent(params: RequestParams) {
       dateColumnNames,
       numericalColumnNames,
       relationListNames,
-      columnNameMap,
     };
   };
 
@@ -211,368 +134,37 @@ export function operationParametersAgent(params: RequestParams) {
     return response;
   };
 
-  const findMany = async (state: typeof OperationParametersState.State) => {
-    const generateSelect = async () => {
-      const { iqlPaths, uniqueTableNames } = generateJoinedTables(
-        params.schema,
-        params.tableName,
-        3
-      );
-
-      const tableSelectSchema = z.object({
-        tables: z.array(stringArrayToZodEnum(Object.keys(iqlPaths))),
-      });
-      const tableSchemas = uniqueTableNames.map((tableName) =>
-        buildTableSchemaStringFromTableSchema(
-          params.schema.find((table) => table.name === tableName)!
-        )
-      );
-      const tableSelectionPrompt = await getPrompt(
-        "findmany-select-tables:391dcd8e"
-      );
-      const tableSelector = model.withStructuredOutput(tableSelectSchema, {
-        method: "jsonSchema",
-        strict: true,
-      });
-      const tableSelectResult = await tableSelectionPrompt
-        .pipe(tableSelector)
-        .invoke({
-          table: params.tableName,
-          tableSchemas: YAML.stringify(tableSchemas),
-          operation: params.operation,
-          operationDocs: YAML.stringify(operationDocs[params.operation]),
-          question: params.question,
-        });
-      const selectableTableColumns: Record<string, string[]> = {};
-      const tablesInQuery: string[] = [];
-      tableSelectResult.tables.forEach((tablePath) => {
-        const tableName = iqlPaths[tablePath];
-        assert(tableName, `Table ${tablePath} not found in schema`);
-        const tableSchema = params.schema.find((t) => t.name === tableName);
-        assert(tableSchema, `Table ${tableName} not found in schema`);
-        tablesInQuery.push(tableName);
-        selectableTableColumns[tablePath] = [
-          ...tableSchema.columns.map((col) => col.name),
-          ...tableSchema.computedColumns.map((col) => col.name),
-        ];
-      });
-      const selectColumnsSchema = z.object({
-        columns: z.object(
-          Object.keys(selectableTableColumns).reduce(
-            (
-              acc: Record<
-                string,
-                z.ZodNullable<z.ZodArray<z.ZodEnum<[string, ...string[]]>>>
-              >,
-              key
-            ) => {
-              if (!selectableTableColumns[key]) {
-                return acc;
-              }
-              acc[key] = z
-                .array(stringArrayToZodEnum(selectableTableColumns[key]))
-                .nullable();
-              return acc;
-            },
-            {} as Record<
-              string,
-              z.ZodNullable<z.ZodArray<z.ZodEnum<[string, ...string[]]>>>
-            >
-          )
-        ),
-      });
-      const tableSchemasForSchemasInQuery = tablesInQuery.map((tableName) =>
-        buildTableSchemaStringFromTableSchema(
-          params.schema.find((table) => table.name === tableName)!
-        )
-      );
-      const selectResult = await determineParamsForSchema({
-        schema: selectColumnsSchema,
-        tableSchema: YAML.stringify(tableSchemasForSchemasInQuery),
-      });
-      const selectResultFiltered = Object.entries(selectResult.columns).reduce(
-        (acc: Record<string, string[]>, [key, value]) => {
-          if (value?.length && value.length > 0) {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {}
-      );
-      return { columns: selectResultFiltered };
-    };
-
-    const orderBySchema = z.object({
-      orderBy: z
-        .object({
-          direction: z.enum(["asc", "desc"]),
-          column: stringArrayToZodEnum([
-            ...state.columnNames,
-            ...state.computedColumnNames,
-          ]).describe("The column to order by"),
-        })
-        .nullable(),
-      limit: z.number().describe("The number of records to return"),
+  const findMany = async (_state: typeof OperationParametersState.State) => {
+    const operationParams = await defineFindManyOperationParameters({
+      schema: params.schema,
+      tableSchema: params.tableSchema,
+      tableName: params.tableName,
+      question: params.question,
+      operation: "findMany",
     });
-    const [selectResult, orderByResult] = await Promise.all([
-      generateSelect(),
-      determineParamsForSchema({
-        schema: orderBySchema,
-      }),
-    ]);
-    const normalizedOrderBy = orderByResult.orderBy
-      ? {
-          ...orderByResult.orderBy,
-          column:
-            canonicalizeColumn(
-              orderByResult.orderBy.column,
-              state.columnNameMap
-            ) ?? orderByResult.orderBy.column,
-        }
-      : null;
+    assert(operationParams, "Failed to define findMany operation parameters");
     return {
       operationParameters: {
-        ...selectResult,
-        ...orderByResult,
-        orderBy: normalizedOrderBy,
+        ...operationParams,
       } satisfies FindManyQuery["operationParameters"],
     };
   };
 
   const groupBy = async (_state: typeof OperationParametersState.State) => {
-    const prepareJoins = async () => {
-      // Only allow joins 1 table over from the starting table
-      const tableCandidates = generateJoinedTables(
-        params.schema,
-        params.tableName,
-        1
-      );
-
-      if (
-        tableCandidates.uniqueTableNames.filter(
-          (name) => name !== params.tableName
-        ).length === 0
-      ) {
-        return {
-          joins: null,
-        };
-      }
-
-      const tableSelectionPrompt = await getPrompt(
-        "select_join_tables:2e053bc1"
-      );
-
-      const joinTableZodSchemas = Object.entries(tableCandidates.iqlPaths)
-        .filter(([_path, tableName]) => tableName !== params.tableName)
-        .map(([path, tableName]) => {
-          return z.object({
-            table: z.literal(tableName),
-            joinPath: z.literal(path),
-            joinType: z.enum(["inner", "left", "right"]),
-          });
-        });
-
-      const joins = model.withStructuredOutput(
-        z.object({
-          joins: z
-            .array(
-              z.union(
-                joinTableZodSchemas as unknown as [
-                  z.ZodTypeAny,
-                  z.ZodTypeAny,
-                  ...z.ZodTypeAny[]
-                ]
-              )
-            )
-            .nullable()
-            .describe(
-              `The tables to join to the ${params.tableName} table, if any`
-            ),
-        }),
-        {
-          method: "jsonSchema",
-          strict: true,
-        }
-      );
-
-      const tableSchemas = tableCandidates.uniqueTableNames.map((tableName) =>
-        buildTableSchemaStringFromTableSchema(
-          params.schema.find((table) => table.name === tableName)!
-        )
-      );
-
-      const tableJoinResult = (await tableSelectionPrompt.pipe(joins).invoke({
-        table: params.tableName,
-        tableSchemas: YAML.stringify(tableSchemas),
-        operationName: params.operation,
-        operation: params.operation,
-        operationDocs: YAML.stringify(operationDocs[params.operation]),
-        question: params.question,
-      })) as {
-        joins:
-          | {
-              table: string;
-              joinPath: string;
-              joinType: "inner" | "left" | "right";
-            }[]
-          | null;
-      };
-
-      return tableJoinResult;
-    };
-
-    const tableJoinResult = await prepareJoins();
-
-    const tablesInQuery = tableJoinResult.joins
-      ? tableJoinResult.joins.map((join) => join.table).concat(params.tableName)
-      : [params.tableName];
-
-    const tableSchemasForSchemasInQuery = tablesInQuery.map((tableName) =>
-      buildTableSchemaStringFromTableSchema(
-        params.schema.find((table) => table.name === tableName)!
-      )
+    const operationParameters = await defineGroupByOperationParameters({
+      schema: params.schema,
+      tableSchema: params.tableSchema,
+      tableName: params.tableName,
+      question: params.question,
+      operation: "groupBy",
+    });
+    assert(
+      operationParameters,
+      "Failed to define groupBy operation parameters"
     );
-
-    const gbColumnNames = tablesInQuery.reduce((acc: string[], tableName) => {
-      const tableSchema = params.schema.find(
-        (table) => table.name === tableName
-      );
-      assert(tableSchema, `Table ${tableName} not found in schema`);
-      const columns = tableSchema.columns.map(
-        (col) => `${tableName}.${col.name}`
-      );
-      acc.push(...columns);
-      return acc;
-    }, []);
-
-    const gbNumericalColumnNames = tablesInQuery.reduce(
-      (acc: string[], tableName) => {
-        const tableSchema = params.schema.find(
-          (table) => table.name === tableName
-        );
-        assert(tableSchema, `Table ${tableName} not found in schema`);
-        const computedColumns = tableSchema.computedColumns.map(
-          (col) => `${tableName}.${col.name}`
-        );
-        const columns = tableSchema.columns
-          .filter(({ type }) => ["number"].includes(type))
-          .map((col) => `${tableName}.${col.name}`)
-          .concat(computedColumns);
-        acc.push(...columns);
-        return acc;
-      },
-      [] as string[]
-    );
-
-    const defineGroupByColumns = async () => {
-      const groupByColumns = z.object({
-        groupBy: z
-          .array(stringArrayToZodEnum(gbColumnNames))
-          .describe("The column or columns to group the results by"),
-      });
-      const groupColumnParams = await determineParamsForSchema({
-        schema: groupByColumns,
-        tableSchema: YAML.stringify(tableSchemasForSchemasInQuery),
-        queryCurrentState: YAML.stringify(tableJoinResult),
-      });
-
-      return { groupBy: groupColumnParams.groupBy };
-    };
-
-    const aggregateSchema = z.object({
-      count: z
-        .object({
-          columns: z
-            .array(stringArrayToZodEnum(gbColumnNames))
-            .describe("The columns to count"),
-        })
-        .nullable(),
-      sum:
-        gbNumericalColumnNames?.length > 0
-          ? z
-              .object({
-                columns: z
-                  .array(stringArrayToZodEnum(gbNumericalColumnNames))
-                  .describe("The columns to sum"),
-              })
-              .nullable()
-          : z.null(),
-      min:
-        gbNumericalColumnNames?.length > 0
-          ? z
-              .object({
-                columns: z
-                  .array(stringArrayToZodEnum(gbNumericalColumnNames))
-                  .describe("The columns to find the minimum of"),
-              })
-              .nullable()
-          : z.null(),
-      max:
-        gbNumericalColumnNames?.length > 0
-          ? z
-              .object({
-                columns: z
-                  .array(stringArrayToZodEnum(gbNumericalColumnNames))
-                  .describe("The columns to find the maximum of"),
-              })
-              .nullable()
-          : z.null(),
-      avg:
-        gbNumericalColumnNames?.length > 0
-          ? z
-              .object({
-                columns: z
-                  .array(stringArrayToZodEnum(gbNumericalColumnNames))
-                  .describe("The columns to find the average of"),
-              })
-              .nullable()
-          : z.null(),
-    });
-
-    const orderByFunctionSchema = z.object({
-      orderByFunction:
-        gbNumericalColumnNames?.length > 0
-          ? z.enum(["count", "sum", "min", "max", "avg"] as const)
-          : z.enum(["count"] as const),
-    });
-
-    const [groupColumnParams, aggregateOperationParams, orderByFunctionObj] =
-      await Promise.all([
-        defineGroupByColumns(),
-        determineParamsForSchema({
-          schema: aggregateSchema,
-          tableSchema: YAML.stringify(tableSchemasForSchemasInQuery),
-          queryCurrentState: YAML.stringify(tableJoinResult),
-        }),
-        determineParamsForSchema({
-          schema: orderByFunctionSchema,
-          tableSchema: YAML.stringify(tableSchemasForSchemasInQuery),
-          queryCurrentState: YAML.stringify(tableJoinResult),
-        }),
-      ]);
-
-    const orderBySchema = z.object({
-      orderBy: z.object({
-        function: z.literal(orderByFunctionObj.orderByFunction),
-        column:
-          orderByFunctionObj.orderByFunction === "count"
-            ? stringArrayToZodEnum(gbColumnNames)
-            : stringArrayToZodEnum(gbNumericalColumnNames),
-        direction: z.enum(["asc", "desc"]),
-      }),
-      limit: z.number().describe("The number of records to return"),
-    });
-
-    const orderByOperationParams = await determineParamsForSchema({
-      schema: orderBySchema,
-    });
-
     return {
       operationParameters: {
-        ...tableJoinResult,
-        ...groupColumnParams,
-        ...aggregateOperationParams,
-        ...orderByOperationParams,
+        ...operationParameters,
       } satisfies GroupByQuery["operationParameters"],
     };
   };
@@ -580,184 +172,41 @@ export function operationParametersAgent(params: RequestParams) {
   const countWithJoin = async (
     _state: typeof OperationParametersState.State
   ) => {
-    const prepareJoins = async () => {
-      // Only allow joins 1 table over from the starting table
-      const tableCandidates = generateJoinedTables(
-        params.schema,
-        params.tableName,
-        1
-      );
-
-      if (
-        tableCandidates.uniqueTableNames.filter(
-          (name) => name !== params.tableName
-        ).length === 0
-      ) {
-        throw new Error("No tables to join");
-      }
-
-      const tableSelectionPrompt = await getPrompt(
-        "select_join_tables:2e053bc1"
-      );
-
-      const joinTableZodSchemas = Object.entries(tableCandidates.iqlPaths)
-        .filter(([_path, tableName]) => tableName !== params.tableName)
-        .map(([path, tableName]) => {
-          return z.object({
-            table: z.literal(tableName),
-            joinPath: z.literal(path),
-            joinType: z.enum(["inner", "left", "right"]),
-          });
-        });
-
-      const joins = model.withStructuredOutput(
-        z.object({
-          joins: z
-            .array(
-              z.union(
-                joinTableZodSchemas as unknown as [
-                  z.ZodTypeAny,
-                  z.ZodTypeAny,
-                  ...z.ZodTypeAny[]
-                ]
-              )
-            )
-            .nullable()
-            .describe(
-              `The tables to join to the ${params.tableName} table, if any`
-            ),
-        }),
-        {
-          method: "jsonSchema",
-          strict: true,
-        }
-      );
-
-      const tableSchemas = tableCandidates.uniqueTableNames.map((tableName) =>
-        buildTableSchemaStringFromTableSchema(
-          params.schema.find((table) => table.name === tableName)!
-        )
-      );
-
-      const tableJoinResult = (await tableSelectionPrompt.pipe(joins).invoke({
-        table: params.tableName,
-        tableSchemas: YAML.stringify(tableSchemas),
-        operationName: params.operation,
-        operation: params.operation,
-        operationDocs: YAML.stringify(operationDocs[params.operation]),
-        question: params.question,
-      })) as {
-        joins: {
-          table: string;
-          joinPath: string;
-          joinType: "inner" | "right" | "left";
-        }[];
-      };
-
-      return tableJoinResult;
-    };
-
-    const tableJoinResult = await prepareJoins();
-
-    const tablesInQuery = tableJoinResult.joins
-      ? tableJoinResult.joins.map((join) => join.table).concat(params.tableName)
-      : [params.tableName];
-
-    const columnNames = tablesInQuery.reduce((acc: string[], tableName) => {
-      const tableSchema = params.schema.find(
-        (table) => table.name === tableName
-      );
-      assert(tableSchema, `Table ${tableName} not found in schema`);
-      const columns = tableSchema.columns.map(
-        (col) => `${tableName}.${col.name}`
-      );
-      acc.push(...columns);
-      return acc;
-    }, []);
-
-    const countColumnsSchema = z.object({
-      count: z
-        .array(stringArrayToZodEnum(columnNames))
-        .describe("The columns to count"),
-      countDistinct: z
-        .array(stringArrayToZodEnum(columnNames))
-        .nullable()
-        .describe("The columns to count"),
+    const operationParameters = await defineCountWithJoinOperationParameters({
+      schema: params.schema,
+      tableSchema: params.tableSchema,
+      tableName: params.tableName,
+      question: params.question,
+      operation: "countWithJoin",
     });
-
-    const countColumnsParams = await determineParamsForSchema({
-      schema: countColumnsSchema,
-      queryCurrentState: YAML.stringify(tableJoinResult),
-    });
-
+    assert(
+      operationParameters,
+      "Failed to define countWithJoin operation parameters"
+    );
     return {
       operationParameters: {
-        ...tableJoinResult,
-        ...countColumnsParams,
+        ...operationParameters,
       } satisfies CountWithJoinQuery["operationParameters"],
     };
   };
 
   const countRelations = async (
-    state: typeof OperationParametersState.State
+    _state: typeof OperationParametersState.State
   ) => {
-    const schema = z.object({
-      columns: z.array(stringArrayToZodEnum(state.columnNames)),
-      relations: z
-        .array(stringArrayToZodEnum(state.relationListNames))
-        .describe("The relations to count"),
-      orderBy: z
-        .object({
-          direction: z.enum(["asc", "desc"]),
-          relation: stringArrayToZodEnum(state.relationListNames).describe(
-            "The relation to order by (must be in the relations array)"
-          ),
-        })
-        .nullable(),
-      limit: z.number().describe("The number of records to return"),
+    const operationParameters = await defineCountRelationsOperationParameters({
+      schema: params.schema,
+      tableSchema: params.tableSchema,
+      tableName: params.tableName,
+      question: params.question,
+      operation: "countRelations",
     });
-
-    const operationParameters = await determineParamsForSchema({ schema });
-    const normalizedColumns = operationParameters.columns.map(
-      (column) => canonicalizeColumn(column, state.columnNameMap) ?? column
+    assert(
+      operationParameters,
+      "Failed to define countRelations operation parameters"
     );
-
-    const relationsToCount = await Promise.all(
-      operationParameters.relations.map(async (relationName) => {
-        const relationTargetTableName =
-          params.tableSchema.outwardRelations.find(
-            (relation) => relation.name === relationName
-          )?.targetTable.name;
-        assert(
-          relationTargetTableName,
-          `Target Table not found for ${relationName}`
-        );
-        const relationTableSchema = params.schema.find(
-          (table) => table.name === relationTargetTableName
-        );
-        assert(relationTableSchema, "Relation Table not found");
-        return await determineParamsForSchema({
-          schema: z.object({
-            name: z.literal(relationName),
-            distinct: stringArrayToZodEnum(
-              relationTableSchema.columns.map((column) => column.name)
-            )
-              .nullable()
-              .describe(
-                "A column in the related table that the count should be distinct by (set null if not necessary). Count is automatically distinct to the starting starting table"
-              ),
-          }),
-        });
-      })
-    );
-
-    const { relations, ...restParameters } = operationParameters;
-
     return {
       operationParameters: {
-        ...restParameters,
-        columns: normalizedColumns,
-        relationsToCount,
+        ...operationParameters,
       } satisfies CountRelationsQuery["operationParameters"],
     };
   };
@@ -790,30 +239,12 @@ export function operationParametersAgent(params: RequestParams) {
     const rawOperationParameters = await determineParamsForSchema({ schema });
 
     const operationParameters: AggregateQuery["operationParameters"] = {
-      avg: canonicalizeColumnArray(
-        rawOperationParameters.avg,
-        state.columnNameMap
-      ),
-      sum: canonicalizeColumnArray(
-        rawOperationParameters.sum,
-        state.columnNameMap
-      ),
-      min: canonicalizeColumnArray(
-        rawOperationParameters.min,
-        state.columnNameMap
-      ),
-      max: canonicalizeColumnArray(
-        rawOperationParameters.max,
-        state.columnNameMap
-      ),
-      count: canonicalizeColumnArray(
-        rawOperationParameters.count,
-        state.columnNameMap
-      ),
-      median: canonicalizeColumnArray(
-        rawOperationParameters.median,
-        state.columnNameMap
-      ),
+      avg: transformEmptyArrayToNull(rawOperationParameters.avg),
+      sum: transformEmptyArrayToNull(rawOperationParameters.sum),
+      min: transformEmptyArrayToNull(rawOperationParameters.min),
+      max: transformEmptyArrayToNull(rawOperationParameters.max),
+      count: transformEmptyArrayToNull(rawOperationParameters.count),
+      median: transformEmptyArrayToNull(rawOperationParameters.median),
     };
 
     return {
@@ -835,16 +266,6 @@ export function operationParametersAgent(params: RequestParams) {
         .describe("The columns to count distinct values for"),
     });
     const operationParameters = await determineParamsForSchema({ schema });
-    const normalizedCountColumns =
-      canonicalizeColumnArray(operationParameters.count, state.columnNameMap) ??
-      [];
-    const normalizedCountDistinctColumns =
-      canonicalizeColumnArray(
-        operationParameters.countDistinct,
-        state.columnNameMap
-      ) ?? [];
-    operationParameters.count = normalizedCountColumns;
-    operationParameters.countDistinct = normalizedCountDistinctColumns;
     return {
       operationParameters:
         operationParameters satisfies CountQuery["operationParameters"],
@@ -895,30 +316,6 @@ export function operationParametersAgent(params: RequestParams) {
       }),
     ]);
 
-    const canonicalDateColumn =
-      canonicalizeColumn(aggregateParams.dateColumn, state.columnNameMap) ??
-      aggregateParams.dateColumn;
-    const canonicalAvg = canonicalizeColumnArray(
-      aggregateParams.avg,
-      state.columnNameMap
-    );
-    const canonicalSum = canonicalizeColumnArray(
-      aggregateParams.sum,
-      state.columnNameMap
-    );
-    const canonicalMin = canonicalizeColumnArray(
-      aggregateParams.min,
-      state.columnNameMap
-    );
-    const canonicalMax = canonicalizeColumnArray(
-      aggregateParams.max,
-      state.columnNameMap
-    );
-    const canonicalCount = canonicalizeColumnArray(
-      aggregateParams.count,
-      state.columnNameMap
-    );
-
     const orderBySchema = z.object({
       orderBy: z.union([
         z.enum(["chronological", "reverseChronological"]),
@@ -939,32 +336,14 @@ export function operationParametersAgent(params: RequestParams) {
       queryCurrentState: YAML.stringify(aggregateParams),
     });
 
-    const normalizedOrderBy = (() => {
-      if (
-        orderByOperationParams.orderBy === "chronological" ||
-        orderByOperationParams.orderBy === "reverseChronological"
-      ) {
-        return orderByOperationParams.orderBy;
-      }
-      const orderByObject = orderByOperationParams.orderBy;
-      return {
-        ...orderByObject,
-        column:
-          canonicalizeColumn(orderByObject.column, state.columnNameMap) ??
-          orderByObject.column,
-      };
-    })();
-
     const operationParameters = {
-      interval: aggregateParams.interval,
-      dateColumn: canonicalDateColumn,
-      avg: canonicalAvg,
-      sum: canonicalSum,
-      min: canonicalMin,
-      max: canonicalMax,
-      count: canonicalCount,
-      orderBy: normalizedOrderBy,
-      limit: orderByOperationParams.limit,
+      ...aggregateParams,
+      avg: transformEmptyArrayToNull(aggregateParams.avg),
+      sum: transformEmptyArrayToNull(aggregateParams.sum),
+      min: transformEmptyArrayToNull(aggregateParams.min),
+      max: transformEmptyArrayToNull(aggregateParams.max),
+      count: transformEmptyArrayToNull(aggregateParams.count),
+      ...orderByOperationParams,
     };
 
     return {
@@ -982,12 +361,8 @@ export function operationParametersAgent(params: RequestParams) {
     });
     const operationParameters = await determineParamsForSchema({ schema });
     return {
-      operationParameters: {
-        ...operationParameters,
-        dateColumn:
-          state.columnNameMap[operationParameters.dateColumn] ??
-          operationParameters.dateColumn,
-      } satisfies CountByTemporalComponentQuery["operationParameters"],
+      operationParameters:
+        operationParameters satisfies CountByTemporalComponentQuery["operationParameters"],
     };
   };
 
@@ -999,11 +374,8 @@ export function operationParametersAgent(params: RequestParams) {
     });
     const operationParameters = await determineParamsForSchema({ schema });
     return {
-      operationParameters: {
-        column:
-          state.columnNameMap[operationParameters.column] ??
-          operationParameters.column,
-      } satisfies FindDistinctQuery["operationParameters"],
+      operationParameters:
+        operationParameters satisfies FindDistinctQuery["operationParameters"],
     };
   };
 

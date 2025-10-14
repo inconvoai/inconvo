@@ -85,7 +85,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     params.schema
   );
 
-  const validateFilterTool = tool(
+  const applyFilterTool = tool(
     async (input: {
       candidate: unknown;
     }): Promise<WhereConditionArtifact[]> => {
@@ -116,7 +116,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
       ];
     },
     {
-      name: "validateFilterTool",
+      name: "applyFilterTool",
       description:
         "Validate (and iteratively refine) the FINAL filter object (or null). Input may be an object, or null. If validation fails you'll receive status=invalid with issues; fix them and call again.",
       schema: z.object({
@@ -126,7 +126,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     }
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:8a377263");
+  const agentPrompt = await getPrompt("where_condition_agent_5:cbbfb24d");
   const agentPromptFormatted = (await agentPrompt.invoke({
     organisationName: params.organisationName,
     tableName: params.tableName,
@@ -138,7 +138,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     relatedTablesSchemas: relatedTablesSchemasString,
   })) as Record<"messages", BaseMessage[]>;
 
-  const modelWithTools = llm.bindTools([validateFilterTool]);
+  const modelWithTools = llm.bindTools([applyFilterTool]);
   type MsgState = typeof MessagesAnnotation.State;
 
   const callModel = async (state: MsgState) => {
@@ -149,8 +149,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const jsonDetectedFeedback = async (_state: MsgState) => {
     return {
       messages: new HumanMessage(
-        "JSON-like content was detected in your last response, but you did not call validateFilterTool. \n" +
-          "You MUST now call validateFilterTool exactly once with a candidate filter object to apply the filter. \n" +
+        "JSON-like content was detected in your last response, but you did not call applyFilterTool. \n" +
+          "You MUST now call applyFilterTool exactly once with a candidate filter object to apply the filter. \n" +
           "Call the tool with { candidate: <object-or-null> }."
       ),
     };
@@ -170,7 +170,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   const hasValidWhereCondition = (state: MsgState) => {
     const last = state.messages.at(-1) as ToolMessage;
-    if (last && last.name === "validateFilterTool") {
+    if (last && last.name === "applyFilterTool") {
       const whereConditionArtifact = last.artifact as WhereConditionArtifact;
       if (whereConditionArtifact.status === "valid") {
         return END;
@@ -182,7 +182,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const workflow = new StateGraph(MessagesAnnotation)
     .addNode("message_filter_agent", callModel)
     .addNode("json_detected_feedback", jsonDetectedFeedback)
-    .addNode("message_filter_agent_tools", new ToolNode([validateFilterTool]))
+    .addNode("message_filter_agent_tools", new ToolNode([applyFilterTool]))
     .addEdge(START, "message_filter_agent")
     .addConditionalEdges("message_filter_agent", shouldContinue, {
       message_filter_agent_tools: "message_filter_agent_tools",
@@ -206,7 +206,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   const validToolMessage = graphResult.messages.toReversed().find((m) => {
     if (!isToolMessage(m)) return false;
-    if (m.name !== "validateFilterTool") return false;
+    if (m.name !== "applyFilterTool") return false;
     const art = m.artifact as WhereConditionArtifact;
     return art && art.status === "valid" && art.filter !== undefined;
   }) as ToolMessage | undefined;

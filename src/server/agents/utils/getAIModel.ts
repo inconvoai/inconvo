@@ -34,7 +34,7 @@ export function getAIModel(
     azure: {
       ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
       ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
-      timeout: 15000,
+      timeout: 35000,
       maxRetries: 2,
       useResponsesApi: false,
     },
@@ -42,7 +42,7 @@ export function getAIModel(
       ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
       ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
       ...(isGPT5 ? { verbosity: "low" } : {}),
-      timeout: 15000,
+      timeout: 35000,
       maxRetries: 2,
       useResponsesApi: false,
     },

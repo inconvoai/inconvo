@@ -325,7 +325,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:214991da");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:21b08650");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -394,7 +394,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }
 
     const guidanceText =
-      "Format this if it is sufficient otherwise make another request to the database.";
+      "You now need to decided if you have enough information to answer the user question.\n" +
+      "If you do, answer the question. If you don't, review your available tool calls.;";
 
     return {
       messages: [new AIMessage(guidanceText)],

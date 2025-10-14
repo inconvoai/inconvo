@@ -59,7 +59,7 @@ interface RequestParams {
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel("azure:gpt-5");
+  const llm = getAIModel("azure:gpt-5", { reasoningEffort: "low" });
 
   const relatedTables = generateJoinedTables(
     params.schema,

@@ -59,7 +59,7 @@ interface RequestParams {
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel("azure:gpt-5", { reasoningEffort: "low" });
+  const llm = getAIModel("azure:gpt-5");
 
   const relatedTables = generateJoinedTables(
     params.schema,
@@ -118,7 +118,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     {
       name: "applyFilterTool",
       description:
-        "Validate (and iteratively refine) the FINAL filter object (or null). Input may be an object, or null. If validation fails you'll receive status=invalid with issues; fix them and call again.",
+        "Applies the filter object to the query. Input may be an object, or null. If validation fails you'll receive status=invalid with issues; fix them and try again.",
       schema: z.object({
         candidate: z.union([z.object({}).passthrough(), z.null()]),
       }),
@@ -126,7 +126,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     }
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:cbbfb24d");
+  const agentPrompt = await getPrompt("where_condition_agent_5:311781c1");
   const agentPromptFormatted = (await agentPrompt.invoke({
     organisationName: params.organisationName,
     tableName: params.tableName,

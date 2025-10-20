@@ -170,7 +170,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
 
   const hasValidWhereCondition = (state: MsgState) => {
     const last = state.messages.at(-1) as ToolMessage;
-    if (last && last.name === "applyFilterTool") {
+    if (last.name === "applyFilterTool") {
       const whereConditionArtifact = last.artifact as WhereConditionArtifact;
       if (whereConditionArtifact.status === "valid") {
         return END;
@@ -208,7 +208,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     if (!isToolMessage(m)) return false;
     if (m.name !== "applyFilterTool") return false;
     const art = m.artifact as WhereConditionArtifact;
-    return art && art.status === "valid" && art.filter !== undefined;
+    return art.status === "valid" && art.filter !== undefined;
   }) as ToolMessage | undefined;
 
   const artifact = validToolMessage?.artifact as

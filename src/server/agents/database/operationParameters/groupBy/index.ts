@@ -205,7 +205,10 @@ export async function defineGroupByOperationParameters(
   // Naive JSON detection similar to findMany util (inline simple check)
   const aiMessageContainsJsonLikeText = (msg?: AIMessage) => {
     if (!msg) return false;
-    const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+    const text =
+      typeof msg.content === "string"
+        ? msg.content
+        : JSON.stringify(msg.content);
     return /\{[\s\S]*\}/.test(text) && !msg.tool_calls?.length;
   };
 
@@ -223,10 +226,8 @@ export async function defineGroupByOperationParameters(
   const hasValidOperationParams = (state: MsgState) => {
     const last = state.messages.at(-1) as ToolMessageWithArtifact;
     if (
-      last &&
       last.name === "applyGroupByOperationParametersTool" &&
-      last.artifact &&
-      last.artifact.status === "valid"
+      last.artifact?.status === "valid"
     ) {
       return END;
     }
@@ -265,11 +266,14 @@ export async function defineGroupByOperationParameters(
     if (!isToolMessage(m)) return false;
     if (m.name !== "applyGroupByOperationParametersTool") return false;
     const toolMsg = m as ToolMessageWithArtifact;
-    return toolMsg.artifact && toolMsg.artifact.status === "valid" && toolMsg.artifact.result !== undefined;
+    return (
+      toolMsg?.artifact?.status === "valid" &&
+      toolMsg.artifact.result !== undefined
+    );
   }) as ToolMessageWithArtifact | undefined;
 
   let artifact: unknown = null;
-  if (validToolMessage?.artifact && validToolMessage.artifact.status === "valid") {
+  if (validToolMessage?.artifact?.status === "valid") {
     artifact = validToolMessage.artifact.result;
   }
 

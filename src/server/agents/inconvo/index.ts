@@ -1,9 +1,9 @@
 import {
   AIMessage,
   HumanMessage,
+  ToolMessage,
   type BaseMessage,
   isAIMessage,
-  type ToolMessage,
   isToolMessage,
 } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
@@ -13,18 +13,20 @@ import {
   Annotation,
   END,
   START,
+  Command,
+  getCurrentTaskInput,
 } from "@langchain/langgraph";
 import {
   type DynamicTool,
   tool,
   type StructuredToolInterface,
+  type ToolRunnableConfig,
 } from "@langchain/core/tools";
 import { z } from "zod";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { Schema } from "~/server/db/schema";
 import { getPrompt } from "../utils/getPrompt";
 import { databaseRetrieverAgent } from "../database";
-import { Calculator } from "~/server/agents/tools/calculator";
 import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
@@ -34,6 +36,7 @@ import { tryCatchSync } from "~/server/api/utils/tryCatch";
 import { inngest } from "~/server/inngest/client";
 import type { Conversation } from "@prisma/client";
 import { databaseRetrieverToolDescription } from "../database/utils/databaseRetrieverToolDescription";
+import { InconvoSandbox } from "../utils/sandbox";
 
 interface Chart {
   type: "bar" | "line";
@@ -205,6 +208,13 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         message: "",
       }),
     }),
+    databaseRetrieverResults: Annotation<
+      { query?: string; data?: Record<string, unknown> }[] | undefined
+    >({
+      reducer: (x, y) => (x ? x.concat(y ?? []) : y),
+      default: () => undefined,
+    }),
+    // Context about the request to pass to the database retriever
     requestContext: Annotation<Record<string, string | number>>({
       reducer: (x, y) => y,
       default: () =>
@@ -229,6 +239,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
   function resetState(_state: typeof AgentState.State) {
     // We only have to preserve the chat history from the checkpointer
+    // and also the database retriever results if any
     // The user question will be overwritten by start node because it the graph
     // Is invoked with a user question
     return {
@@ -245,7 +256,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const tables = params.schema.map((table) => table.name);
 
     const databaseRetriever = tool(
-      async (input: { question: string }) => {
+      async (input: { question: string }, config: ToolRunnableConfig) => {
         try {
           const databaseRetrieverResponse = await (
             await databaseRetrieverAgent({
@@ -257,11 +268,38 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               connectorSigningKey: params.connectorSigningKey,
             })
           ).invoke({});
-          return {
-            verification: databaseRetrieverResponse.reason,
-            query: databaseRetrieverResponse.databaseResponse.query,
-            data: databaseRetrieverResponse.databaseResponse.response,
-          };
+          const toolCallId = config.toolCall?.id;
+          if (!toolCallId) {
+            throw new Error(
+              "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id."
+            );
+          }
+          return new Command({
+            update: {
+              databaseRetrieverResults: [
+                {
+                  query: databaseRetrieverResponse.databaseResponse.query,
+                  data: databaseRetrieverResponse.databaseResponse.response,
+                },
+              ],
+              messages: [
+                new ToolMessage({
+                  status: "success",
+                  name: "databaseRetriever",
+                  content: JSON.stringify(
+                    {
+                      verification: databaseRetrieverResponse.reason,
+                      query: databaseRetrieverResponse.databaseResponse.query,
+                      data: databaseRetrieverResponse.databaseResponse.response,
+                    },
+                    null,
+                    2
+                  ),
+                  tool_call_id: toolCallId,
+                }),
+              ],
+            },
+          });
         } catch (e) {
           return {
             error: `Calling tool with arguments:\n\n${JSON.stringify(
@@ -281,9 +319,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       }
     );
     tools.push(databaseRetriever);
-
-    const calculator = new Calculator();
-    tools.push(calculator);
 
     const getSchemasForTables = tool(
       async (input: { tables: string[] }) => {
@@ -308,6 +343,95 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     );
     tools.push(getSchemasForTables);
 
+    const uploadDataToPythonSandbox = tool(
+      async () => {
+        const currentState = getCurrentTaskInput<typeof AgentState.State>();
+        const jsonResultsToUploadToSandbox =
+          currentState.databaseRetrieverResults ?? [];
+        if (
+          !jsonResultsToUploadToSandbox ||
+          !Array.isArray(jsonResultsToUploadToSandbox) ||
+          jsonResultsToUploadToSandbox.length === 0
+        ) {
+          return "No database retriever results available to upload to the Python sandbox. Please run a database retrieval first.";
+        }
+        const sandbox = new InconvoSandbox({
+          sandboxId: currentState.runId,
+        });
+
+        const uploadResult = await sandbox.uploadFiles(
+          jsonResultsToUploadToSandbox.map((result, index) => ({
+            name: `retriever_result_${index + 1}.json`,
+            content: JSON.stringify(result, null, 2),
+          }))
+        );
+
+        const describeResult = await sandbox.describeFiles(
+          uploadResult.files.map((file) => file.name)
+        );
+        return describeResult;
+      },
+      {
+        name: "uploadDataToPythonSandbox",
+        description:
+          "Uploads database retriever results from this conversation to a Python sandbox environment. " +
+          "Returns a summary of the uploaded data including DataFrame descriptions and filenames. " +
+          "This tool MUST be called at least once before using 'executePythonCode' to ensure data is available in the sandbox. " +
+          "No input parameters required - automatically uses data from current conversation state.",
+        schema: z.object({}),
+      }
+    );
+    tools.push(uploadDataToPythonSandbox);
+
+    const executePythonCode = tool(
+      async (input: { code: string }) => {
+        try {
+          const currentState = getCurrentTaskInput<typeof AgentState.State>();
+          const sandbox = new InconvoSandbox({
+            sandboxId: currentState.runId,
+          });
+          const executionResult = await sandbox.executeCode(input.code);
+          return executionResult;
+        } catch (e) {
+          return `Calling tool with arguments:\n\n${JSON.stringify(
+            input
+          )}\n\nraised the following error:\n\n${
+            e instanceof Error ? e.message : String(e)
+          }`;
+        }
+      },
+      {
+        name: "executePythonCode",
+        description:
+          "Executes Python 3 code in a sandboxed environment for calculations and data analysis.\n\n" +
+          "IMPORTANT: You must call 'uploadDataToPythonSandbox' tool first to make data available.\n\n" +
+          "Available libraries: pandas, numpy, json\n\n" +
+          "Data files uploaded via 'uploadDataToPythonSandbox' are available as 'retriever_result_N.json'.\n\n" +
+          "Example code to load and analyze data:\n" +
+          "```python\n" +
+          "import pandas as pd\n" +
+          "import json\n\n" +
+          "# Load JSON file\n" +
+          "with open('retriever_result_1.json', 'r') as f:\n" +
+          "    data = json.load(f)\n\n" +
+          "# Normalize to DataFrame\n" +
+          "if 'data' in data:\n" +
+          "    df = pd.json_normalize(data['data'])\n" +
+          "else:\n" +
+          "    df = pd.json_normalize(data if isinstance(data, list) else [data])\n\n" +
+          "# Analyze\n" +
+          "print(df.head())\n" +
+          "print(df.describe())\n" +
+          "```",
+        schema: z.object({
+          code: z
+            .string()
+            .describe("The Python 3 code to execute in the sandbox"),
+        }),
+      }
+    );
+    tools.push(executePythonCode);
+
     return {};
   }
 
@@ -325,7 +449,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:21b08650");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:9498e336");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -339,70 +463,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     return { messages: [response] };
   }
 
-  function addDatabaseRetrieverGuidanceMessage(state: typeof AgentState.State) {
-    const messages = state.messages ?? [];
-    if (messages.length === 0) {
-      return {};
-    }
-
-    let lastAiMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const candidate = messages[i];
-      if (!candidate) {
-        continue;
-      }
-      if (isAIMessage(candidate)) {
-        lastAiMessageIndex = i;
-        break;
-      }
-    }
-
-    if (lastAiMessageIndex === -1) {
-      return {};
-    }
-
-    const lastAiMessage = messages[lastAiMessageIndex] as AIMessage;
-    const databaseToolCallIds = [
-      ...(lastAiMessage.tool_calls ?? []),
-      ...(lastAiMessage.invalid_tool_calls ?? []),
-    ]
-      .filter((call) => call.name === "databaseRetriever" && call.id)
-      .map((call) => call.id!);
-
-    if (databaseToolCallIds.length === 0) {
-      return {};
-    }
-
-    let hasDatabaseRetrieverToolMessage = false;
-    for (let i = lastAiMessageIndex + 1; i < messages.length; i += 1) {
-      const message = messages[i];
-      if (!message) {
-        continue;
-      }
-      if (
-        isToolMessage(message) &&
-        message.tool_call_id &&
-        databaseToolCallIds.includes(message.tool_call_id)
-      ) {
-        hasDatabaseRetrieverToolMessage = true;
-        break;
-      }
-    }
-
-    if (!hasDatabaseRetrieverToolMessage) {
-      return {};
-    }
-
-    const guidanceText =
-      "You now need to decided if you have enough information to answer the user question.\n" +
-      "If you do, answer the question. If you don't, review your available tool calls.;";
-
-    return {
-      messages: [new AIMessage(guidanceText)],
-    };
-  }
-
   async function formatResponse(state: typeof AgentState.State) {
+    const sandbox = new InconvoSandbox({
+      sandboxId: state.runId,
+    });
+    await sandbox.destroySandbox();
+
     // try to zod parse the last message before using the LLM to format it
     // const potentiallyFormattedMessage =
     //   // @ts-ignore-next-line This will be fixed when we use the new langchain package
@@ -542,10 +608,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     .addNode("build_tools", buildTools)
     .addNode("inconvo_agent", callModel)
     .addNode("inconvo_agent_tools", toolNode)
-    .addNode(
-      "post_database_retriever_guidance",
-      addDatabaseRetrieverGuidanceMessage
-    )
     .addNode("format_response", formatResponse)
     .addEdge(START, "reset_state")
     .addEdge("reset_state", "build_tools")
@@ -555,8 +617,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       continue: "inconvo_agent_tools",
       formatResponse: "format_response",
     })
-    .addEdge("inconvo_agent_tools", "post_database_retriever_guidance")
-    .addEdge("post_database_retriever_guidance", "inconvo_agent")
+    .addEdge("inconvo_agent_tools", "inconvo_agent")
     .addEdge("format_response", END);
 
   const graph = workflow.compile({ checkpointer: params.checkpointer });

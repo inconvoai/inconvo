@@ -104,10 +104,16 @@ export async function defineFindManyOperationParameters(
         candidateOperationParameters: z
           .object({
             columns: z.object(
-              Object.keys(iqlPaths).reduce((acc: Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>, key) => {
-                acc[key] = z.array(z.string()).optional();
-                return acc;
-              }, {} as Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>)
+              Object.keys(iqlPaths).reduce(
+                (
+                  acc: Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>,
+                  key
+                ) => {
+                  acc[key] = z.array(z.string()).optional();
+                  return acc;
+                },
+                {} as Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>
+              )
             ),
             orderBy: z
               .object({
@@ -174,10 +180,8 @@ export async function defineFindManyOperationParameters(
   const hasValidOperationParams = (state: MsgState) => {
     const last = state.messages.at(-1) as ToolMessageWithArtifact;
     if (
-      last &&
       last.name === "applyFindManyOperationParametersTool" &&
-      last.artifact &&
-      last.artifact.status === "valid"
+      last.artifact?.status === "valid"
     ) {
       return END;
     }
@@ -217,11 +221,14 @@ export async function defineFindManyOperationParameters(
     if (!isToolMessage(m)) return false;
     if (m.name !== "applyFindManyOperationParametersTool") return false;
     const toolMsg = m as ToolMessageWithArtifact;
-    return toolMsg.artifact && toolMsg.artifact.status === "valid" && toolMsg.artifact.result !== undefined;
+    return (
+      toolMsg.artifact?.status === "valid" &&
+      toolMsg.artifact.result !== undefined
+    );
   }) as ToolMessageWithArtifact | undefined;
 
   let artifact: unknown = null;
-  if (validToolMessage?.artifact && validToolMessage.artifact.status === "valid") {
+  if (validToolMessage?.artifact?.status === "valid") {
     artifact = validToolMessage.artifact.result;
   }
 

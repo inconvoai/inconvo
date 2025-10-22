@@ -27,24 +27,29 @@ export function getAIModel(
 
   // Github Copilot PR Review Let me know if you see the provider overwritten. It should come from the modelString.
   const [provider, model] = modelString.split(":") as [string, string];
-  // provider = "openai"; // Temporary override for testing
+  //provider = "openai"; // Temporary override for testing
 
   const isGPT5 = model.startsWith("gpt-5");
   const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {
     azure: {
-      ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
-      ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
-      timeout: 35000,
+      ...(isGPT5
+        ? { reasoning: { effort: "minimal", summary: "detailed" } }
+        : { temperature: 0 }),
+      ...(isGPT5 ? { verbosity: "low" } : {}),
+      timeout: 60000,
       maxRetries: 2,
-      useResponsesApi: false,
+      zdrEnabled: true,
+      useResponsesApi: true,
     },
     openai: {
-      ...(isGPT5 ? { reasoning: { effort: "minimal" } } : { temperature: 0 }),
-      ...(isGPT5 ? { reasoningEffort: "minimal" } : { temperature: 0 }),
+      ...(isGPT5
+        ? { reasoning: { effort: "minimal", summary: "detailed" } }
+        : { temperature: 0 }),
       ...(isGPT5 ? { verbosity: "low" } : {}),
-      timeout: 35000,
+      timeout: 60000,
       maxRetries: 2,
-      useResponsesApi: false,
+      zdrEnabled: false,
+      useResponsesApi: true,
     },
   };
 
@@ -64,13 +69,14 @@ export function getAIModel(
       return new AzureChatOpenAI({
         model: model,
         deploymentName: model,
+        azureOpenAIEndpoint:
+          "https://inconvo-openai-sweedencentral.openai.azure.com/openai/",
         ...mergedOptions,
       });
 
     case "openai":
       return new ChatOpenAI({
-        model: model,
-        temperature: mergedOptions.temperature,
+        model,
         ...mergedOptions,
       });
 

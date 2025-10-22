@@ -139,6 +139,39 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
   );
 }
 
+function extractLastTextFromMessage(
+  message: BaseMessage | null | undefined
+): string {
+  if (!message) return "";
+
+  const { content } = message;
+
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  const lastChunk = content.at(-1);
+
+  if (typeof lastChunk === "string") {
+    return lastChunk;
+  }
+
+  if (
+    typeof lastChunk === "object" &&
+    lastChunk !== null &&
+    "text" in lastChunk
+  ) {
+    const text = (lastChunk as Record<string, unknown>).text;
+    return typeof text === "string" ? text : "";
+  }
+
+  return "";
+}
+
 export async function inconvoAgent(params: QuestionAgentParams) {
   const AgentState = Annotation.Root({
     userQuestion: Annotation<string>({
@@ -230,7 +263,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     [];
   const toolNode = new ToolNode(tools);
 
-  const model = getAIModel("azure:gpt-5");
+  const model = getAIModel("azure:gpt-5", {
+    reasoning: { effort: "low", summary: "detailed" },
+    verbosity: "low",
+  });
 
   const tableContext = params.schema
     .filter((table) => table.context)
@@ -288,7 +324,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
                   name: "databaseRetriever",
                   content: JSON.stringify(
                     {
-                      verification: databaseRetrieverResponse.reason,
+                      // verification: databaseRetrieverResponse.reason,
                       query: databaseRetrieverResponse.databaseResponse.query,
                       data: databaseRetrieverResponse.databaseResponse.response,
                     },
@@ -449,7 +485,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:9498e336");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:00132761");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -470,15 +506,11 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     await sandbox.destroySandbox();
 
     // try to zod parse the last message before using the LLM to format it
-    // const potentiallyFormattedMessage =
-    //   // @ts-ignore-next-line This will be fixed when we use the new langchain package
-    //   // with better types for message and message content
-    //   state.messages?.at(-1)?.content?.at(-1)?.text ?? "";
-    const potentiallyFormattedMessage = state.messages?.at(-1)?.content ?? "";
-    const messageContent =
-      typeof potentiallyFormattedMessage === "string"
-        ? potentiallyFormattedMessage
-        : JSON.stringify(potentiallyFormattedMessage);
+    const potentiallyFormattedMessage = extractLastTextFromMessage(
+      state.messages?.at(-1)
+    );
+    // const potentiallyFormattedMessage = state.messages?.at(-1)?.content ?? "";
+    const messageContent = potentiallyFormattedMessage;
     const { data: potentiallyFormattedMessageAsJson } = tryCatchSync(
       () => JSON.parse(messageContent) as unknown
     ) as { data: unknown; error: Error | null };

@@ -106,17 +106,8 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       reducer: (x, y) => y,
       default: () => ({} as ColumnAliasMap),
     }),
-    // The reason for the answer isn't sufficient
-    reason: Annotation<string>({
-      reducer: (x, y) => y,
-    }),
     error: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
-    }),
-    // Next conditional node to go to
-    next: Annotation<string>({
-      reducer: (x, y) => y ?? x ?? END,
-      default: () => END,
     }),
   });
 
@@ -151,8 +142,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     ...OverallStateAnnotation.spec,
     ...QueryBuilderState.spec,
   });
-
-  const model = getAIModel("azure:gpt-5");
 
   const flattenJsonTablesInSchema = async (
     state: typeof DatabaseAgentState.State
@@ -473,52 +462,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     };
   };
 
-  const decideComplete = async (state: typeof DatabaseAgentState.State) => {
-    const nextStepPrompt = await getPrompt("decide_correct_retrieval:e46eceba");
-    const nextStepSchema = model.withStructuredOutput(
-      z.object({
-        reason: z
-          .string()
-          .describe("The thinking behind the next selecting the next step"),
-        next: z
-          .enum(["generate_follow_up_question", END])
-          .describe("The next step to take"),
-      })
-    );
-    const columnAliasInfo = (() => {
-      const map = state.columnAliasMap;
-      if (!map || Object.keys(map).length === 0) {
-        return "";
-      }
-      const lines = Object.entries(map).flatMap(([table, entries]) => {
-        if (entries.length === 0) return [] as string[];
-        const rows = entries
-          .map((entry) => `  - friendly: ${entry.name} => db: ${entry.dbName}`)
-          .join("\n");
-        return [`Table: ${table}:\n${rows}`];
-      });
-      return lines.join("\n").trim();
-    })();
-    const response = await nextStepPrompt.pipe(nextStepSchema).invoke({
-      question: params.userQuestion,
-      requestContext: JSON.stringify(params.requestContext),
-      database_sql: JSON.stringify(state.databaseResponse.query),
-      column_aliases: columnAliasInfo,
-      date: new Date().toISOString(),
-    });
-
-    if (response.next === "generate_follow_up_question") {
-      return {
-        next: END,
-        reason: `Sorry, I was not able to find the data you were looking for, The data I retrieved is incorrect because ${response.reason}`,
-      };
-    }
-
-    return {
-      next: response.next,
-      reason: response.reason,
-    };
-  };
 
   const workflow = new StateGraph(OverallStateAnnotation)
     .addNode("flatten_json_tables", flattenJsonTablesInSchema)
@@ -567,12 +510,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addNode("format_database_response", formatDatabaseResponse, {
       input: DatabaseAgentState,
     })
-    .addNode("decide_complete", decideComplete, {
-      input: DatabaseAgentState,
-      metadata: {
-        userObservable: true,
-      },
-    })
     .addEdge(START, "flatten_json_tables")
     .addEdge("flatten_json_tables", "select_table_name")
     .addEdge("select_table_name", "set_context_filters")
@@ -582,11 +519,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addEdge("set_message_derived_filters", "build_query")
     .addEdge("build_query", "execute_query")
     .addEdge("execute_query", "format_database_response")
-    .addEdge("format_database_response", "decide_complete")
-    .addConditionalEdges(
-      "decide_complete",
-      (x: typeof OverallStateAnnotation.State) => x.next
-    );
+    .addEdge("format_database_response", END);
 
   return workflow.compile();
 }

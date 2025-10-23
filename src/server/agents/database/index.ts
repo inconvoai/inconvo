@@ -47,7 +47,6 @@ import type { ColumnAliasMap } from "./utils/queryNormalization";
 
 interface RequestParams {
   userQuestion: string;
-  organisationName: string;
   schema: Schema;
   requestContext: Record<string, string | number>;
   connectorUrl: string;
@@ -357,7 +356,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       question: state.question,
       dateCondition: state.dateCondition,
       tableConditions: state.tableConditions,
-      organisationName: params.organisationName,
       requestContext: params.requestContext,
       connectorUrl: params.connectorUrl,
       connectorSigningKey: params.connectorSigningKey,
@@ -461,7 +459,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       },
     };
   };
-
 
   const workflow = new StateGraph(OverallStateAnnotation)
     .addNode("flatten_json_tables", flattenJsonTablesInSchema)

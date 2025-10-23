@@ -52,7 +52,6 @@ interface RequestParams {
   tableSchema: Schema[number];
   dateCondition: DateCondition;
   tableConditions: TableConditions;
-  organisationName: string;
   requestContext: Record<string, string | number>;
   connectorUrl: string;
   connectorSigningKey: string;
@@ -126,9 +125,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     }
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:311781c1");
+  const agentPrompt = await getPrompt("where_condition_agent_5:38907ba5");
   const agentPromptFormatted = (await agentPrompt.invoke({
-    organisationName: params.organisationName,
     tableName: params.tableName,
     operation: params.operation,
     date: new Date().toISOString(),

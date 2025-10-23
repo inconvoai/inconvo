@@ -62,7 +62,6 @@ interface Answer {
 }
 
 interface QuestionAgentParams {
-  organisationName: string;
   schema: Schema;
   connectorUrl: string;
   connectorSigningKey: string;
@@ -265,7 +264,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
   const model = getAIModel("azure:gpt-5", {
     reasoning: { effort: "low", summary: "detailed" },
-    verbosity: "low",
   });
 
   const tableContext = params.schema
@@ -297,7 +295,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           const databaseRetrieverResponse = await (
             await databaseRetrieverAgent({
               userQuestion: input.question,
-              organisationName: params.organisationName,
               schema: params.schema,
               requestContext: state.requestContext,
               connectorUrl: params.connectorUrl,
@@ -485,7 +482,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:00132761");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:6a9afcfa");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,

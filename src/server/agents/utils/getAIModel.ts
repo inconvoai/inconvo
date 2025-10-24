@@ -47,7 +47,7 @@ export function getAIModel(
         : { temperature: 0 }),
       timeout: 60000,
       maxRetries: 2,
-      zdrEnabled: false,
+      zdrEnabled: true,
       useResponsesApi: true,
     },
   };

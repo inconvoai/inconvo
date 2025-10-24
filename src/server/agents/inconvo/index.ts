@@ -5,6 +5,7 @@ import {
   type BaseMessage,
   isAIMessage,
   isToolMessage,
+  type MessageContentText,
 } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
@@ -138,37 +139,26 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
   );
 }
 
-function extractLastTextFromMessage(
+function extractTextFromMessage(
   message: BaseMessage | null | undefined
-): string {
-  if (!message) return "";
+): string[] {
+  if (!message) return [""];
 
   const { content } = message;
 
   if (typeof content === "string") {
-    return content;
+    return [content];
   }
 
   if (!Array.isArray(content)) {
-    return "";
+    return [""];
   }
 
-  const lastChunk = content.at(-1);
+  const textMessages = content
+    .filter((m): m is MessageContentText => m.type === "text")
+    .map((tm) => tm.text);
 
-  if (typeof lastChunk === "string") {
-    return lastChunk;
-  }
-
-  if (
-    typeof lastChunk === "object" &&
-    lastChunk !== null &&
-    "text" in lastChunk
-  ) {
-    const text = (lastChunk as Record<string, unknown>).text;
-    return typeof text === "string" ? text : "";
-  }
-
-  return "";
+  return textMessages;
 }
 
 export async function inconvoAgent(params: QuestionAgentParams) {
@@ -482,7 +472,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:6a9afcfa");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:ced2837d");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -502,15 +492,30 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     });
     await sandbox.destroySandbox();
 
-    // try to zod parse the last message before using the LLM to format it
-    const potentiallyFormattedMessage = extractLastTextFromMessage(
+    // Extract potential JSON responses from the last message
+    const potentialJsonResponses = extractTextFromMessage(
       state.messages?.at(-1)
     );
-    // const potentiallyFormattedMessage = state.messages?.at(-1)?.content ?? "";
-    const messageContent = potentiallyFormattedMessage;
-    const { data: potentiallyFormattedMessageAsJson } = tryCatchSync(
-      () => JSON.parse(messageContent) as unknown
-    ) as { data: unknown; error: Error | null };
+
+    // Filter to only valid JSON that matches inconvoResponseSchema
+    type InconvoResponse = z.infer<typeof inconvoResponseSchema>;
+    const validResponses = potentialJsonResponses
+      .map((jsonString: string) => {
+        const { data } = tryCatchSync(
+          () => JSON.parse(jsonString) as unknown
+        ) as { data: unknown; error: Error | null };
+        return data;
+      })
+      .filter(
+        (data: unknown): data is NonNullable<typeof data> =>
+          data !== null && data !== undefined
+      )
+      .map((data: unknown) => inconvoResponseSchema.safeParse(data))
+      .filter(
+        (result): result is z.SafeParseSuccess<InconvoResponse> =>
+          result.success
+      )
+      .map((result) => result.data);
 
     const stateMessages = state.messages ?? [];
     const databaseRelatedMessages = extractToolRelatedMessages(
@@ -522,26 +527,28 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       "getSchemasForTables"
     );
 
-    if (potentiallyFormattedMessageAsJson) {
-      const parsedMessage = inconvoResponseSchema.safeParse(
-        potentiallyFormattedMessageAsJson
-      );
-      if (parsedMessage.success) {
-        return {
-          answer: parsedMessage.data,
-          chatHistory: [
-            new HumanMessage(state.userQuestion),
-            ...getSchemaRelatedMessages,
-            ...databaseRelatedMessages,
-            new AIMessage(JSON.stringify(parsedMessage.data, null, 2)),
-          ],
-        };
-      } else {
-        console.log(
-          "Failed to parse message as inconvoResponseSchema",
-          parsedMessage.error
-        );
+    if (validResponses.length > 0) {
+      // Prioritize by type: chart > table > text
+      const priorityOrder = ["chart", "table", "text"] as const;
+      let selectedResponse = validResponses[0];
+
+      for (const type of priorityOrder) {
+        const match = validResponses.find((r) => r.type === type);
+        if (match) {
+          selectedResponse = match;
+          break;
+        }
       }
+
+      return {
+        answer: selectedResponse,
+        chatHistory: [
+          new HumanMessage(state.userQuestion),
+          ...getSchemaRelatedMessages,
+          ...databaseRelatedMessages,
+          new AIMessage(JSON.stringify(selectedResponse, null, 2)),
+        ],
+      };
     }
 
     const outputFormatterPrompt = await getPrompt("format_response:84092a5b");
@@ -597,10 +604,16 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       method: "jsonSchema",
     });
 
+    // Fallback to LLM formatter if no valid responses found
+    const messageToFormat =
+      potentialJsonResponses.join("\n") ||
+      state.messages?.at(-1)?.content?.toString() ||
+      "";
+
     const wrapped = await outputFormatterPrompt
       .pipe(outputFormatterSchema)
       .invoke({
-        messageToFormat: potentiallyFormattedMessage,
+        messageToFormat,
       });
 
     const response = wrapped.data as z.infer<typeof variantUnion>;

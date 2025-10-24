@@ -605,10 +605,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     });
 
     // Fallback to LLM formatter if no valid responses found
-    const messageToFormat =
-      potentialJsonResponses.join("\n") ||
-      state.messages?.at(-1)?.content?.toString() ||
-      "";
+    const messageToFormat = potentialJsonResponses.join("\n") ?? "";
 
     const wrapped = await outputFormatterPrompt
       .pipe(outputFormatterSchema)

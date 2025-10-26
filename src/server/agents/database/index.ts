@@ -281,7 +281,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   ) => {
     const model = getAIModel("azure:gpt-4.1");
     const operationSelectorPrompt = await getPrompt(
-      "select_operation:d53071cb"
+      "select_operation:b9c74dc0"
     );
 
     const { columns = [], outwardRelations: relations = [] } =

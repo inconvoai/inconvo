@@ -324,32 +324,47 @@ const aggregateSchema = z
   })
   .strict();
 
-const groupByDateIntervalSchema = z
+const groupByColumnKeySchema = z
   .object({
-    ...baseSchema,
-    operation: z.literal("groupByDateInterval"),
-    operationParameters: z
-      .object({
-        dateColumn: z.string(),
-        interval: z.enum(["day", "week", "month", "quarter", "year", "hour"]),
-        count: z.array(z.string()).nullable(),
-        sum: z.array(z.string()).nullable(),
-        min: z.array(z.string()).nullable(),
-        max: z.array(z.string()).nullable(),
-        avg: z.array(z.string()).nullable(),
-        orderBy: z.union([
-          z.object({
-            function: z.enum(["count", "sum", "min", "max", "avg"]),
-            column: z.string(),
-            direction: z.enum(["asc", "desc"]),
-          }),
-          z.enum(["chronological", "reverseChronological"]),
-        ]),
-        limit: z.number().nullable(),
-      })
-      .strict(),
+    type: z.literal("column"),
+    column: z.string(),
+    alias: z.string().min(1).optional(),
   })
   .strict();
+
+const groupByDateIntervalKeySchema = z
+  .object({
+    type: z.literal("dateInterval"),
+    column: z.string(),
+    interval: z.enum(["day", "week", "month", "quarter", "year", "hour"]),
+    alias: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const groupByKeySchema = z.union([
+  groupByColumnKeySchema,
+  groupByDateIntervalKeySchema,
+]);
+export type GroupByKey = z.infer<typeof groupByKeySchema>;
+
+const groupByOrderBySchema = z.union([
+  z
+    .object({
+      type: z.literal("aggregate"),
+      function: z.enum(["count", "sum", "min", "max", "avg"]),
+      column: z.string(),
+      direction: z.enum(["asc", "desc"]),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("groupKey"),
+      key: z.string(),
+      direction: z.enum(["asc", "desc"]),
+    })
+    .strict(),
+]);
+export type GroupByOrderBy = z.infer<typeof groupByOrderBySchema>;
 
 const countByTemporalComponentSchema = z
   .object({
@@ -379,17 +394,13 @@ const groupBySchema = z
             })
           )
           .nullable(),
-        groupBy: z.array(z.string()),
-        count: z.object({ columns: z.array(z.string()) }).nullable(),
-        sum: z.object({ columns: z.array(z.string()) }).nullable(),
-        min: z.object({ columns: z.array(z.string()) }).nullable(),
-        max: z.object({ columns: z.array(z.string()) }).nullable(),
-        avg: z.object({ columns: z.array(z.string()) }).nullable(),
-        orderBy: z.object({
-          function: z.enum(["count", "sum", "min", "max", "avg"]),
-          column: z.string(),
-          direction: z.enum(["asc", "desc"]),
-        }),
+        groupBy: z.array(groupByKeySchema).min(1),
+        count: z.array(z.string()).nullable(),
+        sum: z.array(z.string()).nullable(),
+        min: z.array(z.string()).nullable(),
+        max: z.array(z.string()).nullable(),
+        avg: z.array(z.string()).nullable(),
+        orderBy: groupByOrderBySchema,
         limit: z.number(),
       })
       .strict(),
@@ -405,7 +416,6 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,
-  groupByDateIntervalSchema,
   countByTemporalComponentSchema,
 ]);
 

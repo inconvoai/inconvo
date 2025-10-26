@@ -61,15 +61,17 @@ test("What is the product with the highest total profit where the profit on sale
           joinType: "inner",
         },
       ],
-      groupBy: ["fct_order_lineitem.product_key", "dim_product.PRODUCT_NAME"],
+      groupBy: [
+        { type: "column", column: "fct_order_lineitem.product_key" },
+        { type: "column", column: "dim_product.PRODUCT_NAME" },
+      ],
       count: null,
-      sum: {
-        columns: ["fct_order_lineitem.profit_"],
-      },
+      sum: ["fct_order_lineitem.profit_"],
       avg: null,
       min: null,
       max: null,
       orderBy: {
+        type: "aggregate",
         function: "sum",
         column: "fct_order_lineitem.profit_",
         direction: "desc",

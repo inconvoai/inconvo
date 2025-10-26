@@ -1,25 +1,44 @@
 import { QuerySchema } from "~/types/querySchema";
-import { aggregateByDateInterval } from "~/operations/groupByDateInterval";
+import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
 
 test("How many lineitems were sold each month?", async () => {
   const iql = {
     table: "fct_order_lineitem",
     whereAndArray: [],
-    operation: "aggregateByDateInterval",
+    operation: "groupBy",
     operationParameters: {
-      interval: "month",
-      dateColumn: "ORDER_TIMESTAMP",
-      aggregateColumn: "ORDER_TIMESTAMP",
-      aggregationType: "count",
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval",
+          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          interval: "month",
+          alias: "month_bucket",
+        },
+      ],
+      count: ["fct_order_lineitem.ORDER_TIMESTAMP"],
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: { type: "groupKey", key: "month_bucket", direction: "asc" },
+      limit: 12,
     },
   };
 
   const parsedQuery = QuerySchema.parse(iql);
   const db = await getDb();
-  const response = await aggregateByDateInterval(db, parsedQuery);
+  const response = await groupBy(db, parsedQuery);
 
-  expect(response).toEqual({
+  const byMonth = Object.fromEntries(
+    response.data.map((row: any) => [
+      row.month_bucket,
+      { count: JSON.parse(row._count)["fct_order_lineitem.ORDER_TIMESTAMP"] },
+    ])
+  );
+
+  expect(byMonth).toEqual({
     "2024-09": { count: 226 },
     "2024-10": { count: 491 },
     "2024-11": { count: 1745 },

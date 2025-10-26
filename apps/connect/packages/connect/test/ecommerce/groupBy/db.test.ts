@@ -15,15 +15,17 @@ test("What are my highest revenue generating products?", async () => {
           joinType: "inner",
         },
       ],
-      groupBy: ["fct_order_lineitem.product_key", "dim_product.PRODUCT_NAME"],
+      groupBy: [
+        { type: "column", column: "fct_order_lineitem.product_key" },
+        { type: "column", column: "dim_product.PRODUCT_NAME" },
+      ],
       count: null,
-      sum: {
-        columns: ["fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE"],
-      },
+      sum: ["fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE"],
       min: null,
       max: null,
       avg: null,
       orderBy: {
+        type: "aggregate",
         function: "sum",
         column: "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
         direction: "desc",

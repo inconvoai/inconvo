@@ -1,50 +1,50 @@
 import { QuerySchema } from "~/types/querySchema";
-import { aggregateByDateInterval } from "~/operations/groupByDateInterval";
+import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
+
+const computedProfitColumn = {
+  name: "profit_",
+  ast: {
+    type: "operation" as const,
+    operator: "*",
+    operands: [
+      {
+        type: "column" as const,
+        name: "num_orders",
+      },
+      {
+        type: "operation" as const,
+        operator: "+",
+        operands: [
+          {
+            type: "operation" as const,
+            operator: "+",
+            operands: [
+              {
+                type: "column" as const,
+                name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
+              },
+              {
+                type: "column" as const,
+                name: "ORDER_LINEITEM_PRODUCT_TAX",
+              },
+            ],
+          },
+          {
+            type: "column" as const,
+            name: "ORDER_LINEITEM_PRODUCT_COGS",
+          },
+        ],
+      },
+    ],
+  },
+  type: "number" as const,
+};
 
 test("How many lineitems were sold each month which have a profit of over $500", async () => {
   const iql = {
     table: "fct_order_lineitem",
-    computedColumns: [
-      {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "*",
-          operands: [
-            {
-              type: "column",
-              name: "num_orders",
-            },
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "operation",
-                  operator: "+",
-                  operands: [
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                    },
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_TAX",
-                    },
-                  ],
-                },
-                {
-                  type: "column",
-                  name: "ORDER_LINEITEM_PRODUCT_COGS",
-                },
-              ],
-            },
-          ],
-        },
-        type: "number",
-      },
-    ],
+    computedColumns: [computedProfitColumn],
     whereAndArray: [
       {
         profit_: {
@@ -52,20 +52,43 @@ test("How many lineitems were sold each month which have a profit of over $500",
         },
       },
     ],
-    operation: "aggregateByDateInterval",
+    operation: "groupBy" as const,
     operationParameters: {
-      interval: "month",
-      dateColumn: "ORDER_TIMESTAMP",
-      aggregateColumn: "ORDER_TIMESTAMP",
-      aggregationType: "count",
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          interval: "month" as const,
+          alias: "month_bucket",
+        },
+      ],
+      count: ["fct_order_lineitem.ORDER_TIMESTAMP"],
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month_bucket",
+        direction: "asc" as const,
+      },
+      limit: 12,
     },
   };
 
   const parsedQuery = QuerySchema.parse(iql);
   const db = await getDb();
-  const response = await aggregateByDateInterval(db, parsedQuery);
+  const response = await groupBy(db, parsedQuery);
 
-  expect(response).toEqual({
+  const byMonth = Object.fromEntries(
+    response.data.map((row: any) => [
+      row.month_bucket,
+      { count: JSON.parse(row._count)["fct_order_lineitem.ORDER_TIMESTAMP"] },
+    ])
+  );
+
+  expect(byMonth).toEqual({
     "2024-09": { count: 33 },
     "2024-10": { count: 75 },
     "2024-11": { count: 66 },
@@ -84,46 +107,7 @@ test("How many lineitems were sold each month which have a profit of over $500",
 test("What was the average profit per month where the profit was over $500", async () => {
   const iql = {
     table: "fct_order_lineitem",
-    computedColumns: [
-      {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "*",
-          operands: [
-            {
-              type: "column",
-              name: "num_orders",
-            },
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "operation",
-                  operator: "+",
-                  operands: [
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                    },
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_TAX",
-                    },
-                  ],
-                },
-                {
-                  type: "column",
-                  name: "ORDER_LINEITEM_PRODUCT_COGS",
-                },
-              ],
-            },
-          ],
-        },
-        type: "number",
-      },
-    ],
+    computedColumns: [computedProfitColumn],
     whereAndArray: [
       {
         profit_: {
@@ -131,20 +115,43 @@ test("What was the average profit per month where the profit was over $500", asy
         },
       },
     ],
-    operation: "aggregateByDateInterval",
+    operation: "groupBy" as const,
     operationParameters: {
-      interval: "month",
-      dateColumn: "ORDER_TIMESTAMP",
-      aggregateColumn: "profit_",
-      aggregationType: "avg",
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          interval: "month" as const,
+          alias: "month_bucket",
+        },
+      ],
+      count: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: ["fct_order_lineitem.profit_"],
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month_bucket",
+        direction: "asc" as const,
+      },
+      limit: 12,
     },
   };
 
   const parsedQuery = QuerySchema.parse(iql);
   const db = await getDb();
-  const response = await aggregateByDateInterval(db, parsedQuery);
+  const response = await groupBy(db, parsedQuery);
 
-  expect(response).toEqual({
+  const byMonth = Object.fromEntries(
+    response.data.map((row: any) => [
+      row.month_bucket,
+      { avg: JSON.parse(row._avg)["fct_order_lineitem.profit_"] },
+    ])
+  );
+
+  expect(byMonth).toEqual({
     "2024-09": {
       avg: "572.9090909090909",
     },

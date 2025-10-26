@@ -4,12 +4,13 @@ import assert from "assert";
 import { ComputedColumn } from "~/types/querySchema";
 
 export function createAggregationFields<T>(
-  columns: string[] | undefined,
+  columns: string[] | null | undefined,
   aggregationFn: (column: SQL<any>) => SQL<T>,
   drizzleSchema: any,
   computedColumns?: ComputedColumn[]
 ): [string, SQL<T>][] | undefined {
-  return columns?.map((columnIdentifier) => {
+  if (!columns || columns.length === 0) return undefined;
+  return columns.map((columnIdentifier) => {
     assert(
       columnIdentifier.split(".").length === 2,
       "Invalid column format for aggregation (not table.column)"

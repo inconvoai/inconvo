@@ -7,7 +7,6 @@ import { aggregate } from "~/operations/aggregate/index";
 import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
-import { groupByDateInterval } from "~/operations/groupByDateInterval";
 import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
@@ -56,9 +55,6 @@ export async function inconvo() {
       switch (operation) {
         case "aggregate":
           response = await aggregate(db, parsedQuery);
-          break;
-        case "groupByDateInterval":
-          response = await groupByDateInterval(db, parsedQuery);
           break;
         case "count":
           response = await count(db, parsedQuery);

@@ -7,6 +7,7 @@ import { buildJsonObjectSelect } from "~/operations/utils/jsonBuilderHelpers";
 import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
 import { createAggregationFields } from "~/operations/utils/createAggregationFields";
 import assert from "assert";
+import { buildDateIntervalExpression } from "~/operations/utils/buildDateIntervalExpression";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
@@ -15,35 +16,35 @@ export async function groupBy(db: any, query: Query) {
   const drizzleSchema = await loadDrizzleSchema();
 
   const countJsonFields = createAggregationFields(
-    operationParameters.count?.columns,
+    operationParameters.count ?? undefined,
     count,
     drizzleSchema,
     computedColumns
   );
 
   const minJsonFields = createAggregationFields(
-    operationParameters.min?.columns,
+    operationParameters.min ?? undefined,
     min,
     drizzleSchema,
     computedColumns
   );
 
   const maxJsonFields = createAggregationFields(
-    operationParameters.max?.columns,
+    operationParameters.max ?? undefined,
     max,
     drizzleSchema,
     computedColumns
   );
 
   const sumJsonFields = createAggregationFields(
-    operationParameters.sum?.columns,
+    operationParameters.sum ?? undefined,
     sum,
     drizzleSchema,
     computedColumns
   );
 
   const avgJsonFields = createAggregationFields(
-    operationParameters.avg?.columns,
+    operationParameters.avg ?? undefined,
     avg,
     drizzleSchema,
     computedColumns
@@ -67,36 +68,51 @@ export async function groupBy(db: any, query: Query) {
     selectFields["_avg"] = buildJsonObjectSelect(avgJsonFields);
   }
 
-  const groupBySelectFields: Record<string, any> =
-    operationParameters.groupBy.reduce((acc, columnIdentifier) => {
+  const groupBySelectFields: Record<string, any> = {};
+  const groupByColumns: any[] = [];
+  const groupKeyExpressions = new Map<string, any>();
+
+  for (const key of operationParameters.groupBy) {
+    if (key.type === "column") {
       assert(
-        columnIdentifier.split(".").length === 2,
+        key.column.split(".").length === 2,
         "Invalid column format for group by (not table.column)"
       );
-      const [tableName, columnName] = columnIdentifier.split(".");
+      const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
         columnName,
         tableName,
         drizzleSchema,
         computedColumns,
       });
-      acc[`${tableName}.${columnName}`] = column;
-      return acc;
-    }, {} as Record<string, any>);
+      const alias = key.alias ?? `${tableName}.${columnName}`;
+      groupBySelectFields[alias] = column;
+      groupByColumns.push(column);
+      groupKeyExpressions.set(alias, column);
+    } else if (key.type === "dateInterval") {
+      assert(
+        key.column.split(".").length === 2,
+        "Invalid column format for group by interval (not table.column)"
+      );
+      const [tableName, columnName] = key.column.split(".");
+      const column = getColumnFromTable({
+        columnName,
+        tableName,
+        drizzleSchema,
+        computedColumns,
+      });
+      const alias = key.alias ?? `${tableName}.${columnName}|${key.interval}`;
+      const intervalExpression = buildDateIntervalExpression(
+        column,
+        key.interval
+      );
+      groupBySelectFields[alias] = intervalExpression;
+      groupByColumns.push(intervalExpression);
+      groupKeyExpressions.set(alias, intervalExpression);
+    }
+  }
 
-  const groupByColumns = operationParameters.groupBy.map((columnIdentifier) => {
-    assert(
-      columnIdentifier.split(".").length === 2,
-      "Invalid column format for group by (not table.column)"
-    );
-    const [tableName, columnName] = columnIdentifier.split(".");
-    return getColumnFromTable({
-      columnName,
-      tableName,
-      drizzleSchema,
-      computedColumns,
-    });
-  });
+  const orderByParams = operationParameters.orderBy;
 
   const dbQuery = db
     .select({
@@ -115,12 +131,22 @@ export async function groupBy(db: any, query: Query) {
       })
     )
     .orderBy(() => {
+      if (orderByParams.type === "groupKey") {
+        const { key, direction } = orderByParams;
+        const expression = groupKeyExpressions.get(key);
+        assert(
+          expression,
+          `Order By key ${key} must reference a defined groupBy key`
+        );
+        const sorter = direction === "asc" ? asc : desc;
+        return sorter(expression);
+      }
+
       assert(
-        operationParameters.orderBy.column.split(".").length === 2,
+        orderByParams.column.split(".").length === 2,
         "Order By column must be in the format table.column"
       );
-      const [tableName, columnName] =
-        operationParameters.orderBy.column.split(".");
+      const [tableName, columnName] = orderByParams.column.split(".");
       const column = getColumnFromTable({
         columnName,
         tableName,
@@ -128,9 +154,9 @@ export async function groupBy(db: any, query: Query) {
         computedColumns,
       });
       const direction =
-        operationParameters.orderBy.direction === "asc" ? asc : desc;
+        orderByParams.direction === "asc" ? asc : desc;
 
-      switch (operationParameters.orderBy.function) {
+      switch (orderByParams.function) {
         case "count":
           return direction(count(column));
         case "sum":

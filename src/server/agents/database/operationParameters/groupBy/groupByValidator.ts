@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { GroupByQuery } from "~/server/userDatabaseConnector/types";
+import type {
+  GroupByKey,
+  GroupByOrderBy,
+  GroupByQuery,
+} from "~/server/userDatabaseConnector/types";
+import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
 export interface GroupByJoinOption {
   table: string;
@@ -9,8 +14,10 @@ export interface GroupByJoinOption {
 export interface GroupByValidatorContext {
   baseTableName: string;
   joinOptions: GroupByJoinOption[]; // possible joins (1 hop)
-  allPossibleColumns: string[]; // fully qualified table.column (base + all joins)
-  numericalColumns: string[]; // subset of allPossibleColumns that are numeric/computed numeric
+  allColumns: string[]; // fully qualified table.column (base + all joins)
+  groupableColumns: string[]; // subset eligible for plain column grouping (non-temporal)
+  intervalColumns: string[]; // subset eligible for date interval grouping
+  numericalColumns: string[]; // subset of allColumns that are numeric/computed numeric
 }
 
 export interface GroupByValidResult {
@@ -54,47 +61,107 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     .nullable()
     .describe("Chosen joins (subset of available); null or empty for none");
 
-  const colEnum = z.enum([
-    ctx.allPossibleColumns[0],
-    ...ctx.allPossibleColumns.slice(1),
-  ] as [string, ...string[]]);
-  const numColEnum = ctx.numericalColumns.length
-    ? z.enum([ctx.numericalColumns[0], ...ctx.numericalColumns.slice(1)] as [
-        string,
-        ...string[]
-      ])
-    : z.never();
+  const buildEnum = (values: string[]) =>
+    values.length ? stringArrayToZodEnum(values) : null;
 
-  const aggObject = (e: typeof colEnum | typeof numColEnum) =>
+  const allColumnsEnum = buildEnum(ctx.allColumns);
+  const numericalColumnsEnum = buildEnum(ctx.numericalColumns);
+  const groupableColumnsEnum = buildEnum(ctx.groupableColumns);
+  const intervalColumnsEnum = buildEnum(ctx.intervalColumns);
+
+  const allColumnsEnumOrNever = allColumnsEnum ?? z.never();
+
+  const buildAggregateArraySchema = (
+    enumSchema: z.ZodEnum<[string, ...string[]]> | null
+  ) =>
+    enumSchema
+      ? z
+          .array(enumSchema)
+          .min(1)
+          .describe("Columns for this aggregate (fully qualified)")
+          .nullable()
+      : z.null();
+
+  type ColumnGroupKey = Extract<GroupByKey, { type: "column" }>;
+  type IntervalGroupKey = Extract<GroupByKey, { type: "dateInterval" }>;
+
+  const buildColumnGroupKeySchema = (
+    columnEnum: z.ZodEnum<[string, ...string[]]>
+  ): z.ZodType<ColumnGroupKey> =>
     z
       .object({
-        columns: z
-          .array(e)
-          .min(1)
-          .describe("Columns for this aggregate (fully qualified)"),
+        type: z.literal("column"),
+        column: columnEnum,
+        alias: z.string().min(1).optional(),
       })
-      .nullable();
+      .strict();
 
-  return z.object({
-    joins: joinsSchema.optional(),
-    groupBy: z
-      .array(colEnum)
-      .min(1)
-      .describe("Columns to group by (fully qualified)"),
-    count: aggObject(colEnum),
-    sum: ctx.numericalColumns.length ? aggObject(numColEnum) : z.null(),
-    min: ctx.numericalColumns.length ? aggObject(numColEnum) : z.null(),
-    max: ctx.numericalColumns.length ? aggObject(numColEnum) : z.null(),
-    avg: ctx.numericalColumns.length ? aggObject(numColEnum) : z.null(),
-    orderBy: z.object({
+  const buildIntervalGroupKeySchema = (
+    columnEnum: z.ZodEnum<[string, ...string[]]>
+  ): z.ZodType<IntervalGroupKey> =>
+    z
+      .object({
+        type: z.literal("dateInterval"),
+        column: columnEnum,
+        interval: z.enum(["day", "week", "month", "quarter", "year", "hour"]),
+        alias: z.string().min(1).optional(),
+      })
+      .strict();
+
+  const columnKeySchema = groupableColumnsEnum
+    ? buildColumnGroupKeySchema(groupableColumnsEnum)
+    : null;
+
+  const intervalKeySchema = intervalColumnsEnum
+    ? buildIntervalGroupKeySchema(intervalColumnsEnum)
+    : null;
+
+  let groupByKeySchema: z.ZodType<GroupByKey>;
+  if (columnKeySchema && intervalKeySchema) {
+    groupByKeySchema = z.union([columnKeySchema, intervalKeySchema]);
+  } else if (columnKeySchema) {
+    groupByKeySchema = columnKeySchema;
+  } else if (intervalKeySchema) {
+    groupByKeySchema = intervalKeySchema;
+  } else {
+    groupByKeySchema = z.never();
+  }
+
+  const groupKeyOrderSchema = z
+    .object({
+      type: z.literal("groupKey"),
+      key: z.string(),
+      direction: z.enum(["asc", "desc"]),
+    })
+    .strict();
+
+  const aggregateOrderSchema = z
+    .object({
+      type: z.literal("aggregate"),
       function: z.enum(
         ctx.numericalColumns.length
           ? (["count", "sum", "min", "max", "avg"] as const)
           : (["count"] as const)
       ),
-      column: colEnum.describe("Column referenced by order by function"),
+      column: allColumnsEnumOrNever.describe(
+        "Column referenced by order by function"
+      ),
       direction: z.enum(["asc", "desc"]),
-    }),
+    })
+    .strict();
+
+  return z.object({
+    joins: joinsSchema.optional(),
+    groupBy: z
+      .array(groupByKeySchema)
+      .min(1)
+      .describe("Columns or interval keys to group by"),
+    count: buildAggregateArraySchema(allColumnsEnum),
+    sum: buildAggregateArraySchema(numericalColumnsEnum),
+    min: buildAggregateArraySchema(numericalColumnsEnum),
+    max: buildAggregateArraySchema(numericalColumnsEnum),
+    avg: buildAggregateArraySchema(numericalColumnsEnum),
+    orderBy: z.union([groupKeyOrderSchema, aggregateOrderSchema]),
     limit: z.number().int().positive().max(1000),
   });
 }
@@ -116,14 +183,27 @@ export function validateGroupByCandidate(
     return { status: "invalid", issues };
   }
 
-  const data = parsed.data;
+  const data = parsed.data as {
+    joins?: GroupByQuery["operationParameters"]["joins"];
+    groupBy: GroupByKey[];
+    count: string[] | null;
+    sum: string[] | null;
+    min: string[] | null;
+    max: string[] | null;
+    avg: string[] | null;
+    orderBy: GroupByOrderBy;
+    limit: number;
+  };
 
   // Type the joins properly to avoid unsafe access
-  const joins = data.joins as Array<{
-    table: string;
-    joinPath: string;
-    joinType: "inner" | "left" | "right";
-  }> | null | undefined;
+  const joins = data.joins as
+    | Array<{
+        table: string;
+        joinPath: string;
+        joinType: "inner" | "left" | "right";
+      }>
+    | null
+    | undefined;
 
   const selectedJoinTables = new Set([
     ctx.baseTableName,
@@ -151,40 +231,116 @@ export function validateGroupByCandidate(
     });
   };
 
-  ensureColumnTablesAllowed(data.groupBy, "groupBy");
-  ensureColumnTablesAllowed(data.count?.columns, "count.columns");
-  ensureColumnTablesAllowed(data.sum?.columns, "sum.columns");
-  ensureColumnTablesAllowed(data.min?.columns, "min.columns");
-  ensureColumnTablesAllowed(data.max?.columns, "max.columns");
-  ensureColumnTablesAllowed(data.avg?.columns, "avg.columns");
+  const resolvedGroupBy: GroupByKey[] = [];
+  const aliasSet = new Set<string>();
+  data.groupBy.forEach((key, index) => {
+    const aliasCandidate =
+      key.alias && key.alias.trim().length > 0
+        ? key.alias.trim()
+        : key.type === "column"
+        ? key.column
+        : `${key.column}|${key.interval}`;
+
+    if (aliasSet.has(aliasCandidate)) {
+      issues.push({
+        path: `groupBy[${index}].alias`,
+        message: `Alias ${aliasCandidate} is used more than once`,
+        code: "duplicate_alias",
+      });
+    } else {
+      aliasSet.add(aliasCandidate);
+    }
+
+    const groupByTable = tablePart(key.column);
+    if (!selectedJoinTables.has(groupByTable)) {
+      issues.push({
+        path: `groupBy[${index}].column`,
+        message: `Column ${key.column} references table not selected in joins`,
+        code: "unselected_table",
+      });
+    }
+
+    if (key.type === "column" && ctx.intervalColumns.includes(key.column)) {
+      issues.push({
+        path: `groupBy[${index}].column`,
+        message: `Column ${key.column} is temporal and must use dateInterval grouping`,
+        code: "invalid_column_grouping",
+      });
+    }
+
+    if (
+      key.type === "dateInterval" &&
+      !ctx.intervalColumns.includes(key.column)
+    ) {
+      issues.push({
+        path: `groupBy[${index}].column`,
+        message: `Column ${key.column} must be a date/time column for interval grouping`,
+        code: "invalid_interval_column",
+      });
+    }
+
+    resolvedGroupBy.push({
+      ...key,
+      alias: aliasCandidate,
+    });
+  });
+
+  ensureColumnTablesAllowed(data.count ?? undefined, "count");
+  ensureColumnTablesAllowed(data.sum ?? undefined, "sum");
+  ensureColumnTablesAllowed(data.min ?? undefined, "min");
+  ensureColumnTablesAllowed(data.max ?? undefined, "max");
+  ensureColumnTablesAllowed(data.avg ?? undefined, "avg");
 
   // orderBy validation
-  if (data.orderBy.function === "count") {
-    if (!data.groupBy.includes(data.orderBy.column)) {
+  if (data.orderBy.type === "groupKey") {
+    if (!aliasSet.has(data.orderBy.key)) {
       issues.push({
-        path: "orderBy.column",
-        message:
-          "When ordering by count, column must be one of groupBy columns",
-        code: "orderBy_invalid_column",
+        path: "orderBy.key",
+        message: `OrderBy key ${data.orderBy.key} must match a groupBy alias`,
+        code: "orderBy_key_missing",
       });
     }
   } else {
-    if (!ctx.numericalColumns.includes(data.orderBy.column)) {
+    if (
+      data.orderBy.function !== "count" &&
+      !ctx.numericalColumns.includes(data.orderBy.column)
+    ) {
       issues.push({
         path: "orderBy.column",
         message: `Column ${data.orderBy.column} is not numerical for function ${data.orderBy.function}`,
         code: "orderBy_not_numeric",
       });
     }
-  }
 
-  // Column table selection for orderBy
-  if (!selectedJoinTables.has(tablePart(data.orderBy.column))) {
-    issues.push({
-      path: "orderBy.column",
-      message: `OrderBy column table not in selected joins`,
-      code: "orderBy_table_missing",
-    });
+    const allowedTables = selectedJoinTables;
+    if (!allowedTables.has(tablePart(data.orderBy.column))) {
+      issues.push({
+        path: "orderBy.column",
+        message: `OrderBy column table not in selected joins`,
+        code: "orderBy_table_missing",
+      });
+    }
+
+    const aggregateColumnsByFunction: Record<
+      "count" | "sum" | "min" | "max" | "avg",
+      string[] | null | undefined
+    > = {
+      count: data.count,
+      sum: data.sum,
+      min: data.min,
+      max: data.max,
+      avg: data.avg,
+    };
+
+    const targetColumns = aggregateColumnsByFunction[data.orderBy.function];
+
+    if (!targetColumns?.includes(data.orderBy.column)) {
+      issues.push({
+        path: "orderBy.column",
+        message: `Column ${data.orderBy.column} must be included in the ${data.orderBy.function} aggregate columns`,
+        code: "orderBy_column_not_aggregated",
+      });
+    }
   }
 
   if (issues.length) {
@@ -192,18 +348,30 @@ export function validateGroupByCandidate(
   }
 
   // Strip empty aggregate columns arrays (should not happen due to min(1), but defensively)
-  const cleanAgg = (agg: { columns: string[] } | null | undefined) =>
-    agg?.columns && agg.columns.length > 0 ? agg : null;
+  const cleanAgg = (agg: string[] | null | undefined) =>
+    agg && agg.length > 0 ? agg : null;
 
   const result: GroupByQuery["operationParameters"] = {
     joins: data.joins && data.joins.length > 0 ? data.joins : null,
-    groupBy: data.groupBy,
-    count: cleanAgg(data.count ?? null),
-    sum: cleanAgg(data.sum ?? null),
-    min: cleanAgg(data.min ?? null),
-    max: cleanAgg(data.max ?? null),
-    avg: cleanAgg(data.avg ?? null),
-    orderBy: data.orderBy,
+    groupBy: resolvedGroupBy,
+    count: cleanAgg(data.count),
+    sum: cleanAgg(data.sum),
+    min: cleanAgg(data.min),
+    max: cleanAgg(data.max),
+    avg: cleanAgg(data.avg),
+    orderBy:
+      data.orderBy.type === "groupKey"
+        ? {
+            type: "groupKey",
+            key: data.orderBy.key,
+            direction: data.orderBy.direction,
+          }
+        : {
+            type: "aggregate",
+            function: data.orderBy.function,
+            column: data.orderBy.column,
+            direction: data.orderBy.direction,
+          },
     limit: data.limit,
   };
 

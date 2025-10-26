@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CountRelationsQuery } from "~/server/userDatabaseConnector/types";
+import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
 export interface CountRelationsRelationOption {
   name: string;
@@ -34,18 +35,12 @@ export type CountRelationsValidationResult =
 export function buildCountRelationsZodSchema(
   ctx: CountRelationsValidatorContext
 ) {
-  const baseColEnum = z.enum([
-    ctx.baseColumns[0],
-    ...ctx.baseColumns.slice(1),
-  ] as [string, ...string[]]);
+  const baseColEnum = stringArrayToZodEnum(ctx.baseColumns);
 
   // Build per relation literal object schemas so tool guidance is strict
   const relationLiteralSchemas = ctx.relationOptions.map((rel) => {
     const distinctEnum = rel.targetColumns.length
-      ? (z.enum([rel.targetColumns[0], ...rel.targetColumns.slice(1)] as [
-          string,
-          ...string[]
-        ]) as z.ZodType<string>)
+      ? (stringArrayToZodEnum(rel.targetColumns) as z.ZodType<string>)
       : z.never();
     return z.object({
       name: z.literal(rel.name),
@@ -71,10 +66,9 @@ export function buildCountRelationsZodSchema(
   }
 
   // ctx.relationOptions length guaranteed > 0 past early return above
-  const relationNameEnum = z.enum([
-    ctx.relationOptions[0]!.name,
-    ...ctx.relationOptions.slice(1).map((r) => r.name),
-  ] as [string, ...string[]]);
+  const relationNameEnum = stringArrayToZodEnum(
+    ctx.relationOptions.map((r) => r.name)
+  );
 
   return z.object({
     columns: z

@@ -169,9 +169,10 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      "Groups rows by one or more columns in starting table or a joined table. Can calculate the Count, Sum, Min, Max or Avg of the columns in the starting table or joined tabled grouped by the grouped columns. If a join is not needed set joins to null. The results are ordered in descending order and limited to a chosen value. If you want to groupBy a date column use groupByDateInterval instead. When grouping by an ID column, also add a friendly name to the groupBy array to present to the user later. Column names in groupBy array must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'.",
+      "Groups rows by one or more keys drawn from the starting table or joined tables. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`) or date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`). Aggregates (count, sum, min, max, avg) should be declared as arrays of fully-qualified column names, or set to null when unused. When joins are not needed set joins to null. Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Make sure any alias you provide in the groupBy array is unique. Supports join types: 'inner' (default), 'left', 'right'.",
     example: {
-      question: "How many cars are owned by users in each country?",
+      question:
+        "How many cars are owned by users in each country, sorted by the total?",
       query: {
         table: "user",
         operation: "groupBy",
@@ -183,14 +184,18 @@ export const operationDocs = {
               joinType: "inner",
             },
           ],
-          groupBy: ["country.name"],
-          sum: {
-            columns: ["user.cars"],
-          },
+          groupBy: [
+            {
+              type: "column",
+              column: "country.name",
+            },
+          ],
+          sum: ["user.cars"],
           min: null,
           max: null,
           count: null,
           orderBy: {
+            type: "aggregate",
             function: "sum",
             column: "user.cars",
             direction: "desc",
@@ -202,37 +207,6 @@ export const operationDocs = {
         { country: "USA", _sum: { cars: 12 } },
         { country: "UK", _sum: { cars: 8 } },
         { country: "IRE", _sum: { cars: 7 } },
-      ],
-    },
-  },
-  groupByDateInterval: {
-    description:
-      "Calculates aggregations (min, max, count, sum, or avg) of records grouped by a given date interval. (day, week, month, year). This is useful for time series analysis. OrderBy can be 'chronological', 'reverseChronological', or an object with function, column, and direction. If the order is not specified you should use 'chronological' as the default order. 'reverseChronological' can be used to find the X most recent records grouped by the specified date interval.",
-    example: {
-      question: "Which months had the highest average order amounts?",
-      query: {
-        table: "orders",
-        operation: "groupByDateInterval",
-        operationParameters: {
-          dateColumn: "orderDate",
-          interval: "month",
-          sum: null,
-          min: null,
-          max: null,
-          count: null,
-          avg: ["totalAmount"],
-          orderBy: {
-            function: "avg",
-            column: "totalAmount",
-            direction: "desc",
-          },
-          limit: 3,
-        },
-      },
-      response: [
-        { date_interval: "2021-02-01", _avg: { totalAmount: 145.75 } },
-        { date_interval: "2021-03-01", _avg: { totalAmount: 132.25 } },
-        { date_interval: "2021-01-01", _avg: { totalAmount: 120.5 } },
       ],
     },
   },

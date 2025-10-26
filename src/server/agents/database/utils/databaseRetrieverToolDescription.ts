@@ -31,7 +31,8 @@ ${whereConditionDocsSummary}
 - Always specify the table name you want to query
 - Choose the appropriate operation based on what data you need
 - Use where conditions to filter results when needed
-- For groupBy operations on date columns, use groupByDateInterval instead
+- For time-based grouping, use a groupBy key with { type: "dateInterval", column: "table.dateColumn", interval: "month" }
+- Provide aggregate lists (count, sum, min, max, avg) as arrays of fully-qualified column names, or null when not needed
 - When joining tables, ensure you specify the correct joinPath following the schema relationships
 - Column names in joined queries must use 'table.column' format
 - OrderBy is optional for operations that support it - set to null if not needed

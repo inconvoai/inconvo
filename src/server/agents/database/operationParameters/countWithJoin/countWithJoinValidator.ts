@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CountWithJoinQuery } from "~/server/userDatabaseConnector/types";
+import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
 export interface CountWithJoinValidatorContext {
   baseTable: string;
@@ -51,10 +52,7 @@ export function buildCountWithJoinZodSchema(
     .min(1, "At least one join required")
     .describe("Selected joins to traverse from base table");
 
-  const colEnum = z.enum([
-    ctx.allPossibleColumns[0],
-    ...ctx.allPossibleColumns.slice(1),
-  ] as [string, ...string[]]);
+  const colEnum = stringArrayToZodEnum(ctx.allPossibleColumns);
 
   return z.object({
     joins: joinsSchema,

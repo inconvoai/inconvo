@@ -25,6 +25,7 @@ import {
   validateGroupByCandidate,
   type GroupByValidationResult,
 } from "./groupByValidator";
+import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
 // Extended ToolMessage type with artifact
 interface ToolMessageWithArtifact extends ToolMessage {
@@ -63,23 +64,62 @@ export async function defineGroupByOperationParameters(
     ...joinOptions.map((o) => o.table),
   ]);
 
-  // Build fully qualified columns and numerical subset
-  const allPossibleColumns: string[] = [];
-  const numericalColumns: string[] = [];
+  type ColumnMetadata = {
+    isTemporal: boolean;
+    isNumeric: boolean;
+  };
+
+  const columnCatalog = new Map<string, ColumnMetadata>();
+
+  const upsertColumn = (columnKey: string, metadata: ColumnMetadata) => {
+    const existing = columnCatalog.get(columnKey);
+    if (!existing) {
+      columnCatalog.set(columnKey, metadata);
+      return;
+    }
+    columnCatalog.set(columnKey, {
+      isTemporal: existing.isTemporal || metadata.isTemporal,
+      isNumeric: existing.isNumeric || metadata.isNumeric,
+    });
+  };
+
+  const temporalTypes = new Set(["DateTime", "Date"]);
+  const numericTypes = new Set(["number"]);
+
   tablesPotential.forEach((tName) => {
     const tSchema = params.schema.find((t) => t.name === tName);
     if (!tSchema) return;
     tSchema.columns.forEach((c) => {
       const fq = `${tName}.${c.name}`;
-      allPossibleColumns.push(fq);
-      if (["number"].includes(c.type)) numericalColumns.push(fq);
+      upsertColumn(fq, {
+        isTemporal: temporalTypes.has(c.type),
+        isNumeric: numericTypes.has(c.type),
+      });
     });
     tSchema.computedColumns.forEach((c) => {
       const fq = `${tName}.${c.name}`;
-      allPossibleColumns.push(fq);
-      numericalColumns.push(fq); // assume computed are numerical allowed like original logic
+      upsertColumn(fq, {
+        isTemporal: false,
+        isNumeric: true, // computed columns are assumed numeric for aggregation eligibility
+      });
     });
   });
+
+  const allColumns = Array.from(columnCatalog.keys());
+  const intervalColumns = allColumns.filter(
+    (col) => columnCatalog.get(col)?.isTemporal === true
+  );
+  const numericalColumns = allColumns.filter(
+    (col) => columnCatalog.get(col)?.isNumeric === true
+  );
+  const groupableColumns = allColumns.filter(
+    (col) => columnCatalog.get(col)?.isTemporal !== true
+  );
+
+  assert(
+    allColumns.length > 0,
+    "No columns available to group by in selected tables"
+  );
 
   // TOOL: validate + apply groupBy operation parameters
   const applyGroupByOperationParametersTool = tool(
@@ -94,7 +134,9 @@ export async function defineGroupByOperationParameters(
             table: o.table,
             joinPath: o.joinPath,
           })),
-          allPossibleColumns,
+          allColumns,
+          groupableColumns,
+          intervalColumns,
           numericalColumns,
         }
       );
@@ -125,37 +167,112 @@ export async function defineGroupByOperationParameters(
               .describe(
                 `The tables to join to the ${params.tableName} table, if any.`
               ),
-            groupBy: z.array(z.string()),
-            sum: z
-              .object({
-                columns: z.array(z.string()),
-              })
-              .nullable(),
-            min: z
-              .object({
-                columns: z.array(z.string()),
-              })
-              .nullable(),
-            max: z
-              .object({
-                columns: z.array(z.string()),
-              })
-              .nullable(),
-            count: z
-              .object({
-                columns: z.array(z.string()),
-              })
-              .nullable(),
-            avg: z
-              .object({
-                columns: z.array(z.string()),
-              })
-              .nullable(),
-            orderBy: z.object({
-              function: z.string(),
-              column: z.string(),
-              direction: z.string(),
-            }),
+            groupBy: (() => {
+              const keySchemas: z.ZodTypeAny[] = [];
+              if (groupableColumns.length > 0) {
+                keySchemas.push(
+                  z
+                    .object({
+                      type: z.literal("column"),
+                      column: stringArrayToZodEnum(groupableColumns),
+                      alias: z.string().min(1).optional(),
+                    })
+                    .strict()
+                );
+              }
+              if (intervalColumns.length > 0) {
+                keySchemas.push(
+                  z
+                    .object({
+                      type: z.literal("dateInterval"),
+                      column: stringArrayToZodEnum(intervalColumns),
+                      interval: z.enum([
+                        "day",
+                        "week",
+                        "month",
+                        "quarter",
+                        "year",
+                        "hour",
+                      ]),
+                      alias: z.string().min(1).optional(),
+                    })
+                    .strict()
+                );
+              }
+              const unionSchema = keySchemas[0]
+                ? keySchemas.length === 1
+                  ? keySchemas[0]
+                  : z.union(
+                      keySchemas as [
+                        z.ZodTypeAny,
+                        z.ZodTypeAny,
+                        ...z.ZodTypeAny[]
+                      ]
+                    )
+                : z.never();
+              return z.array(unionSchema).min(1);
+            })(),
+            count: (() => {
+              if (!allColumns.length) return z.null();
+              return z
+                .array(stringArrayToZodEnum(allColumns))
+                .min(1)
+                .describe("Columns to count (fully qualified)")
+                .nullable();
+            })(),
+            sum: (() => {
+              if (!numericalColumns.length) return z.null();
+              return z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .min(1)
+                .describe("Columns to sum (fully qualified)")
+                .nullable();
+            })(),
+            min: (() => {
+              if (!numericalColumns.length) return z.null();
+              return z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .min(1)
+                .describe("Columns to take minimum over (fully qualified)")
+                .nullable();
+            })(),
+            max: (() => {
+              if (!numericalColumns.length) return z.null();
+              return z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .min(1)
+                .describe("Columns to take maximum over (fully qualified)")
+                .nullable();
+            })(),
+            avg: (() => {
+              if (!numericalColumns.length) return z.null();
+              return z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .min(1)
+                .describe("Columns to average (fully qualified)")
+                .nullable();
+            })(),
+            orderBy: z.union([
+              z
+                .object({
+                  type: z.literal("aggregate"),
+                  function: z.enum(
+                    numericalColumns.length
+                      ? (["count", "sum", "min", "max", "avg"] as const)
+                      : (["count"] as const)
+                  ),
+                  column: stringArrayToZodEnum(allColumns),
+                  direction: z.enum(["asc", "desc"]),
+                })
+                .strict(),
+              z
+                .object({
+                  type: z.literal("groupKey"),
+                  key: z.string(),
+                  direction: z.enum(["asc", "desc"]),
+                })
+                .strict(),
+            ]),
             limit: z.number().min(1).max(1000),
           })
           .describe(

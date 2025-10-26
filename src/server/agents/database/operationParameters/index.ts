@@ -10,7 +10,6 @@ import YAML from "yaml";
 import { operationDocs } from "../utils/operationDocs";
 import type { Operation } from "../types";
 import type {
-  GroupByDateIntervalQuery,
   AggregateQuery,
   CountByTemporalComponentQuery,
   CountQuery,
@@ -272,86 +271,6 @@ export function operationParametersAgent(params: RequestParams) {
     };
   };
 
-  const groupByDateInterval = async (
-    state: typeof OperationParametersState.State
-  ) => {
-    const aggregateSchema = z.object({
-      dateColumn: stringArrayToZodEnum(state.dateColumnNames),
-      interval: z.enum(["day", "week", "month", "year"]),
-      avg: z
-        .array(stringArrayToZodEnum(state.numericalColumnNames))
-        .nullable()
-        .describe("AVG of the column values over the interval"),
-      sum: z
-        .array(stringArrayToZodEnum(state.numericalColumnNames))
-        .nullable()
-        .describe("SUM of the column values over the interval"),
-      min: z
-        .array(stringArrayToZodEnum(state.numericalColumnNames))
-        .nullable()
-        .describe("MIN value for column over the interval"),
-      max: z
-        .array(stringArrayToZodEnum(state.numericalColumnNames))
-        .nullable()
-        .describe("MAX value for column over the interval"),
-      count: z
-        .array(stringArrayToZodEnum(state.columnNames))
-        .nullable()
-        .describe("COUNT of the column over the interval"),
-    });
-
-    const orderByFunctionSchema = z.object({
-      orderByFunction:
-        state.numericalColumnNames?.length > 0
-          ? z.enum(["count", "sum", "min", "max", "avg"] as const)
-          : z.enum(["count"] as const),
-    });
-
-    const [aggregateParams, orderByFunctionObj] = await Promise.all([
-      determineParamsForSchema({
-        schema: aggregateSchema,
-      }),
-      determineParamsForSchema({
-        schema: orderByFunctionSchema,
-      }),
-    ]);
-
-    const orderBySchema = z.object({
-      orderBy: z.union([
-        z.enum(["chronological", "reverseChronological"]),
-        z.object({
-          function: z.literal(orderByFunctionObj.orderByFunction),
-          column:
-            orderByFunctionObj.orderByFunction === "count"
-              ? stringArrayToZodEnum(state.columnNames)
-              : stringArrayToZodEnum(state.numericalColumnNames),
-          direction: z.enum(["asc", "desc"]),
-        }),
-      ]),
-      limit: z.number().describe("The number of records to return"),
-    });
-
-    const orderByOperationParams = await determineParamsForSchema({
-      schema: orderBySchema,
-      queryCurrentState: YAML.stringify(aggregateParams),
-    });
-
-    const operationParameters = {
-      ...aggregateParams,
-      avg: transformEmptyArrayToNull(aggregateParams.avg),
-      sum: transformEmptyArrayToNull(aggregateParams.sum),
-      min: transformEmptyArrayToNull(aggregateParams.min),
-      max: transformEmptyArrayToNull(aggregateParams.max),
-      count: transformEmptyArrayToNull(aggregateParams.count),
-      ...orderByOperationParams,
-    };
-
-    return {
-      operationParameters:
-        operationParameters satisfies GroupByDateIntervalQuery["operationParameters"],
-    };
-  };
-
   const countByTemporalComponent = async (
     state: typeof OperationParametersState.State
   ) => {
@@ -390,7 +309,6 @@ export function operationParametersAgent(params: RequestParams) {
     .addNode("countWithJoin", countWithJoin)
     .addNode("countRelations", countRelations)
     .addNode("aggregate", aggregate)
-    .addNode("groupByDateInterval", groupByDateInterval)
     .addNode("countByTemporalComponent", countByTemporalComponent)
     .addNode("groupBy", groupBy);
 

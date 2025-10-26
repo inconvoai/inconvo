@@ -9,7 +9,6 @@ import type {
   FindDistinctByEditDistanceQuery,
   FindDistinctQuery,
   FindManyQuery,
-  GroupByDateIntervalQuery,
   GroupByQuery,
   QuestionConditions,
   TableConditions,
@@ -391,79 +390,76 @@ export function normalizeQueryColumnReferences(
         },
       };
     }
-    case "groupByDateInterval": {
-      const params =
-        query.operationParameters as GroupByDateIntervalQuery["operationParameters"];
-      const normalizeBaseColumns = (columns: string[] | null) =>
-        columns
-          ? columns.map((column) =>
-              normalizeColumnName(lookup, baseTableName, column, aliasTracker)
-            )
-          : null;
-      const normalizedOrderBy =
-        typeof params.orderBy === "string"
-          ? params.orderBy
-          : {
-              ...params.orderBy,
-              column: normalizeColumnName(
-                lookup,
-                baseTableName,
-                params.orderBy.column,
-                aliasTracker
-              ),
-            };
-      return {
-        ...query,
-        operationParameters: {
-          ...params,
-          dateColumn: normalizeColumnName(
-            lookup,
-            baseTableName,
-            params.dateColumn,
-            aliasTracker
-          ),
-          count: normalizeBaseColumns(params.count),
-          sum: normalizeBaseColumns(params.sum),
-          min: normalizeBaseColumns(params.min),
-          max: normalizeBaseColumns(params.max),
-          avg: normalizeBaseColumns(params.avg),
-          orderBy: normalizedOrderBy,
-        },
-      };
-    }
     case "groupBy": {
       const params =
         query.operationParameters as GroupByQuery["operationParameters"];
-      const normalizeAgg = (
-        aggregate: { columns: string[] } | null
-      ): { columns: string[] } | null => {
+      const normalizeAgg = (aggregate: string[] | null): string[] | null => {
         if (!aggregate) return null;
-        return {
-          columns: aggregate.columns.map((column) =>
-            normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
-          ),
-        };
+        return aggregate.map((column) =>
+          normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+        );
       };
+
+      const normalizedGroupBy = params.groupBy.map((groupKey) => {
+        if (groupKey.type === "column") {
+          const normalizedColumn = normalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = groupKey.column;
+          const alias =
+            (groupKey.alias ?? defaultAlias) === defaultAlias
+              ? normalizedColumn
+              : groupKey.alias ?? normalizedColumn;
+          return {
+            ...groupKey,
+            column: normalizedColumn,
+            alias,
+          };
+        }
+
+        const normalizedColumn = normalizeFullyQualifiedColumn(
+          groupKey.column,
+          lookup,
+          aliasTracker
+        );
+        const defaultAlias = `${groupKey.column}|${groupKey.interval}`;
+        const normalizedDefaultAlias = `${normalizedColumn}|${groupKey.interval}`;
+        const alias =
+          (groupKey.alias ?? defaultAlias) === defaultAlias
+            ? normalizedDefaultAlias
+            : groupKey.alias ?? normalizedDefaultAlias;
+        return {
+          ...groupKey,
+          column: normalizedColumn,
+          alias,
+        };
+      });
+
+      const normalizedOrderBy =
+        params.orderBy.type === "groupKey"
+          ? params.orderBy
+          : {
+              ...params.orderBy,
+              column: normalizeFullyQualifiedColumn(
+                params.orderBy.column,
+                lookup,
+                aliasTracker
+              ),
+            };
+
       return {
         ...query,
         operationParameters: {
           ...params,
-          groupBy: params.groupBy.map((column) =>
-            normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
-          ),
+          groupBy: normalizedGroupBy,
           count: normalizeAgg(params.count),
           sum: normalizeAgg(params.sum),
           min: normalizeAgg(params.min),
           max: normalizeAgg(params.max),
           avg: normalizeAgg(params.avg),
-          orderBy: {
-            ...params.orderBy,
-            column: normalizeFullyQualifiedColumn(
-              params.orderBy.column,
-              lookup,
-              aliasTracker
-            ),
-          },
+          orderBy: normalizedOrderBy,
         },
       };
     }

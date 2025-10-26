@@ -12,7 +12,6 @@ export type Operation =
   | "countRelations"
   | "aggregate"
   | "groupBy"
-  | "groupByDateInterval"
   | "countByTemporalComponent";
 
 export interface DBQuery {

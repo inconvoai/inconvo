@@ -42,9 +42,12 @@ import { InconvoSandbox } from "../utils/sandbox";
 interface Chart {
   type: "bar" | "line";
   data: {
-    label: string;
-    value: number;
-  }[];
+    labels: string[];
+    datasets: {
+      name: string;
+      values: number[];
+    }[];
+  };
   title: string;
   xLabel: string;
   yLabel: string;
@@ -60,6 +63,17 @@ interface Answer {
   message: string;
   chart?: Chart;
   table?: Table;
+}
+
+function assertChartDatasetsMatchLabels(chart: Chart) {
+  const labelCount = chart.data.labels.length;
+  chart.data.datasets.forEach((dataset) => {
+    if (dataset.values.length !== labelCount) {
+      throw new Error(
+        `Chart dataset "${dataset.name}" must include ${labelCount} values.`
+      );
+    }
+  });
 }
 
 interface QuestionAgentParams {
@@ -472,7 +486,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:ced2837d");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:576b20e6");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -530,7 +544,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     if (validResponses.length > 0) {
       // Prioritize by type: chart > table > text
       const priorityOrder = ["chart", "table", "text"] as const;
-      let selectedResponse = validResponses[0];
+      let selectedResponse = validResponses[0]!;
 
       for (const type of priorityOrder) {
         const match = validResponses.find((r) => r.type === type);
@@ -538,6 +552,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           selectedResponse = match;
           break;
         }
+      }
+
+      if (selectedResponse.type === "chart" && selectedResponse.chart) {
+        assertChartDatasetsMatchLabels(selectedResponse.chart);
       }
 
       return {
@@ -551,7 +569,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       };
     }
 
-    const outputFormatterPrompt = await getPrompt("format_response:84092a5b");
+    const outputFormatterPrompt = await getPrompt("format_response:249747a7");
 
     const variantUnion = z.discriminatedUnion("type", [
       z.object({
@@ -565,20 +583,43 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           .describe(
             "Explanation accompanying the chart highlighting key insights"
           ),
-        chart: z.object({
-          type: z.enum(["line", "bar"]).describe("Chart type"),
-          data: z
-            .array(
-              z.object({
-                label: z.string().describe("X axis label"),
-                value: z.number().describe("Y axis value"),
+        chart: z
+          .object({
+            type: z.enum(["line", "bar"]).describe("Chart type"),
+            data: z
+              .object({
+                labels: z
+                  .array(z.string())
+                  .min(1)
+                  .describe("Ordered labels for the x axis"),
+                datasets: z
+                  .array(
+                    z
+                      .object({
+                        name: z
+                          .string()
+                          .describe(
+                            "Name of the dataset to render in the chart"
+                          ),
+                        values: z
+                          .array(z.number())
+                          .describe(
+                            "Ordered y axis values, each index aligns with the labels array"
+                          ),
+                      })
+                      .strict()
+                  )
+                  .min(1)
+                  .describe(
+                    "Datasets to plot, aligned by index to the labels array"
+                  ),
               })
-            )
-            .min(1),
-          title: z.string(),
-          xLabel: z.string(),
-          yLabel: z.string(),
-        }),
+              .strict(),
+            title: z.string(),
+            xLabel: z.string(),
+            yLabel: z.string(),
+          })
+          .strict(),
       }),
       z.object({
         type: z.literal("table"),
@@ -598,11 +639,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         "Discriminated union payload. Use type to decide which shape to return."
       ),
     });
-
-    const outputFormatterSchema = model.withStructuredOutput(wrappedSchema, {
-      strict: true,
-      method: "jsonSchema",
-    });
+    const model_4_1 = getAIModel("azure:gpt-4.1");
+    const outputFormatterSchema = model_4_1.withStructuredOutput(
+      wrappedSchema,
+      {
+        strict: true,
+        method: "jsonSchema",
+      }
+    );
 
     // Fallback to LLM formatter if no valid responses found
     const messageToFormat = potentialJsonResponses.join("\n") ?? "";
@@ -614,6 +658,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       });
 
     const response = wrapped.data as z.infer<typeof variantUnion>;
+
+    if (response.type === "chart" && response.chart) {
+      assertChartDatasetsMatchLabels(response.chart);
+    }
 
     return {
       answer: response,

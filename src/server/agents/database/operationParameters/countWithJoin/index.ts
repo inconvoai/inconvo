@@ -126,6 +126,7 @@ export async function defineCountWithJoinOperationParameters(
           ),
       }),
       responseFormat: "content_and_artifact",
+      verboseParsingErrors: true,
     }
   );
 

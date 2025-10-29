@@ -280,6 +280,7 @@ export async function defineGroupByOperationParameters(
           ),
       }),
       responseFormat: "content_and_artifact",
+      verboseParsingErrors: true,
     }
   );
 

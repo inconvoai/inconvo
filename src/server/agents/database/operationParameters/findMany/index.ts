@@ -133,6 +133,7 @@ export async function defineFindManyOperationParameters(
           ),
       }),
       responseFormat: "content_and_artifact",
+      verboseParsingErrors: true,
     }
   );
 

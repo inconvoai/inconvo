@@ -185,6 +185,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => y,
       default: () => "",
     }),
+    sandboxUsed: Annotation<boolean>({
+      reducer: (x, y) => x || y,
+      default: () => false,
+    }),
     // Messages in the current run
     messages: Annotation<BaseMessage[] | null>({
       reducer: (x, y) => messageReducer(x, y),
@@ -381,7 +385,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     tools.push(getSchemasForTables);
 
     const uploadDataToPythonSandbox = tool(
-      async () => {
+      async (_input, config: ToolRunnableConfig) => {
         const currentState = getCurrentTaskInput<typeof AgentState.State>();
         const jsonResultsToUploadToSandbox =
           currentState.databaseRetrieverResults ?? [];
@@ -406,7 +410,25 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         const describeResult = await sandbox.describeFiles(
           uploadResult.files.map((file) => file.name)
         );
-        return describeResult;
+        const toolCallId = config.toolCall?.id;
+        if (!toolCallId) {
+          throw new Error(
+            "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id."
+          );
+        }
+        return new Command({
+          update: {
+            sandboxUsed: true,
+            messages: [
+              new ToolMessage({
+                status: "success",
+                name: "uploadDataToPythonSandbox",
+                content: JSON.stringify(describeResult),
+                tool_call_id: toolCallId,
+              }),
+            ],
+          },
+        });
       },
       {
         name: "uploadDataToPythonSandbox",
@@ -421,14 +443,32 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     tools.push(uploadDataToPythonSandbox);
 
     const executePythonCode = tool(
-      async (input: { code: string }) => {
+      async (input: { code: string }, config: ToolRunnableConfig) => {
         try {
           const currentState = getCurrentTaskInput<typeof AgentState.State>();
           const sandbox = new InconvoSandbox({
             sandboxId: currentState.runId,
           });
           const executionResult = await sandbox.executeCode(input.code);
-          return executionResult;
+          const toolCallId = config.toolCall?.id;
+          if (!toolCallId) {
+            throw new Error(
+              "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id."
+            );
+          }
+          return new Command({
+            update: {
+              sandboxUsed: true,
+              messages: [
+                new ToolMessage({
+                  status: "success",
+                  name: "executePythonCode",
+                  content: executionResult.output,
+                  tool_call_id: toolCallId,
+                }),
+              ],
+            },
+          });
         } catch (e) {
           return `Calling tool with arguments:\n\n${JSON.stringify(
             input
@@ -501,10 +541,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
-    const sandbox = new InconvoSandbox({
-      sandboxId: state.runId,
-    });
-    await sandbox.destroySandbox();
+    if (state.sandboxUsed) {
+      const sandbox = new InconvoSandbox({
+        sandboxId: state.runId,
+      });
+      await sandbox.destroySandbox();
+    }
 
     // Extract potential JSON responses from the last message
     const potentialJsonResponses = extractTextFromMessage(

@@ -198,6 +198,20 @@ export async function defineGroupByOperationParameters(
                     })
                     .strict()
                 );
+                keySchemas.push(
+                  z
+                    .object({
+                      type: z.literal("dateComponent"),
+                      column: stringArrayToZodEnum(intervalColumns),
+                      component: z.enum([
+                        "dayOfWeek",
+                        "monthOfYear",
+                        "quarterOfYear",
+                      ]),
+                      alias: z.string().min(1).optional(),
+                    })
+                    .strict()
+                );
               }
               const unionSchema = keySchemas[0]
                 ? keySchemas.length === 1

@@ -11,8 +11,7 @@ export type Operation =
   | "countWithJoin"
   | "countRelations"
   | "aggregate"
-  | "groupBy"
-  | "countByTemporalComponent";
+  | "groupBy";
 
 export interface DBQuery {
   table: string;

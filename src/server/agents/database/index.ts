@@ -38,12 +38,12 @@ import { buildConditionsForTable } from "./utils/buildConditionsForTable";
 import { whereConditionDocsSummary } from "./utils/whereDocs";
 import {
   buildColumnLookup,
-  normalizeDateCondition,
-  normalizeQueryColumnReferences,
-  normalizeQuestionConditions,
-  normalizeTableConditions,
-} from "./utils/queryNormalization";
-import type { ColumnAliasMap } from "./utils/queryNormalization";
+  canonicalizeDateCondition,
+  canonicalizeQueryColumnReferences,
+  canonicalizeQuestionConditions,
+  canonicalizeTableConditions,
+} from "./utils/queryCanonicalization";
+import type { ColumnAliasMap } from "./utils/queryCanonicalization";
 
 interface RequestParams {
   userQuestion: string;
@@ -281,7 +281,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   ) => {
     const model = getAIModel("azure:gpt-4.1");
     const operationSelectorPrompt = await getPrompt(
-      "select_operation:b9c74dc0"
+      "select_operation:a6815489"
     );
 
     const { columns = [], outwardRelations: relations = [] } =
@@ -371,23 +371,23 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     };
 
     const columnLookup = buildColumnLookup(state.schema);
-    // Tracker pass by ref and updated in the normalization functions
+    // Tracker passed by ref and updated in the canonicalization functions
     const columnAliasTracker: ColumnAliasMap = {};
 
-    const normalizedTableConditions = normalizeTableConditions(
+    const canonicalizedTableConditions = canonicalizeTableConditions(
       state.tableConditions,
       state.tableName,
       columnLookup,
       columnAliasTracker
     );
-    const normalizedQuestionConditions = normalizeQuestionConditions(
+    const canonicalizedQuestionConditions = canonicalizeQuestionConditions(
       state.questionConditions,
       state.tableName,
       state.schema,
       columnLookup,
       columnAliasTracker
     );
-    const normalizedDateCondition = normalizeDateCondition(
+    const canonicalizedDateCondition = canonicalizeDateCondition(
       state.dateCondition,
       state.tableName,
       columnLookup,
@@ -396,9 +396,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
     const queryWithConditions = formatAllConditions(
       query,
-      normalizedTableConditions,
-      normalizedQuestionConditions,
-      normalizedDateCondition
+      canonicalizedTableConditions,
+      canonicalizedQuestionConditions,
+      canonicalizedDateCondition
     );
 
     const relatedTableNames = new Set([
@@ -418,7 +418,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       queryWithConditions.jsonColumnSchema = state.jsonColumnSchema;
     }
 
-    const queryUsingDbNames = normalizeQueryColumnReferences(
+    const queryUsingDbNames = canonicalizeQueryColumnReferences(
       queryWithConditions,
       state.schema,
       state.tableName,

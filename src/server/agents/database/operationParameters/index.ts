@@ -11,7 +11,6 @@ import { operationDocs } from "../utils/operationDocs";
 import type { Operation } from "../types";
 import type {
   AggregateQuery,
-  CountByTemporalComponentQuery,
   CountQuery,
   CountRelationsQuery,
   CountWithJoinQuery,
@@ -271,20 +270,6 @@ export function operationParametersAgent(params: RequestParams) {
     };
   };
 
-  const countByTemporalComponent = async (
-    state: typeof OperationParametersState.State
-  ) => {
-    const schema = z.object({
-      component: z.enum(["Day", "Month"]),
-      dateColumn: stringArrayToZodEnum(state.dateColumnNames),
-    });
-    const operationParameters = await determineParamsForSchema({ schema });
-    return {
-      operationParameters:
-        operationParameters satisfies CountByTemporalComponentQuery["operationParameters"],
-    };
-  };
-
   const findDistinct = async (state: typeof OperationParametersState.State) => {
     const schema = z.object({
       column: stringArrayToZodEnum(state.columnNames).describe(
@@ -309,7 +294,6 @@ export function operationParametersAgent(params: RequestParams) {
     .addNode("countWithJoin", countWithJoin)
     .addNode("countRelations", countRelations)
     .addNode("aggregate", aggregate)
-    .addNode("countByTemporalComponent", countByTemporalComponent)
     .addNode("groupBy", groupBy);
 
   workflow

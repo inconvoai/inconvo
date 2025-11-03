@@ -1,7 +1,6 @@
 import type { Schema } from "~/server/db/schema";
 import type {
   AggregateQuery,
-  CountByTemporalComponentQuery,
   CountQuery,
   CountRelationsQuery,
   CountWithJoinQuery,
@@ -61,7 +60,7 @@ export function buildColumnLookup(schema: Schema): ColumnLookup {
   return lookup;
 }
 
-export function normalizeTableConditions(
+export function canonicalizeTableConditions(
   tableConditions: TableConditions,
   tableName: string,
   lookup: ColumnLookup,
@@ -70,7 +69,7 @@ export function normalizeTableConditions(
   if (!tableConditions) return null;
   return tableConditions.map((condition) => ({
     ...condition,
-    column: normalizeColumnName(
+    column: canonicalizeColumnName(
       lookup,
       tableName,
       condition.column,
@@ -79,7 +78,7 @@ export function normalizeTableConditions(
   }));
 }
 
-export function normalizeQuestionConditions(
+export function canonicalizeQuestionConditions(
   questionConditions: QuestionConditions,
   tableName: string,
   schema: Schema,
@@ -88,9 +87,9 @@ export function normalizeQuestionConditions(
 ): QuestionConditions {
   if (!questionConditions) return null;
   if (!questionConditions.AND) return questionConditions;
-  const normalized = questionConditions.AND.map(
+  const canonicalized = questionConditions.AND.map(
     (filter): QuestionConditionNode =>
-      normalizeQuestionConditionNode(
+      canonicalizeQuestionConditionNode(
         filter,
         tableName,
         schema,
@@ -99,11 +98,11 @@ export function normalizeQuestionConditions(
       )
   );
   return {
-    AND: normalized,
+    AND: canonicalized,
   };
 }
 
-function normalizeQuestionConditionNode(
+function canonicalizeQuestionConditionNode(
   node: unknown,
   tableName: string,
   schema: Schema,
@@ -121,7 +120,7 @@ function normalizeQuestionConditionNode(
     if (key === "AND" || key === "OR" || key === "NOT") {
       if (Array.isArray(value)) {
         result[key] = value.map((item) =>
-          normalizeQuestionConditionNode(
+          canonicalizeQuestionConditionNode(
             item,
             tableName,
             schema,
@@ -145,15 +144,15 @@ function normalizeQuestionConditionNode(
         return;
       }
       const relationValue = value as Record<string, unknown>;
-      const normalizedRelationValue: Record<string, unknown> = {};
+      const canonicalizedRelationValue: Record<string, unknown> = {};
       Object.entries(relationValue).forEach(([relationKey, relationClause]) => {
         if (relationClause === null) {
-          normalizedRelationValue[relationKey] = null;
+          canonicalizedRelationValue[relationKey] = null;
           return;
         }
         if (Array.isArray(relationClause)) {
-          const normalizedArray = relationClause.map((item) =>
-            normalizeQuestionConditionNode(
+          const canonicalizedArray = relationClause.map((item) =>
+            canonicalizeQuestionConditionNode(
               item,
               relation.targetTable.name,
               schema,
@@ -161,12 +160,12 @@ function normalizeQuestionConditionNode(
               aliasTracker
             )
           );
-          normalizedRelationValue[relationKey] =
-            normalizedArray as unknown as QuestionConditionNode;
+          canonicalizedRelationValue[relationKey] =
+            canonicalizedArray as unknown as QuestionConditionNode;
           return;
         }
         if (typeof relationClause === "object") {
-          normalizedRelationValue[relationKey] = normalizeQuestionConditionNode(
+          canonicalizedRelationValue[relationKey] = canonicalizeQuestionConditionNode(
             relationClause,
             relation.targetTable.name,
             schema,
@@ -175,31 +174,31 @@ function normalizeQuestionConditionNode(
           );
           return;
         }
-        normalizedRelationValue[relationKey] = relationClause;
+        canonicalizedRelationValue[relationKey] = relationClause;
       });
-      result[key] = normalizedRelationValue;
+      result[key] = canonicalizedRelationValue;
       return;
     }
 
-    const normalizedKey = normalizeColumnName(
+    const canonicalizedKey = canonicalizeColumnName(
       lookup,
       tableName,
       key,
       aliasTracker
     );
     if (value && typeof value === "object" && !Array.isArray(value)) {
-      result[normalizedKey] = {
+      result[canonicalizedKey] = {
         ...(value as Record<string, unknown>),
       };
     } else {
-      result[normalizedKey] = value;
+      result[canonicalizedKey] = value;
     }
   });
 
   return result as QuestionConditionNode;
 }
 
-export function normalizeDateCondition(
+export function canonicalizeDateCondition(
   dateCondition: DateCondition,
   tableName: string,
   lookup: ColumnLookup,
@@ -210,7 +209,7 @@ export function normalizeDateCondition(
     OR: dateCondition.OR.map((orClause) => ({
       AND: orClause.AND.map((andClause) => ({
         ...andClause,
-        column: normalizeColumnName(
+        column: canonicalizeColumnName(
           lookup,
           tableName,
           andClause.column,
@@ -221,7 +220,7 @@ export function normalizeDateCondition(
   };
 }
 
-export function normalizeQueryColumnReferences(
+export function canonicalizeQueryColumnReferences(
   query: DBQuery,
   schema: Schema,
   baseTableName: string,
@@ -233,12 +232,12 @@ export function normalizeQueryColumnReferences(
       const params =
         query.operationParameters as FindManyQuery["operationParameters"];
       const joinPathMap = buildJoinPathMap(schema, baseTableName);
-      const normalizedColumns = Object.entries(params.columns ?? {}).reduce<
+      const canonicalizedColumns = Object.entries(params.columns ?? {}).reduce<
         Record<string, string[]>
       >((acc, [path, columns]) => {
         if (!Array.isArray(columns)) return acc;
         acc[path] = columns.map((column) =>
-          normalizeColumnForJoinPath(
+          canonicalizeColumnForJoinPath(
             lookup,
             joinPathMap,
             baseTableName,
@@ -249,10 +248,10 @@ export function normalizeQueryColumnReferences(
         );
         return acc;
       }, {});
-      const normalizedOrderBy = params.orderBy
+      const canonicalizedOrderBy = params.orderBy
         ? {
             ...params.orderBy,
-            column: normalizeColumnName(
+            column: canonicalizeColumnName(
               lookup,
               baseTableName,
               params.orderBy.column,
@@ -264,8 +263,8 @@ export function normalizeQueryColumnReferences(
         ...query,
         operationParameters: {
           ...params,
-          columns: normalizedColumns,
-          orderBy: normalizedOrderBy,
+          columns: canonicalizedColumns,
+          orderBy: canonicalizedOrderBy,
         },
       };
     }
@@ -276,7 +275,7 @@ export function normalizeQueryColumnReferences(
         ...query,
         operationParameters: {
           ...params,
-          column: normalizeColumnName(
+          column: canonicalizeColumnName(
             lookup,
             baseTableName,
             params.column,
@@ -292,7 +291,7 @@ export function normalizeQueryColumnReferences(
         ...query,
         operationParameters: {
           ...params,
-          column: normalizeColumnName(
+          column: canonicalizeColumnName(
             lookup,
             baseTableName,
             params.column,
@@ -311,11 +310,11 @@ export function normalizeQueryColumnReferences(
           count: params.count.map((column) =>
             column === "_all"
               ? column
-              : normalizeColumnName(lookup, baseTableName, column, aliasTracker)
+              : canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
           ),
           countDistinct: params.countDistinct
             ? params.countDistinct.map((column) =>
-                normalizeColumnName(lookup, baseTableName, column, aliasTracker)
+                canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
               )
             : null,
         },
@@ -329,11 +328,11 @@ export function normalizeQueryColumnReferences(
         operationParameters: {
           ...params,
           count: params.count.map((column) =>
-            normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+            canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
           ),
           countDistinct: params.countDistinct
             ? params.countDistinct.map((column) =>
-                normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+                canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
               )
             : null,
         },
@@ -348,7 +347,7 @@ export function normalizeQueryColumnReferences(
         operationParameters: {
           ...params,
           columns: params.columns.map((column) =>
-            normalizeColumnName(lookup, baseTableName, column, aliasTracker)
+            canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
           ),
           relationsToCount: params.relationsToCount.map((relation) => {
             const targetTable = relationMap[relation.name];
@@ -357,7 +356,7 @@ export function normalizeQueryColumnReferences(
             }
             return {
               ...relation,
-              distinct: normalizeColumnName(
+              distinct: canonicalizeColumnName(
                 lookup,
                 targetTable,
                 relation.distinct,
@@ -371,38 +370,38 @@ export function normalizeQueryColumnReferences(
     case "aggregate": {
       const params =
         query.operationParameters as AggregateQuery["operationParameters"];
-      const normalizeBaseColumns = (columns: string[] | null) =>
+      const canonicalizeBaseColumns = (columns: string[] | null) =>
         columns
           ? columns.map((column) =>
-              normalizeColumnName(lookup, baseTableName, column, aliasTracker)
+              canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
             )
           : null;
       return {
         ...query,
         operationParameters: {
           ...params,
-          avg: normalizeBaseColumns(params.avg),
-          sum: normalizeBaseColumns(params.sum),
-          min: normalizeBaseColumns(params.min),
-          max: normalizeBaseColumns(params.max),
-          count: normalizeBaseColumns(params.count),
-          median: normalizeBaseColumns(params.median),
+          avg: canonicalizeBaseColumns(params.avg),
+          sum: canonicalizeBaseColumns(params.sum),
+          min: canonicalizeBaseColumns(params.min),
+          max: canonicalizeBaseColumns(params.max),
+          count: canonicalizeBaseColumns(params.count),
+          median: canonicalizeBaseColumns(params.median),
         },
       };
     }
     case "groupBy": {
       const params =
         query.operationParameters as GroupByQuery["operationParameters"];
-      const normalizeAgg = (aggregate: string[] | null): string[] | null => {
+      const canonicalizeAgg = (aggregate: string[] | null): string[] | null => {
         if (!aggregate) return null;
         return aggregate.map((column) =>
-          normalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+          canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
         );
       };
 
-      const normalizedGroupBy = params.groupBy.map((groupKey) => {
+      const canonicalizedGroupBy = params.groupBy.map((groupKey) => {
         if (groupKey.type === "column") {
-          const normalizedColumn = normalizeFullyQualifiedColumn(
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
             groupKey.column,
             lookup,
             aliasTracker
@@ -410,39 +409,62 @@ export function normalizeQueryColumnReferences(
           const defaultAlias = groupKey.column;
           const alias =
             (groupKey.alias ?? defaultAlias) === defaultAlias
-              ? normalizedColumn
-              : groupKey.alias ?? normalizedColumn;
+              ? canonicalizedColumn
+              : groupKey.alias ?? canonicalizedColumn;
           return {
             ...groupKey,
-            column: normalizedColumn,
+            column: canonicalizedColumn,
             alias,
           };
         }
 
-        const normalizedColumn = normalizeFullyQualifiedColumn(
-          groupKey.column,
-          lookup,
-          aliasTracker
-        );
-        const defaultAlias = `${groupKey.column}|${groupKey.interval}`;
-        const normalizedDefaultAlias = `${normalizedColumn}|${groupKey.interval}`;
-        const alias =
-          (groupKey.alias ?? defaultAlias) === defaultAlias
-            ? normalizedDefaultAlias
-            : groupKey.alias ?? normalizedDefaultAlias;
-        return {
-          ...groupKey,
-          column: normalizedColumn,
-          alias,
-        };
+        if (groupKey.type === "dateInterval") {
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = `${groupKey.column}|${groupKey.interval}`;
+          const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.interval}`;
+          const alias =
+            (groupKey.alias ?? defaultAlias) === defaultAlias
+              ? canonicalizedDefaultAlias
+              : groupKey.alias ?? canonicalizedDefaultAlias;
+          return {
+            ...groupKey,
+            column: canonicalizedColumn,
+            alias,
+          };
+        }
+
+        if (groupKey.type === "dateComponent") {
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = `${groupKey.column}|${groupKey.component}`;
+          const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.component}`;
+          const alias =
+            (groupKey.alias ?? defaultAlias) === defaultAlias
+              ? canonicalizedDefaultAlias
+              : groupKey.alias ?? canonicalizedDefaultAlias;
+          return {
+            ...groupKey,
+            column: canonicalizedColumn,
+            alias,
+          };
+        }
+
+        return groupKey;
       });
 
-      const normalizedOrderBy =
+      const canonicalizedOrderBy =
         params.orderBy.type === "groupKey"
           ? params.orderBy
           : {
               ...params.orderBy,
-              column: normalizeFullyQualifiedColumn(
+              column: canonicalizeFullyQualifiedColumn(
                 params.orderBy.column,
                 lookup,
                 aliasTracker
@@ -453,29 +475,13 @@ export function normalizeQueryColumnReferences(
         ...query,
         operationParameters: {
           ...params,
-          groupBy: normalizedGroupBy,
-          count: normalizeAgg(params.count),
-          sum: normalizeAgg(params.sum),
-          min: normalizeAgg(params.min),
-          max: normalizeAgg(params.max),
-          avg: normalizeAgg(params.avg),
-          orderBy: normalizedOrderBy,
-        },
-      };
-    }
-    case "countByTemporalComponent": {
-      const params =
-        query.operationParameters as CountByTemporalComponentQuery["operationParameters"];
-      return {
-        ...query,
-        operationParameters: {
-          ...params,
-          dateColumn: normalizeColumnName(
-            lookup,
-            baseTableName,
-            params.dateColumn,
-            aliasTracker
-          ),
+          groupBy: canonicalizedGroupBy,
+          count: canonicalizeAgg(params.count),
+          sum: canonicalizeAgg(params.sum),
+          min: canonicalizeAgg(params.min),
+          max: canonicalizeAgg(params.max),
+          avg: canonicalizeAgg(params.avg),
+          orderBy: canonicalizedOrderBy,
         },
       };
     }
@@ -484,7 +490,7 @@ export function normalizeQueryColumnReferences(
   }
 }
 
-function normalizeColumnName(
+function canonicalizeColumnName(
   lookup: ColumnLookup,
   tableName: string,
   columnName: string,
@@ -501,7 +507,7 @@ function buildJoinPathMap(schema: Schema, baseTableName: string) {
   return iqlPaths;
 }
 
-function normalizeColumnForJoinPath(
+function canonicalizeColumnForJoinPath(
   lookup: ColumnLookup,
   joinPathMap: Record<string, string>,
   baseTable: string,
@@ -512,10 +518,10 @@ function normalizeColumnForJoinPath(
   const tableName =
     path === baseTable ? baseTable : joinPathMap[path] ?? undefined;
   if (!tableName) return column;
-  return normalizeColumnName(lookup, tableName, column, aliasTracker);
+  return canonicalizeColumnName(lookup, tableName, column, aliasTracker);
 }
 
-function normalizeFullyQualifiedColumn(
+function canonicalizeFullyQualifiedColumn(
   column: string,
   lookup: ColumnLookup,
   aliasTracker?: ColumnAliasMap
@@ -526,13 +532,13 @@ function normalizeFullyQualifiedColumn(
   }
   const tableName = column.slice(0, separatorIndex);
   const columnName = column.slice(separatorIndex + 1);
-  const normalizedColumn = normalizeColumnName(
+  const canonicalizedColumn = canonicalizeColumnName(
     lookup,
     tableName,
     columnName,
     aliasTracker
   );
-  return `${tableName}.${normalizedColumn}`;
+  return `${tableName}.${canonicalizedColumn}`;
 }
 
 function getTableSchema(schema: Schema, tableName: string) {

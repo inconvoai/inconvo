@@ -16,7 +16,7 @@ export interface GroupByValidatorContext {
   joinOptions: GroupByJoinOption[]; // possible joins (1 hop)
   allColumns: string[]; // fully qualified table.column (base + all joins)
   groupableColumns: string[]; // subset eligible for plain column grouping (non-temporal)
-  intervalColumns: string[]; // subset eligible for date interval grouping
+  intervalColumns: string[]; // subset eligible for date interval/component grouping
   numericalColumns: string[]; // subset of allColumns that are numeric/computed numeric
 }
 
@@ -84,6 +84,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
 
   type ColumnGroupKey = Extract<GroupByKey, { type: "column" }>;
   type IntervalGroupKey = Extract<GroupByKey, { type: "dateInterval" }>;
+  type ComponentGroupKey = Extract<GroupByKey, { type: "dateComponent" }>;
 
   const buildColumnGroupKeySchema = (
     columnEnum: z.ZodEnum<[string, ...string[]]>
@@ -108,6 +109,18 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
       })
       .strict();
 
+  const buildComponentGroupKeySchema = (
+    columnEnum: z.ZodEnum<[string, ...string[]]>
+  ): z.ZodType<ComponentGroupKey> =>
+    z
+      .object({
+        type: z.literal("dateComponent"),
+        column: columnEnum,
+        component: z.enum(["dayOfWeek", "monthOfYear", "quarterOfYear"]),
+        alias: z.string().min(1).optional(),
+      })
+      .strict();
+
   const columnKeySchema = groupableColumnsEnum
     ? buildColumnGroupKeySchema(groupableColumnsEnum)
     : null;
@@ -116,15 +129,28 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     ? buildIntervalGroupKeySchema(intervalColumnsEnum)
     : null;
 
+  const componentKeySchema = intervalColumnsEnum
+    ? buildComponentGroupKeySchema(intervalColumnsEnum)
+    : null;
+
+  const keySchemas: z.ZodTypeAny[] = [];
+  if (columnKeySchema) keySchemas.push(columnKeySchema);
+  if (intervalKeySchema) keySchemas.push(intervalKeySchema);
+  if (componentKeySchema) keySchemas.push(componentKeySchema);
+
   let groupByKeySchema: z.ZodType<GroupByKey>;
-  if (columnKeySchema && intervalKeySchema) {
-    groupByKeySchema = z.union([columnKeySchema, intervalKeySchema]);
-  } else if (columnKeySchema) {
-    groupByKeySchema = columnKeySchema;
-  } else if (intervalKeySchema) {
-    groupByKeySchema = intervalKeySchema;
-  } else {
+  if (keySchemas.length === 0) {
     groupByKeySchema = z.never();
+  } else if (keySchemas.length === 1) {
+    groupByKeySchema = keySchemas[0] as z.ZodType<GroupByKey>;
+  } else {
+    groupByKeySchema = z.union(
+      keySchemas as [
+        z.ZodTypeAny,
+        z.ZodTypeAny,
+        ...z.ZodTypeAny[]
+      ]
+    ) as z.ZodType<GroupByKey>;
   }
 
   const groupKeyOrderSchema = z
@@ -155,7 +181,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     groupBy: z
       .array(groupByKeySchema)
       .min(1)
-      .describe("Columns or interval keys to group by"),
+    .describe("Columns, date intervals, or date components to group by"),
     count: buildAggregateArraySchema(allColumnsEnum),
     sum: buildAggregateArraySchema(numericalColumnsEnum),
     min: buildAggregateArraySchema(numericalColumnsEnum),
@@ -234,12 +260,16 @@ export function validateGroupByCandidate(
   const resolvedGroupBy: GroupByKey[] = [];
   const aliasSet = new Set<string>();
   data.groupBy.forEach((key, index) => {
+    const defaultAlias =
+      key.type === "column"
+        ? key.column
+        : key.type === "dateInterval"
+        ? `${key.column}|${key.interval}`
+        : `${key.column}|${key.component}`;
     const aliasCandidate =
       key.alias && key.alias.trim().length > 0
         ? key.alias.trim()
-        : key.type === "column"
-        ? key.column
-        : `${key.column}|${key.interval}`;
+        : defaultAlias;
 
     if (aliasSet.has(aliasCandidate)) {
       issues.push({
@@ -263,18 +293,18 @@ export function validateGroupByCandidate(
     if (key.type === "column" && ctx.intervalColumns.includes(key.column)) {
       issues.push({
         path: `groupBy[${index}].column`,
-        message: `Column ${key.column} is temporal and must use dateInterval grouping`,
+        message: `Column ${key.column} is temporal and must use dateInterval or dateComponent grouping`,
         code: "invalid_column_grouping",
       });
     }
 
     if (
-      key.type === "dateInterval" &&
+      (key.type === "dateInterval" || key.type === "dateComponent") &&
       !ctx.intervalColumns.includes(key.column)
     ) {
       issues.push({
         path: `groupBy[${index}].column`,
-        message: `Column ${key.column} must be a date/time column for interval grouping`,
+        message: `Column ${key.column} must be a date/time column for temporal grouping`,
         code: "invalid_interval_column",
       });
     }

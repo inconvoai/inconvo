@@ -153,4 +153,61 @@ describe("groupBy validator", () => {
       expect(result.result.groupBy[0]?.alias).toBe("users.createdAt|month");
     }
   });
+
+  it("valid component grouping uses alias defaults", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "dayOfWeek" as const,
+        },
+      ],
+      count: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "users.createdAt|dayOfWeek",
+        direction: "asc" as const,
+      },
+      limit: 7,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.groupBy[0]?.alias).toBe(
+        "users.createdAt|dayOfWeek"
+      );
+    }
+  });
+
+  it("invalid when dateComponent targets non-temporal column", () => {
+    const bad = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.name",
+          component: "monthOfYear" as const,
+        },
+      ],
+      count: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "users.name|monthOfYear",
+        direction: "asc" as const,
+      },
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(bad, ctx);
+    expect(result.status).toBe("invalid");
+  });
 });

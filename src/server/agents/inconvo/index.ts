@@ -463,7 +463,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
                 new ToolMessage({
                   status: "success",
                   name: "executePythonCode",
-                  content: executionResult.output,
+                  content: JSON.stringify(executionResult, null, 2),
                   tool_call_id: toolCallId,
                 }),
               ],

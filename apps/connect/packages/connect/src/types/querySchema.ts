@@ -341,9 +341,19 @@ const groupByDateIntervalKeySchema = z
   })
   .strict();
 
+const groupByDateComponentKeySchema = z
+  .object({
+    type: z.literal("dateComponent"),
+    column: z.string(),
+    component: z.enum(["dayOfWeek", "monthOfYear", "quarterOfYear"]),
+    alias: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const groupByKeySchema = z.union([
   groupByColumnKeySchema,
   groupByDateIntervalKeySchema,
+  groupByDateComponentKeySchema,
 ]);
 export type GroupByKey = z.infer<typeof groupByKeySchema>;
 
@@ -365,19 +375,6 @@ const groupByOrderBySchema = z.union([
     .strict(),
 ]);
 export type GroupByOrderBy = z.infer<typeof groupByOrderBySchema>;
-
-const countByTemporalComponentSchema = z
-  .object({
-    ...baseSchema,
-    operation: z.literal("countByTemporalComponent"),
-    operationParameters: z
-      .object({
-        component: z.enum(["Day", "Month"]),
-        dateColumn: z.string(),
-      })
-      .strict(),
-  })
-  .strict();
 
 const groupBySchema = z
   .object({
@@ -416,7 +413,6 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,
-  countByTemporalComponentSchema,
 ]);
 
 export type Query = z.infer<typeof QuerySchema>;

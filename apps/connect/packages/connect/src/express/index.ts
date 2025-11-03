@@ -7,7 +7,6 @@ import { aggregate } from "~/operations/aggregate/index";
 import { findMany } from "~/operations/findMany/index";
 import { count } from "~/operations/count";
 import { countRelations } from "~/operations/countRelations";
-import { countByTemporalComponent } from "~/operations/countByTemporalComponent";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
 import { getDb } from "~/dbConnection";
@@ -61,9 +60,6 @@ export async function inconvo() {
           break;
         case "countWithJoin":
           response = await countWithJoin(db, parsedQuery);
-          break;
-        case "countByTemporalComponent":
-          response = await countByTemporalComponent(db, parsedQuery);
           break;
         case "countRelations":
           response = await countRelations(db, parsedQuery);

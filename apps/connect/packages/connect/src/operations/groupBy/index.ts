@@ -8,6 +8,7 @@ import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
 import { createAggregationFields } from "~/operations/utils/createAggregationFields";
 import assert from "assert";
 import { buildDateIntervalExpression } from "~/operations/utils/buildDateIntervalExpression";
+import { buildDateComponentExpressions } from "~/operations/utils/buildDateComponentExpression";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
@@ -70,7 +71,7 @@ export async function groupBy(db: any, query: Query) {
 
   const groupBySelectFields: Record<string, any> = {};
   const groupByColumns: any[] = [];
-  const groupKeyExpressions = new Map<string, any>();
+  const groupKeyExpressions = new Map<string, { select: any; order: any }>();
 
   for (const key of operationParameters.groupBy) {
     if (key.type === "column") {
@@ -88,7 +89,7 @@ export async function groupBy(db: any, query: Query) {
       const alias = key.alias ?? `${tableName}.${columnName}`;
       groupBySelectFields[alias] = column;
       groupByColumns.push(column);
-      groupKeyExpressions.set(alias, column);
+      groupKeyExpressions.set(alias, { select: column, order: column });
     } else if (key.type === "dateInterval") {
       assert(
         key.column.split(".").length === 2,
@@ -108,7 +109,32 @@ export async function groupBy(db: any, query: Query) {
       );
       groupBySelectFields[alias] = intervalExpression;
       groupByColumns.push(intervalExpression);
-      groupKeyExpressions.set(alias, intervalExpression);
+      groupKeyExpressions.set(alias, {
+        select: intervalExpression,
+        order: intervalExpression,
+      });
+    } else if (key.type === "dateComponent") {
+      assert(
+        key.column.split(".").length === 2,
+        "Invalid column format for group by component (not table.column)"
+      );
+      const [tableName, columnName] = key.column.split(".");
+      const column = getColumnFromTable({
+        columnName,
+        tableName,
+        drizzleSchema,
+        computedColumns,
+      });
+      const alias =
+        key.alias ?? `${tableName}.${columnName}|${key.component}`;
+      const { select, order } = buildDateComponentExpressions(
+        column,
+        key.component
+      );
+      groupBySelectFields[alias] = select;
+      groupByColumns.push(select);
+      groupByColumns.push(order);
+      groupKeyExpressions.set(alias, { select, order });
     }
   }
 
@@ -139,7 +165,7 @@ export async function groupBy(db: any, query: Query) {
           `Order By key ${key} must reference a defined groupBy key`
         );
         const sorter = direction === "asc" ? asc : desc;
-        return sorter(expression);
+        return sorter(expression.order);
       }
 
       assert(

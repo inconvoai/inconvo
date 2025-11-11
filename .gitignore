@@ -26,6 +26,7 @@ next-env.d.ts
 # misc
 .DS_Store
 *.pem
+!certs/aws-rds-ca-bundle.pem
 
 # debug
 npm-debug.log*

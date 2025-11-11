@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { QuerySchema } from "~/types/querySchema";
 import { ZodError } from "zod";
@@ -5,6 +6,79 @@ import { generateHmac, generateMessage } from "~/util/hmac";
 import { buildSchema } from "~/util/buildSchema";
 import { aggregate } from "~/operations/aggregate";
 import { getDb } from "~/dbConnection";
+import { registerNonce } from "~/util/replayProtection";
+
+const hexPattern = /^[0-9a-f]+$/i;
+
+function authenticateRequest({
+  method,
+  requestUrl,
+  signature,
+  timestamp,
+  random,
+  body,
+}: {
+  method: "GET" | "POST";
+  requestUrl: string;
+  signature: string | null;
+  timestamp: string | null;
+  random: string | null;
+  body?: object;
+}) {
+  if (!timestamp || !random || !signature) {
+    return NextResponse.json({ error: "Invalid Request" }, { status: 400 });
+  }
+
+  const requestTimestamp = Number(timestamp);
+
+  if (!Number.isFinite(requestTimestamp)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+
+  if (Math.abs(requestTimestamp - currentTimestamp) > 300) {
+    return NextResponse.json(
+      { message: "Unauthorized - timestamp is too old or too new" },
+      { status: 401 }
+    );
+  }
+
+  const message = generateMessage({
+    method,
+    body,
+    requestUrl,
+    timestamp,
+    random,
+  });
+
+  const generatedSignature = generateHmac(message);
+  const expectedLength = generatedSignature.length;
+
+  if (signature.length !== expectedLength || !hexPattern.test(signature)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const generatedBuffer = Buffer.from(generatedSignature, "hex");
+  const receivedBuffer = Buffer.from(signature, "hex");
+
+  if (!crypto.timingSafeEqual(generatedBuffer, receivedBuffer)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const nonceAccepted = registerNonce(random, requestTimestamp, {
+    nowSeconds: currentTimestamp,
+  });
+
+  if (!nonceAccepted) {
+    return NextResponse.json(
+      { message: "Unauthorized - replay detected" },
+      { status: 401 }
+    );
+  }
+
+  return null;
+}
 
 async function handleGetRequest(request: NextRequest) {
   try {
@@ -12,30 +86,16 @@ async function handleGetRequest(request: NextRequest) {
     const random = request.headers.get("inconvo-random");
     const signature = request.headers.get("inconvo-signature");
 
-    if (!timestamp || !random || !signature) {
-      return NextResponse.json({ error: "Invalid Request" }, { status: 400 });
-    }
-
-    const message = generateMessage({
+    const authError = authenticateRequest({
       method: "GET",
       requestUrl: "/",
+      signature,
       timestamp,
       random,
     });
 
-    const generatedSignature = generateHmac(message);
-    const requestTimestamp = Number(timestamp);
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-
-    if (Math.abs(requestTimestamp - currentTimestamp) > 300) {
-      return NextResponse.json(
-        { message: "Unauthorized - timestamp is too old or too new" },
-        { status: 401 }
-      );
-    }
-
-    if (generatedSignature !== signature) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (authError) {
+      return authError;
     }
 
     const schema = buildSchema();
@@ -56,31 +116,17 @@ async function handlePostRequest(request: NextRequest) {
     const signature = request.headers.get("inconvo-signature");
     const body = await request.json();
 
-    if (!timestamp || !random || !signature) {
-      return NextResponse.json({ error: "Invalid Request" }, { status: 400 });
-    }
-
-    const message = generateMessage({
+    const authError = authenticateRequest({
       method: "POST",
-      body,
       requestUrl: "/",
+      signature,
       timestamp,
       random,
+      body,
     });
 
-    const generatedSignature = generateHmac(message);
-    const requestTimestamp = Number(timestamp);
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-
-    if (Math.abs(requestTimestamp - currentTimestamp) > 300) {
-      return NextResponse.json(
-        { message: "Unauthorized - timestamp is too old or too new" },
-        { status: 401 }
-      );
-    }
-
-    if (generatedSignature !== signature) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    if (authError) {
+      return authError;
     }
 
     const parsedQuery = QuerySchema.parse(body);

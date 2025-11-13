@@ -1,7 +1,6 @@
 import { type Query } from "~/types/querySchema";
-import { asc, avg, count, desc, eq, max, min, sum } from "drizzle-orm";
+import { asc, avg, count, desc, max, min, sum } from "drizzle-orm";
 import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { buildJsonObjectSelect } from "~/operations/utils/jsonBuilderHelpers";
 import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
@@ -9,6 +8,10 @@ import { createAggregationFields } from "~/operations/utils/createAggregationFie
 import assert from "assert";
 import { buildDateIntervalExpression } from "~/operations/utils/buildDateIntervalExpression";
 import { buildDateComponentExpressions } from "~/operations/utils/buildDateComponentExpression";
+import {
+  buildJoinCondition,
+  normaliseJoinHop,
+} from "../utils/joinDescriptorHelpers";
 
 export async function groupBy(db: any, query: Query) {
   assert(query.operation === "groupBy", "Invalid inconvo operation");
@@ -140,7 +143,7 @@ export async function groupBy(db: any, query: Query) {
 
   const orderByParams = operationParameters.orderBy;
 
-  const dbQuery = db
+  let dbQuery = db
     .select({
       ...groupBySelectFields,
       ...selectFields,
@@ -197,48 +200,41 @@ export async function groupBy(db: any, query: Query) {
     })
     .limit(operationParameters.limit);
 
-  if (operationParameters.joins) {
-    for (const join of operationParameters.joins) {
-      const { table: joinTable, joinPath, joinType } = join;
-
-      const [currentKey, relatedKey] = findRelationsBetweenTables(
-        table,
-        joinTable,
-        joinPath.split(".").at(-1) ?? "",
-        drizzleSchema
+  const joins = operationParameters.joins ?? [];
+  for (const join of joins) {
+    const joinType = join.joinType ?? "left";
+    for (const hop of join.path) {
+      const metadata = normaliseJoinHop(hop);
+      const targetTableName = metadata.target[0]?.tableName;
+      if (!targetTableName) {
+        throw new Error("Join descriptor hop is missing target table metadata.");
+      }
+      const joinCondition = buildJoinCondition(
+        metadata,
+        drizzleSchema,
+        computedColumns
       );
 
       switch (joinType) {
-        case "inner": {
-          dbQuery.innerJoin(
-            drizzleSchema[joinTable],
-            eq(
-              drizzleSchema[table][currentKey],
-              drizzleSchema[joinTable][relatedKey]
-            )
+        case "inner":
+          dbQuery = dbQuery.innerJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
           );
           break;
-        }
-        case "left": {
-          dbQuery.leftJoin(
-            drizzleSchema[joinTable],
-            eq(
-              drizzleSchema[table][currentKey],
-              drizzleSchema[joinTable][relatedKey]
-            )
+        case "right":
+          dbQuery = dbQuery.rightJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
           );
           break;
-        }
-        case "right": {
-          dbQuery.rightJoin(
-            drizzleSchema[joinTable],
-            eq(
-              drizzleSchema[table][currentKey],
-              drizzleSchema[joinTable][relatedKey]
-            )
+        case "left":
+        default:
+          dbQuery = dbQuery.leftJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
           );
           break;
-        }
       }
     }
   }

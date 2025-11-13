@@ -202,13 +202,52 @@ const baseSchema = {
   jsonColumnSchema: JsonColumnSchemaSchema.optional(),
 };
 
+const fullyQualifiedColumnSchema = z
+  .string()
+  .min(3)
+  .refine(
+    (value) => value.includes("."),
+    "Join column references must be fully qualified (table.column)."
+  );
+
+export const joinPathHopSchema = z
+  .object({
+    source: z.array(fullyQualifiedColumnSchema).min(1),
+    target: z.array(fullyQualifiedColumnSchema).min(1),
+  })
+  .strict()
+  .superRefine((hop, ctx) => {
+    if (hop.source.length !== hop.target.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Join path hop must pair equal numbers of source and target columns.",
+      });
+    }
+  });
+
+export const joinPathSchema = z.array(joinPathHopSchema).min(1);
+export type JoinPathHop = z.infer<typeof joinPathHopSchema>;
+
+export const joinTypeSchema = z.enum(["inner", "left", "right"]);
+
+export const joinDescriptorSchema = z
+  .object({
+    table: z.string(),
+    name: z.string().min(1).optional(),
+    path: joinPathSchema,
+    joinType: joinTypeSchema.optional(),
+  })
+  .strict();
+
 const findManySchema = z
   .object({
     ...baseSchema,
     operation: z.literal("findMany"),
     operationParameters: z
       .object({
-        columns: z.record(z.string(), z.array(z.string())),
+        select: z.record(z.string(), z.array(z.string())),
+        joins: z.array(joinDescriptorSchema).nullable().optional(),
         orderBy: z
           .object({
             column: z.string(),
@@ -247,37 +286,47 @@ const findDistinctByEditDistanceSchema = z
   })
   .strict();
 
+const countMetricsArraySchema = z.array(z.string()).min(1);
+
 const countSchema = z
   .object({
     ...baseSchema,
     operation: z.literal("count"),
     operationParameters: z
       .object({
-        count: z.array(z.string()),
-        countDistinct: z.array(z.string()).nullable(),
+        joins: z.array(joinDescriptorSchema).nullable().optional(),
+        count: countMetricsArraySchema
+          .nullable()
+          .optional()
+          .default(null),
+        countDistinct: countMetricsArraySchema
+          .nullable()
+          .optional()
+          .default(null),
       })
-      .strict(),
-  })
-  .strict();
+      .strict()
+      .superRefine((params, ctx) => {
+        const hasCount =
+          Array.isArray(params.count) && params.count.length > 0;
+        const hasDistinct =
+          Array.isArray(params.countDistinct) &&
+          params.countDistinct.length > 0;
 
-const countWithJoinSchema = z
-  .object({
-    ...baseSchema,
-    operation: z.literal("countWithJoin"),
-
-    operationParameters: z
-      .object({
-        joins: z.array(
-          z.object({
-            table: z.string(),
-            joinPath: z.string(),
-            joinType: z.enum(["inner", "left", "right"]),
-          })
-        ),
-        count: z.array(z.string()),
-        countDistinct: z.array(z.string()).nullable(),
-      })
-      .strict(),
+        if (!hasCount && !hasDistinct) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "Provide at least one metric via `count` or `countDistinct`.",
+            path: ["count"],
+          });
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "Provide at least one metric via `count` or `countDistinct`.",
+            path: ["countDistinct"],
+          });
+        }
+      }),
   })
   .strict();
 
@@ -288,6 +337,14 @@ const countRelationsSchema = z
     operationParameters: z
       .object({
         columns: z.array(z.string()),
+        joins: z
+          .array(
+            joinDescriptorSchema.extend({
+              name: z.string().min(1),
+            })
+          )
+          .nullable()
+          .optional(),
         relationsToCount: z.array(
           z.object({
             name: z.string(),
@@ -296,7 +353,7 @@ const countRelationsSchema = z
         ),
         orderBy: z
           .object({
-            relation: z.string(),
+            name: z.string(),
             direction: z.enum(["asc", "desc"]),
           })
           .strict()
@@ -313,6 +370,7 @@ const aggregateSchema = z
     operation: z.literal("aggregate"),
     operationParameters: z
       .object({
+        joins: z.array(joinDescriptorSchema).nullable().optional(),
         min: z.array(z.string()).nullable(),
         max: z.array(z.string()).nullable(),
         avg: z.array(z.string()).nullable(),
@@ -382,15 +440,7 @@ const groupBySchema = z
     operation: z.literal("groupBy"),
     operationParameters: z
       .object({
-        joins: z
-          .array(
-            z.object({
-              table: z.string(),
-              joinPath: z.string(),
-              joinType: z.enum(["inner", "left", "right"]),
-            })
-          )
-          .nullable(),
+        joins: z.array(joinDescriptorSchema).nullable().optional(),
         groupBy: z.array(groupByKeySchema).min(1),
         count: z.array(z.string()).nullable(),
         sum: z.array(z.string()).nullable(),
@@ -409,7 +459,6 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   findDistinctSchema,
   findDistinctByEditDistanceSchema,
   countSchema,
-  countWithJoinSchema,
   countRelationsSchema,
   aggregateSchema,
   groupBySchema,

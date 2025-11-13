@@ -1,60 +1,55 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { count } from "~/operations/count";
 import { getDb } from "~/dbConnection";
 
-test("How many lineitems are there with a profit of over $800", async () => {
-  const iql = {
-    table: "fct_order_lineitem",
-    computedColumns: [
+const netTotalComputedColumn = {
+  name: "net_total",
+  table: {
+    name: "orders" as const,
+  },
+  ast: {
+    type: "operation" as const,
+    operator: "-",
+    operands: [
       {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "*",
-          operands: [
-            {
-              type: "column",
-              name: "num_orders",
-            },
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "operation",
-                  operator: "+",
-                  operands: [
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                    },
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_TAX",
-                    },
-                  ],
-                },
-                {
-                  type: "column",
-                  name: "ORDER_LINEITEM_PRODUCT_COGS",
-                },
-              ],
-            },
-          ],
-        },
-        type: "number",
+        type: "operation" as const,
+        operator: "+",
+        operands: [
+          {
+            type: "column" as const,
+            name: "subtotal",
+          },
+          {
+            type: "column" as const,
+            name: "tax",
+          },
+        ],
+      },
+      {
+        type: "column" as const,
+        name: "discount",
       },
     ],
+  },
+  type: "number" as const,
+};
+
+test("How many orders net more than $1,600 after tax and discount?", async () => {
+  const iql = {
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [
       {
-        profit_: {
-          gt: 800,
+        net_total: {
+          gt: 1600,
         },
       },
     ],
     operation: "count",
     operationParameters: {
-      columns: ["_unique_key", "profit_"],
+      count: ["orders.id", "orders.net_total"],
+      countDistinct: null,
     },
   };
 
@@ -62,10 +57,21 @@ test("How many lineitems are there with a profit of over $800", async () => {
   const db = await getDb();
   const response = await count(db, parsedQuery);
 
-  expect(response).toEqual({
+  const { rows } = await db.execute(
+    sql`
+      SELECT COUNT(*)::int AS matching_orders
+      FROM orders
+      WHERE (subtotal + tax - discount) > 1600
+    `
+  );
+  const [sqlResult] = rows as any[];
+
+  const countResult = "data" in response ? response.data : response;
+
+  expect(countResult).toEqual({
     _count: {
-      _unique_key: 18,
-      profit_: 18,
+      "orders.id": Number(sqlResult.matching_orders),
+      "orders.net_total": Number(sqlResult.matching_orders),
     },
   });
 });

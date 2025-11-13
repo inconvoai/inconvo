@@ -1,33 +1,40 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
 
-test("What are my highest revenue generating products?", async () => {
+test("Which products drive the highest order subtotal?", async () => {
   const iql = {
-    table: "fct_order_lineitem",
+    table: "orders",
     whereAndArray: [],
     operation: "groupBy",
     operationParameters: {
       joins: [
         {
-          table: "dim_product",
-          joinPath: "fct_order_lineitem.dim_product",
+          table: "products",
+          name: "product",
+          path: [
+            {
+              source: ["orders.product_id"],
+              target: ["products.id"],
+            },
+          ],
           joinType: "inner",
         },
       ],
       groupBy: [
-        { type: "column", column: "fct_order_lineitem.product_key" },
-        { type: "column", column: "dim_product.PRODUCT_NAME" },
+        { type: "column", column: "orders.product_id" },
+        { type: "column", column: "products.title" },
       ],
       count: null,
-      sum: ["fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE"],
+      sum: ["orders.subtotal"],
       min: null,
       max: null,
       avg: null,
       orderBy: {
         type: "aggregate",
         function: "sum",
-        column: "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
+        column: "orders.subtotal",
         direction: "desc",
       },
       limit: 10,
@@ -38,78 +45,44 @@ test("What are my highest revenue generating products?", async () => {
   const db = await getDb();
   const response = await groupBy(db, parsedQuery);
 
-  console.log("response", response);
+  const { rows } = await db.execute(
+    sql`
+      SELECT
+        o.product_id,
+        p.title,
+        SUM(o.subtotal)::float8 AS subtotal_sum
+      FROM orders o
+      JOIN products p ON p.id = o.product_id
+      GROUP BY o.product_id, p.title
+      ORDER BY subtotal_sum DESC, o.product_id ASC
+      LIMIT 10
+    `
+  );
 
-  expect(response).toEqual([
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 306747,
-      },
-      "fct_order_lineitem.product_key": "shopify_31443282067544",
-      "dim_product.PRODUCT_NAME": "Tiger Toy",
+  const expected: Array<{
+    "orders.product_id": number;
+    "products.title": string;
+    _sum: Record<string, number>;
+  }> = rows.map((row: any) => ({
+    _sum: {
+      "orders.subtotal": Number(row.subtotal_sum),
     },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 187204,
-      },
-      "fct_order_lineitem.product_key": "shopify_44110720696624",
-      "dim_product.PRODUCT_NAME": "Rope and Ball Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 185895,
-      },
-      "fct_order_lineitem.product_key": "shopify_46665181692208",
-      "dim_product.PRODUCT_NAME": "Elephant Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 132908,
-      },
-      "fct_order_lineitem.product_key": "shopify_46988847415600",
-      "dim_product.PRODUCT_NAME": "Rope and Ball Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 125428,
-      },
-      "fct_order_lineitem.product_key": "shopify_40077336641624",
-      "dim_product.PRODUCT_NAME": "Giraffe Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 114332,
-      },
-      "fct_order_lineitem.product_key": "shopify_46988783780144",
-      "dim_product.PRODUCT_NAME": "Tiger Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 59458,
-      },
-      "fct_order_lineitem.product_key": "shopify_30150991413336",
-      "dim_product.PRODUCT_NAME": "Tiger Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 54851,
-      },
-      "fct_order_lineitem.product_key": "shopify_32103211303000",
-      "dim_product.PRODUCT_NAME": "Reindeer Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 49596,
-      },
-      "fct_order_lineitem.product_key": "shopify_30151925137496",
-      "dim_product.PRODUCT_NAME": "Shark Toy",
-    },
-    {
-      _sum: {
-        "fct_order_lineitem.ORDER_LINEITEM_PRODUCT_GROSS_REVENUE": 45329,
-      },
-      "fct_order_lineitem.product_key": "shopify_40077336608856",
-      "dim_product.PRODUCT_NAME": "Giraffe Toy",
-    },
-  ]);
+    "orders.product_id": row.product_id,
+    "products.title": row.title,
+  }));
+
+  const resultRows = Array.isArray(response) ? response : response.data;
+
+  expect(resultRows).toHaveLength(expected.length);
+  expected.forEach((expectedRow, index) => {
+    const actualRow = resultRows[index] as typeof expectedRow;
+    expect(actualRow["orders.product_id"]).toBe(
+      expectedRow["orders.product_id"]
+    );
+    expect(actualRow["products.title"]).toBe(expectedRow["products.title"]);
+    expect(actualRow._sum["orders.subtotal"]).toBeCloseTo(
+      expectedRow._sum["orders.subtotal"],
+      4
+    );
+  });
 });

@@ -1,49 +1,65 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { findMany } from "~/operations/findMany";
 import { getDb } from "~/dbConnection";
 
-test("What are the revenues for our most profitable orders and what products were sold?", async () => {
-  const iql = {
-    table: "fct_order",
-    computedColumns: [
+const netTotalComputedColumn = {
+  name: "net_total",
+  table: {
+    name: "orders" as const,
+  },
+  ast: {
+    type: "operation" as const,
+    operator: "-",
+    operands: [
       {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "+",
-          operands: [
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "column",
-                  name: "ORDER_PRODUCT_GROSS_REVENUE",
-                },
-                {
-                  type: "column",
-                  name: "ORDER_PRODUCT_TAX",
-                },
-              ],
-            },
-            {
-              type: "column",
-              name: "ORDER_PRODUCT_COGS",
-            },
-          ],
-        },
-        type: "number",
+        type: "operation" as const,
+        operator: "+",
+        operands: [
+          {
+            type: "column" as const,
+            name: "subtotal",
+          },
+          {
+            type: "column" as const,
+            name: "tax",
+          },
+        ],
+      },
+      {
+        type: "column" as const,
+        name: "discount",
       },
     ],
+  },
+  type: "number" as const,
+};
+
+test("Which orders delivered the highest net totals and what products did they include?", async () => {
+  const iql = {
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [],
     operation: "findMany",
     operationParameters: {
-      columns: {
-        fct_order: ["ORDER_PRODUCT_GROSS_REVENUE", "profit_"],
-        "fct_order.fct_order_lineitems.dim_product": ["PRODUCT_NAME"],
+      select: {
+        orders: ["id", "subtotal", "net_total"],
+        "orders.product": ["title"],
       },
+      joins: [
+        {
+          table: "products",
+          name: "orders.product",
+          path: [
+            {
+              source: ["orders.product_id"],
+              target: ["products.id"],
+            },
+          ],
+        },
+      ],
       orderBy: {
-        column: "profit_",
+        column: "net_total",
         direction: "desc",
       },
       limit: 5,
@@ -54,51 +70,32 @@ test("What are the revenues for our most profitable orders and what products wer
   const db = await getDb();
   const response = await findMany(db, parsedQuery);
 
-  const answer = [
-    {
-      ORDER_PRODUCT_GROSS_REVENUE: 1449,
-      fct_order_lineitems: [
-        {
-          dim_product: {
-            PRODUCT_NAME: "Giraffe Toy",
-          },
-        },
-      ],
-      profit_: 967,
-    },
-    {
-      ORDER_PRODUCT_GROSS_REVENUE: 683,
-      fct_order_lineitems: [
-        {
-          dim_product: {
-            PRODUCT_NAME: "Giraffe Toy",
-          },
-        },
-      ],
-      profit_: 532,
-    },
-    {
-      ORDER_PRODUCT_GROSS_REVENUE: 1078,
-      fct_order_lineitems: null,
-      profit_: 497,
-    },
-    {
-      ORDER_PRODUCT_GROSS_REVENUE: 682,
-      fct_order_lineitems: [
-        {
-          dim_product: {
-            PRODUCT_NAME: "Rope and Ball Toy",
-          },
-        },
-      ],
-      profit_: 476,
-    },
-    {
-      ORDER_PRODUCT_GROSS_REVENUE: 580,
-      fct_order_lineitems: null,
-      profit_: 454,
-    },
-  ];
+  const { rows } = await db.execute(
+    sql`
+      SELECT
+        o.id,
+        o.subtotal,
+        (o.subtotal + o.tax - o.discount)::float8 AS net_total,
+        p.title AS product_title
+      FROM orders o
+      LEFT JOIN products p ON p.id = o.product_id
+      ORDER BY net_total DESC, o.id ASC
+      LIMIT 5
+    `
+  );
 
-  expect(response).toEqual(answer);
+  const expected = rows.map((row: any) => ({
+    id: row.id,
+    subtotal: Number(row.subtotal),
+    net_total: Number(row.net_total),
+    "orders.product": row.product_title
+      ? {
+          title: row.product_title,
+        }
+      : null,
+  }));
+
+  const resultRows = Array.isArray(response) ? response : response.data;
+
+  expect(resultRows).toEqual(expected);
 });

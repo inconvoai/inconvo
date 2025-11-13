@@ -1,10 +1,18 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
 
-test("How many lineitems were sold each month?", async () => {
+function parseAggregateCell(value: unknown): Record<string, number> {
+  if (typeof value === "string") {
+    return JSON.parse(value);
+  }
+  return (value as Record<string, number>) ?? {};
+}
+
+test("How many orders were placed in each month?", async () => {
   const iql = {
-    table: "fct_order_lineitem",
+    table: "orders",
     whereAndArray: [],
     operation: "groupBy",
     operationParameters: {
@@ -12,12 +20,12 @@ test("How many lineitems were sold each month?", async () => {
       groupBy: [
         {
           type: "dateInterval",
-          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          column: "orders.created_at",
           interval: "month",
           alias: "month_bucket",
         },
       ],
-      count: ["fct_order_lineitem.ORDER_TIMESTAMP"],
+      count: ["orders.created_at"],
       sum: null,
       min: null,
       max: null,
@@ -31,25 +39,36 @@ test("How many lineitems were sold each month?", async () => {
   const db = await getDb();
   const response = await groupBy(db, parsedQuery);
 
-  const byMonth = Object.fromEntries(
-    response.data.map((row: any) => [
+  const rows = "data" in response ? response.data : response;
+  const byMonth: Record<string, { count: number }> = Object.fromEntries(
+    rows.map((row: any) => [
       row.month_bucket,
-      { count: JSON.parse(row._count)["fct_order_lineitem.ORDER_TIMESTAMP"] },
+      {
+        count: Number(
+          parseAggregateCell(row._count)["orders.created_at"] ?? 0
+        ),
+      },
     ])
   );
 
-  expect(byMonth).toEqual({
-    "2024-09": { count: 226 },
-    "2024-10": { count: 491 },
-    "2024-11": { count: 1745 },
-    "2024-12": { count: 1913 },
-    "2025-01": { count: 624 },
-    "2025-02": { count: 610 },
-    "2025-03": { count: 511 },
-    "2025-04": { count: 421 },
-    "2025-05": { count: 453 },
-    "2025-06": { count: 417 },
-    "2025-07": { count: 646 },
-    "2025-08": { count: 346 },
-  });
+  const { rows: sqlRows } = await db.execute(
+    sql`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month_bucket,
+        COUNT(*)::int                                       AS order_count
+      FROM orders
+      GROUP BY month_bucket
+      ORDER BY month_bucket ASC
+      LIMIT 12
+    `
+  );
+
+  const expectedByMonth = Object.fromEntries(
+    sqlRows.map((row: any) => [
+      row.month_bucket,
+      { count: Number(row.order_count) },
+    ])
+  );
+
+  expect(byMonth).toEqual(expectedByMonth);
 });

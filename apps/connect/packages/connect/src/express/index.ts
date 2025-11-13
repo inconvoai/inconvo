@@ -10,7 +10,6 @@ import { countRelations } from "~/operations/countRelations";
 import { groupBy } from "~/operations/groupBy";
 import { findDistinct } from "~/operations/findDistinct";
 import { getDb } from "~/dbConnection";
-import { countWithJoin } from "~/operations/countWithJoin";
 import packageJson from "~/../../package.json";
 import { findDistinctByEditDistance } from "~/operations/findDistinctByEditDistance";
 
@@ -57,9 +56,6 @@ export async function inconvo() {
           break;
         case "count":
           response = await count(db, parsedQuery);
-          break;
-        case "countWithJoin":
-          response = await countWithJoin(db, parsedQuery);
           break;
         case "countRelations":
           response = await countRelations(db, parsedQuery);

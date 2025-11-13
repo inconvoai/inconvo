@@ -5,6 +5,10 @@ import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getColumnFromTable } from "../utils/getColumnFromTable";
 import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 import assert from "assert";
+import {
+  buildJoinCondition,
+  normaliseJoinHop,
+} from "../utils/joinDescriptorHelpers";
 
 export async function aggregate(db: any, query: Query) {
   assert(query.operation === "aggregate", "Invalid inconvo operation");
@@ -16,17 +20,19 @@ export async function aggregate(db: any, query: Query) {
   } = query;
 
   const drizzleSchema = await loadDrizzleSchema();
+const aliasToTable = buildAliasToTable(tableName, operationParameters.joins);
 
   const createAggregateFields = (
     columns: string[] | undefined,
     aggregateFn: (column: SQL<any>) => SQL<any>
   ): [string, SQL<any>][] | undefined => {
     return columns?.map((columnName) => {
-      const column = getColumnFromTable({
+      const column = resolveColumnReference({
         columnName,
-        tableName,
+        baseTable: tableName,
         drizzleSchema,
         computedColumns,
+        aliasToTable,
       });
       return [columnName, aggregateFn(column)];
     });
@@ -81,7 +87,7 @@ export async function aggregate(db: any, query: Query) {
     selectFields["_median"] = buildJsonObjectSelect(medianFields);
   }
 
-  const dbQuery = db
+  let dbQuery = db
     .select(selectFields)
     .from(drizzleSchema[tableName])
     .where((columns: Record<string, SQL>) =>
@@ -94,7 +100,108 @@ export async function aggregate(db: any, query: Query) {
       })
     );
 
+  const joins = operationParameters.joins ?? [];
+  for (const join of joins) {
+    const joinType = join.joinType ?? "left";
+    for (const hop of join.path) {
+      const metadata = normaliseJoinHop(hop);
+      const targetTableName = metadata.target[0]?.tableName;
+      if (!targetTableName) {
+        throw new Error("Join descriptor hop is missing target table metadata.");
+      }
+      const joinCondition = buildJoinCondition(
+        metadata,
+        drizzleSchema,
+        computedColumns
+      );
+
+      switch (joinType) {
+        case "inner":
+          dbQuery = dbQuery.innerJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
+          );
+          break;
+        case "right":
+          dbQuery = dbQuery.rightJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
+          );
+          break;
+        case "left":
+        default:
+          dbQuery = dbQuery.leftJoin(
+            drizzleSchema[targetTableName],
+            joinCondition
+          );
+          break;
+      }
+    }
+  }
+
   const sql = dbQuery.toSQL();
   const response = await dbQuery;
   return { query: sql, data: response[0] };
+}
+
+type AggregateQueryType = Extract<Query, { operation: "aggregate" }>;
+
+function buildAliasToTable(
+  baseTable: string,
+  joins: AggregateQueryType["operationParameters"]["joins"]
+) {
+  const map = new Map<string, string>();
+  map.set(baseTable, baseTable);
+
+  joins?.forEach((join) => {
+    const alias = join.name ?? join.table;
+    map.set(alias, join.table);
+    map.set(join.table, join.table);
+  });
+
+  return map;
+}
+
+function splitColumnReference(columnName: string) {
+  const lastDot = columnName.lastIndexOf(".");
+  if (lastDot === -1) {
+    throw new Error(
+      `Column ${columnName} must be qualified as tableOrAlias.column`
+    );
+  }
+  const alias = columnName.slice(0, lastDot);
+  const column = columnName.slice(lastDot + 1);
+  if (!alias || !column) {
+    throw new Error(`Invalid column reference: ${columnName}`);
+  }
+  return { alias, column };
+}
+
+function resolveColumnReference({
+  columnName,
+  baseTable,
+  drizzleSchema,
+  computedColumns,
+  aliasToTable,
+}: {
+  columnName: string;
+  baseTable: string;
+  drizzleSchema: Record<string, any>;
+  computedColumns: Query["computedColumns"];
+  aliasToTable: Map<string, string>;
+}) {
+  const { alias, column } = splitColumnReference(columnName);
+  const targetTable = aliasToTable.get(alias);
+  if (!targetTable) {
+    throw new Error(`Join alias ${alias} not found for column ${columnName}`);
+  }
+
+  const shouldUseComputed = targetTable === baseTable;
+
+  return getColumnFromTable({
+    columnName: column,
+    tableName: targetTable,
+    drizzleSchema,
+    computedColumns: shouldUseComputed ? computedColumns : undefined,
+  });
 }

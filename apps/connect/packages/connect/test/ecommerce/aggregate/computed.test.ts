@@ -1,58 +1,52 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { aggregate } from "~/operations/aggregate";
 import { getDb } from "~/dbConnection";
 
-test("What is our average profit on a lineitem?", async () => {
-  const iql = {
-    table: "fct_order_lineitem",
-    computedColumns: [
+const netTotalComputedColumn = {
+  name: "net_total",
+  table: {
+    name: "orders" as const,
+  },
+  ast: {
+    type: "operation" as const,
+    operator: "-",
+    operands: [
       {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "*",
-          operands: [
-            {
-              type: "column",
-              name: "num_orders",
-            },
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "operation",
-                  operator: "+",
-                  operands: [
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                    },
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_TAX",
-                    },
-                  ],
-                },
-                {
-                  type: "column",
-                  name: "ORDER_LINEITEM_PRODUCT_COGS",
-                },
-              ],
-            },
-          ],
-        },
-        type: "number",
+        type: "operation" as const,
+        operator: "+",
+        operands: [
+          {
+            type: "column" as const,
+            name: "subtotal",
+          },
+          {
+            type: "column" as const,
+            name: "tax",
+          },
+        ],
+      },
+      {
+        type: "column" as const,
+        name: "discount",
       },
     ],
+  },
+  type: "number" as const,
+};
+
+test("What is our average order total including tax and discount?", async () => {
+  const iql = {
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [],
     operation: "aggregate",
     operationParameters: {
-      min: ["profit_"],
-      max: ["profit_"],
-      avg: ["profit_"],
-      sum: ["profit_"],
-      count: ["profit_"],
+      min: ["orders.net_total"],
+      max: ["orders.net_total"],
+      avg: ["orders.net_total"],
+      sum: ["orders.net_total"],
+      count: ["orders.net_total"],
       median: null,
     },
   };
@@ -61,82 +55,58 @@ test("What is our average profit on a lineitem?", async () => {
   const db = await getDb();
   const response = await aggregate(db, parsedQuery);
 
-  expect(response).toEqual({
-    _avg: {
-      profit_: 119.34086097368841,
-    },
-    _sum: {
-      profit_: 1002821.2547619037,
-    },
-    _min: {
-      profit_: -92,
-    },
-    _max: {
-      profit_: 942,
-    },
-    _count: {
-      profit_: 8403,
-    },
-  });
+  const { rows } = await db.execute(
+    sql`
+      SELECT
+        AVG(subtotal + tax - discount)::float8 AS avg_net_total,
+        SUM(subtotal + tax - discount)::float8 AS sum_net_total,
+        MIN(subtotal + tax - discount)::float8 AS min_net_total,
+        MAX(subtotal + tax - discount)::float8 AS max_net_total,
+        COUNT(*)::int                          AS count_orders
+      FROM orders
+    `
+  );
+  const [sqlResult] = rows as any[];
+
+  const aggregateResult = "data" in response ? response.data : response;
+
+  expect(aggregateResult._avg["orders.net_total"]).toBeCloseTo(
+    Number(sqlResult.avg_net_total),
+    10
+  );
+  expect(aggregateResult._sum["orders.net_total"]).toBeCloseTo(
+    Number(sqlResult.sum_net_total),
+    4
+  );
+  expect(aggregateResult._min["orders.net_total"]).toBe(
+    Number(sqlResult.min_net_total)
+  );
+  expect(aggregateResult._max["orders.net_total"]).toBe(
+    Number(sqlResult.max_net_total)
+  );
+  expect(aggregateResult._count["orders.net_total"]).toBe(
+    Number(sqlResult.count_orders)
+  );
 });
 
-test("How many times have we made more than $900 profit on a lineitem?", async () => {
+test("How many orders cleared more than $1,600 after tax and discount?", async () => {
   const iql = {
-    table: "fct_order_lineitem",
-    computedColumns: [
-      {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "*",
-          operands: [
-            {
-              type: "column",
-              name: "num_orders",
-            },
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "operation",
-                  operator: "+",
-                  operands: [
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-                    },
-                    {
-                      type: "column",
-                      name: "ORDER_LINEITEM_PRODUCT_TAX",
-                    },
-                  ],
-                },
-                {
-                  type: "column",
-                  name: "ORDER_LINEITEM_PRODUCT_COGS",
-                },
-              ],
-            },
-          ],
-        },
-        type: "number",
-      },
-    ],
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [
       {
-        profit_: {
-          gt: 900,
+        net_total: {
+          gt: 1600,
         },
       },
     ],
     operation: "aggregate",
     operationParameters: {
-      min: ["profit_"],
-      max: ["profit_"],
-      avg: ["profit_"],
-      sum: ["profit_"],
-      count: ["profit_"],
+      min: ["orders.net_total"],
+      max: ["orders.net_total"],
+      avg: ["orders.net_total"],
+      sum: ["orders.net_total"],
+      count: ["orders.net_total"],
       median: null,
     },
   };
@@ -145,21 +115,37 @@ test("How many times have we made more than $900 profit on a lineitem?", async (
   const db = await getDb();
   const response = await aggregate(db, parsedQuery);
 
-  expect(response).toEqual({
-    _avg: {
-      profit_: 936.3333333333334,
-    },
-    _sum: {
-      profit_: 2809,
-    },
-    _min: {
-      profit_: 925,
-    },
-    _max: {
-      profit_: 942,
-    },
-    _count: {
-      profit_: 3,
-    },
-  });
+  const { rows } = await db.execute(
+    sql`
+      SELECT
+        AVG(subtotal + tax - discount)::float8 AS avg_net_total,
+        SUM(subtotal + tax - discount)::float8 AS sum_net_total,
+        MIN(subtotal + tax - discount)::float8 AS min_net_total,
+        MAX(subtotal + tax - discount)::float8 AS max_net_total,
+        COUNT(*)::int                          AS count_orders
+      FROM orders
+      WHERE (subtotal + tax - discount) > 1600
+    `
+  );
+  const [sqlResult] = rows as any[];
+
+  const aggregateResult = "data" in response ? response.data : response;
+
+  expect(aggregateResult._avg["orders.net_total"]).toBeCloseTo(
+    Number(sqlResult.avg_net_total),
+    10
+  );
+  expect(aggregateResult._sum["orders.net_total"]).toBeCloseTo(
+    Number(sqlResult.sum_net_total),
+    4
+  );
+  expect(aggregateResult._min["orders.net_total"]).toBe(
+    Number(sqlResult.min_net_total)
+  );
+  expect(aggregateResult._max["orders.net_total"]).toBe(
+    Number(sqlResult.max_net_total)
+  );
+  expect(aggregateResult._count["orders.net_total"]).toBe(
+    Number(sqlResult.count_orders)
+  );
 });

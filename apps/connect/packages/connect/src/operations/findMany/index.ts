@@ -11,7 +11,6 @@ import {
   Table,
   WithSubquery,
 } from "drizzle-orm";
-import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
 import { getColumnFromTable } from "~/operations/utils/getColumnFromTable";
 import { getRelatedTableNameFromPath } from "../utils/drizzleSchemaHelpers";
@@ -19,6 +18,11 @@ import {
   buildJsonObjectSelect,
   jsonAggregate,
 } from "../utils/jsonBuilderHelpers";
+import {
+  resolveJoinDescriptor,
+  aliasDepth,
+} from "../utils/joinDescriptorHelpers";
+import { findRelationsBetweenTables } from "~/operations/utils/findRelationsBetweenTables";
 
 export async function findMany(db: any, query: Query) {
   assert(query.operation === "findMany", "Invalid inconvo operation");
@@ -29,16 +33,24 @@ export async function findMany(db: any, query: Query) {
     jsonColumnSchema,
     computedColumns,
   } = query;
-  const { columns, orderBy, limit } = operationParameters;
+  const { select, orderBy, limit } = operationParameters;
 
   const drizzleSchema = await loadDrizzleSchema();
 
-  const selectColsPerTable: Record<string, string[] | null> = {};
-  Object.entries(columns).forEach(([tableRelations, value]) => {
-    const colName = tableRelations.split(".").at(-1);
-    if (colName === undefined) return;
-    selectColsPerTable[colName] = value;
-  });
+  const resolvedJoins =
+    operationParameters.joins
+      ?.map((join) =>
+        resolveJoinDescriptor({
+          alias: join.name ?? join.table,
+          tableName: join.table,
+          path: join.path,
+        })
+      )
+      .sort((a, b) => aliasDepth(b.alias) - aliasDepth(a.alias)) ?? [];
+
+  const joinDescriptorMap = new Map(
+    resolvedJoins.map((join) => [join.alias, join])
+  );
 
   const tableAliasMapper: Record<string, WithSubquery> = {};
   const tableAliases: WithSubquery[] = [];
@@ -82,7 +94,8 @@ export async function findMany(db: any, query: Query) {
 
   // todo: rename
   const needCtes =
-    Object.keys(columns).filter((table) => table !== query.table).length > 0;
+    Object.keys(select).filter((tableAlias) => tableAlias !== query.table)
+      .length > 0;
 
   function createInitialCte(
     index: number,
@@ -177,9 +190,9 @@ export async function findMany(db: any, query: Query) {
     return [cte];
   }
 
-  const tablePaths = Object.keys(operationParameters.columns)
-    .filter((table) => table !== query.table)
-    .map((table) => table.split("."));
+  const tablePaths = Object.keys(select)
+    .filter((alias) => alias !== query.table)
+    .map((alias) => alias.split("."));
   const dedupedTablePaths = tablePaths.filter(
     (arr, _index, self) =>
       !self.some(
@@ -199,57 +212,80 @@ export async function findMany(db: any, query: Query) {
       jsonCtes = [];
       tableLinks = [];
       const reverseTablePath = tablePath.slice().reverse();
+      const aliasKey = tablePath.join(".");
+      const joinDescriptor = joinDescriptorMap.get(aliasKey);
+
+      if (!joinDescriptor) {
+        throw new Error(`Join descriptor for alias ${aliasKey} not provided.`);
+      }
+
       for (const [index, tableRelationName] of reverseTablePath.entries()) {
         if (tableRelationName === query.table) {
           continue;
         }
 
-        const pathToTableName = tablePath.slice(
-          0,
-          tablePath.indexOf(tableRelationName) + 1
-        );
-        const tableName = getRelatedTableNameFromPath(
-          pathToTableName,
-          drizzleSchema
-        );
+        const hopIndex = joinDescriptor.hops.length - 1 - index;
+        const hopMetadata =
+          joinDescriptor.hops[hopIndex] ?? joinDescriptor.hops[0];
 
-        const pathToRelatedTable = tablePath.slice(
-          0,
-          tablePath.indexOf(tableRelationName)
-        );
+        const targetTableName =
+          hopMetadata?.target[0]?.tableName ??
+          getRelatedTableNameFromPath(
+            tablePath.slice(0, tablePath.indexOf(tableRelationName) + 1),
+            drizzleSchema
+          );
 
-        const relatedTableName = getRelatedTableNameFromPath(
-          pathToRelatedTable,
-          drizzleSchema
-        );
+        const sourceTableName =
+          hopMetadata?.source[0]?.tableName ??
+          getRelatedTableNameFromPath(
+            tablePath.slice(0, tablePath.indexOf(tableRelationName)),
+            drizzleSchema
+          );
 
-        const [relatedTableKey, currentTableKey, groupBy] =
-          findRelationsBetweenTables(
-            relatedTableName,
-            tableName,
+        const currentTableKey = hopMetadata?.target[0]?.columnName;
+        const relatedTableKey = hopMetadata?.source[0]?.columnName;
+
+        if (!currentTableKey || !relatedTableKey) {
+          throw new Error(
+            `Unable to resolve join columns for alias ${aliasKey} (segment ${tableRelationName}).`
+          );
+        }
+
+        let groupBy: boolean;
+        try {
+          const [, , groupByFlag = true] = findRelationsBetweenTables(
+            sourceTableName,
+            targetTableName,
             tableRelationName,
             drizzleSchema
           );
+          groupBy = groupByFlag;
+        } catch {
+          groupBy = true;
+        }
 
         tableLinks.push([currentTableKey, relatedTableKey]);
 
         const tableSchema =
-          tableAliasMapper[tableName] || drizzleSchema[tableName];
-        const jsonFields: [string, unknown][] =
-          selectColsPerTable[tableRelationName]?.map((col) => {
-            const columnParam = getColumnFromTable({
-              columnName: col,
-              tableName: tableName,
-              drizzleSchema,
-              computedColumns,
-            });
-            return [col, columnParam];
-          }) ?? [];
+          tableAliasMapper[targetTableName] || drizzleSchema[targetTableName];
+        const aliasForSegment = tablePath
+          .slice(0, tablePath.length - index)
+          .join(".");
+        const selectedColumns = select[aliasForSegment] ?? [];
+        const jsonFields: [string, unknown][] = selectedColumns.map((col) => {
+          const columnParam = getColumnFromTable({
+            columnName: col,
+            tableName: targetTableName,
+            drizzleSchema,
+            computedColumns,
+          });
+          return [col, columnParam];
+        });
         if (index === 0) {
           const ctes = createInitialCte(
             index,
             outerIndex,
-            tableName,
+            targetTableName,
             tableSchema,
             currentTableKey,
             jsonFields,
@@ -267,7 +303,7 @@ export async function findMany(db: any, query: Query) {
           const ctes = createSubsequentCte(
             index,
             outerIndex,
-            tableName,
+            targetTableName,
             tableSchema,
             currentTableKey,
             extendedJsonFields,
@@ -287,17 +323,18 @@ export async function findMany(db: any, query: Query) {
   const tableSchema: Table | WithSubquery =
     tableAliasMapper[query.table] || drizzleSchema[query.table];
 
-  const rootSelect: { [key: string]: any } = (
-    query.operationParameters.columns[table] || []
-  ).reduce((acc: { [key: string]: any }, column: string) => {
-    acc[column] = getColumnFromTable({
-      columnName: column,
-      tableName: query.table,
-      drizzleSchema,
-      computedColumns,
-    });
-    return acc;
-  }, {});
+  const rootSelect: { [key: string]: any } = (select[table] || []).reduce(
+    (acc: { [key: string]: any }, column: string) => {
+      acc[column] = getColumnFromTable({
+        columnName: column,
+        tableName: query.table,
+        drizzleSchema,
+        computedColumns,
+      });
+      return acc;
+    },
+    {}
+  );
 
   const dbQuery = db
     .with(...tableAliases, ...nestedJsonCtes.flat())
@@ -306,8 +343,11 @@ export async function findMany(db: any, query: Query) {
       ...dedupedTablePaths.reduce(
         (acc: Record<string, any>, tablePath, index) => {
           const tableCte = nestedJsonCtes[index].at(-1);
-          const tableName = tablePath[1];
-          acc[tableName] = sql`${tableCte}.json_data`.as(tableName);
+          if (!tableCte) {
+            return acc;
+          }
+          const tableAlias = tablePath.join(".");
+          acc[tableAlias] = sql`${tableCte}.json_data`.as(tableAlias);
           return acc;
         },
         {}

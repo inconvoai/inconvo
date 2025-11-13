@@ -1,58 +1,64 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { countRelations } from "~/operations/countRelations";
 import { getDb } from "~/dbConnection";
 
-test("What was the order with the most lineitems with an order profit of over $100", async () => {
-  const iql = {
-    table: "fct_order",
-    computedColumns: [
+const inventoryValueColumn = {
+  name: "inventory_value",
+  table: {
+    name: "products" as const,
+  },
+  ast: {
+    type: "operation" as const,
+    operator: "*",
+    operands: [
       {
-        name: "profit_",
-        ast: {
-          type: "operation",
-          operator: "+",
-          operands: [
-            {
-              type: "operation",
-              operator: "+",
-              operands: [
-                {
-                  type: "column",
-                  name: "ORDER_PRODUCT_GROSS_REVENUE",
-                },
-                {
-                  type: "column",
-                  name: "ORDER_PRODUCT_TAX",
-                },
-              ],
-            },
-            {
-              type: "column",
-              name: "ORDER_PRODUCT_COGS",
-            },
-          ],
-        },
-        type: "number",
+        type: "column" as const,
+        name: "price",
+      },
+      {
+        type: "column" as const,
+        name: "stock_level",
       },
     ],
+  },
+  type: "number" as const,
+};
+
+test("Which product with a large inventory value has attracted the most orders?", async () => {
+  const iql = {
+    table: "products",
+    computedColumns: [inventoryValueColumn],
     whereAndArray: [
       {
-        profit_: {
-          gt: 100,
+        inventory_value: {
+          gt: 40000,
         },
       },
     ],
     operation: "countRelations",
     operationParameters: {
-      columns: ["_unique_key", "store_key", "profit_"],
+      columns: ["id", "title", "inventory_value"],
+      joins: [
+        {
+          table: "orders",
+          name: "orders",
+          path: [
+            {
+              source: ["products.id"],
+              target: ["orders.product_id"],
+            },
+          ],
+        },
+      ],
       relationsToCount: [
         {
-          name: "fct_order_lineitems",
+          name: "orders",
           distinct: null,
         },
       ],
       orderBy: {
-        relation: "fct_order_lineitems",
+        name: "orders",
         direction: "desc",
       },
       limit: 1,
@@ -63,14 +69,31 @@ test("What was the order with the most lineitems with an order profit of over $1
   const db = await getDb();
   const response = await countRelations(db, parsedQuery);
 
-  const answer = [
-    {
-      _unique_key: "5484008702256",
-      store_key: "25824624728",
-      fct_order_lineitemsCount: 3,
-      profit_: 163,
-    },
-  ];
+  const { rows } = await db.execute(
+    sql`
+      SELECT
+        p.id,
+        p.title,
+        (p.price * p.stock_level)::float8 AS inventory_value,
+        COUNT(o.*)::int                  AS order_count
+      FROM products p
+      JOIN orders o ON o.product_id = p.id
+      WHERE (p.price * p.stock_level) > 40000
+      GROUP BY p.id, p.title, inventory_value
+      ORDER BY order_count DESC, p.id ASC
+      LIMIT 1
+    `
+  );
+  const [sqlResult] = rows as any[];
 
-  expect(response).toEqual(answer);
+  const resultRows = Array.isArray(response) ? response : response.data;
+
+  expect(resultRows).toEqual([
+    {
+      id: sqlResult.id,
+      title: sqlResult.title,
+      inventory_value: Number(sqlResult.inventory_value),
+      orders_count: Number(sqlResult.order_count),
+    },
+  ]);
 }, 10000);

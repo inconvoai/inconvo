@@ -1,54 +1,55 @@
+import { sql } from "drizzle-orm";
 import { QuerySchema } from "~/types/querySchema";
 import { groupBy } from "~/operations/groupBy";
 import { getDb } from "~/dbConnection";
 
-const computedProfitColumn = {
-  name: "profit_",
+const netTotalComputedColumn = {
+  name: "net_total",
+  table: {
+    name: "orders" as const,
+  },
   ast: {
     type: "operation" as const,
-    operator: "*",
+    operator: "-",
     operands: [
-      {
-        type: "column" as const,
-        name: "num_orders",
-      },
       {
         type: "operation" as const,
         operator: "+",
         operands: [
           {
-            type: "operation" as const,
-            operator: "+",
-            operands: [
-              {
-                type: "column" as const,
-                name: "ORDER_LINEITEM_PRODUCT_GROSS_REVENUE",
-              },
-              {
-                type: "column" as const,
-                name: "ORDER_LINEITEM_PRODUCT_TAX",
-              },
-            ],
+            type: "column" as const,
+            name: "subtotal",
           },
           {
             type: "column" as const,
-            name: "ORDER_LINEITEM_PRODUCT_COGS",
+            name: "tax",
           },
         ],
+      },
+      {
+        type: "column" as const,
+        name: "discount",
       },
     ],
   },
   type: "number" as const,
 };
 
-test("How many lineitems were sold each month which have a profit of over $500", async () => {
+function parseAggregateCell(value: unknown): Record<string, number> {
+  if (typeof value === "string") {
+    return JSON.parse(value);
+  }
+  return (value as Record<string, number>) ?? {};
+}
+
+test("How many orders per month cleared more than $1,400 after tax and discount?", async () => {
   const iql = {
-    table: "fct_order_lineitem",
-    computedColumns: [computedProfitColumn],
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [
       {
-        profit_: {
-          gt: 500,
+        net_total: {
+          gt: 1400,
         },
       },
     ],
@@ -58,12 +59,12 @@ test("How many lineitems were sold each month which have a profit of over $500",
       groupBy: [
         {
           type: "dateInterval" as const,
-          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          column: "orders.created_at",
           interval: "month" as const,
           alias: "month_bucket",
         },
       ],
-      count: ["fct_order_lineitem.ORDER_TIMESTAMP"],
+      count: ["orders.created_at"],
       sum: null,
       min: null,
       max: null,
@@ -81,37 +82,47 @@ test("How many lineitems were sold each month which have a profit of over $500",
   const db = await getDb();
   const response = await groupBy(db, parsedQuery);
 
-  const byMonth = Object.fromEntries(
-    response.data.map((row: any) => [
+  const rows = "data" in response ? response.data : response;
+  const byMonth: Record<string, { count: number }> = Object.fromEntries(
+    rows.map((row: any) => [
       row.month_bucket,
-      { count: JSON.parse(row._count)["fct_order_lineitem.ORDER_TIMESTAMP"] },
+      {
+        count: Number(parseAggregateCell(row._count)["orders.created_at"] ?? 0),
+      },
     ])
   );
 
-  expect(byMonth).toEqual({
-    "2024-09": { count: 33 },
-    "2024-10": { count: 75 },
-    "2024-11": { count: 66 },
-    "2024-12": { count: 48 },
-    "2025-01": { count: 42 },
-    "2025-02": { count: 68 },
-    "2025-03": { count: 89 },
-    "2025-04": { count: 55 },
-    "2025-05": { count: 58 },
-    "2025-06": { count: 62 },
-    "2025-07": { count: 72 },
-    "2025-08": { count: 32 },
-  });
+  const { rows: sqlRows } = await db.execute(
+    sql`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month_bucket,
+        COUNT(*)::int                                       AS order_count
+      FROM orders
+      WHERE (subtotal + tax - discount) > 1400
+      GROUP BY month_bucket
+      ORDER BY month_bucket ASC
+      LIMIT 12
+    `
+  );
+
+  const expectedByMonth: Record<string, { count: number }> = Object.fromEntries(
+    sqlRows.map((row: any) => [
+      row.month_bucket,
+      { count: Number(row.order_count) },
+    ])
+  );
+
+  expect(byMonth).toEqual(expectedByMonth);
 });
 
-test("What was the average profit per month where the profit was over $500", async () => {
+test("What was the average net total per month for orders over $1,400?", async () => {
   const iql = {
-    table: "fct_order_lineitem",
-    computedColumns: [computedProfitColumn],
+    table: "orders",
+    computedColumns: [netTotalComputedColumn],
     whereAndArray: [
       {
-        profit_: {
-          gt: 500,
+        net_total: {
+          gt: 1400,
         },
       },
     ],
@@ -121,7 +132,7 @@ test("What was the average profit per month where the profit was over $500", asy
       groupBy: [
         {
           type: "dateInterval" as const,
-          column: "fct_order_lineitem.ORDER_TIMESTAMP",
+          column: "orders.created_at",
           interval: "month" as const,
           alias: "month_bucket",
         },
@@ -130,7 +141,7 @@ test("What was the average profit per month where the profit was over $500", asy
       sum: null,
       min: null,
       max: null,
-      avg: ["fct_order_lineitem.profit_"],
+      avg: ["orders.net_total"],
       orderBy: {
         type: "groupKey" as const,
         key: "month_bucket",
@@ -144,49 +155,39 @@ test("What was the average profit per month where the profit was over $500", asy
   const db = await getDb();
   const response = await groupBy(db, parsedQuery);
 
-  const byMonth = Object.fromEntries(
-    response.data.map((row: any) => [
+  const rows = "data" in response ? response.data : response;
+  const byMonth: Record<string, { avg: number }> = Object.fromEntries(
+    rows.map((row: any) => [
       row.month_bucket,
-      { avg: JSON.parse(row._avg)["fct_order_lineitem.profit_"] },
+      {
+        avg: Number(parseAggregateCell(row._avg)["orders.net_total"] ?? 0),
+      },
     ])
   );
 
-  expect(byMonth).toEqual({
-    "2024-09": {
-      avg: "572.9090909090909",
-    },
-    "2024-10": {
-      avg: "591.0266666666666",
-    },
-    "2024-11": {
-      avg: "597.6666666666666",
-    },
-    "2024-12": {
-      avg: "627.375",
-    },
-    "2025-01": {
-      avg: "652.3571428571429",
-    },
-    "2025-02": {
-      avg: "620.8823529411765",
-    },
-    "2025-03": {
-      avg: "619.056179775281",
-    },
-    "2025-04": {
-      avg: "610.5818181818182",
-    },
-    "2025-05": {
-      avg: "614.7413793103449",
-    },
-    "2025-06": {
-      avg: "617.1451612903226",
-    },
-    "2025-07": {
-      avg: "634.6666666666666",
-    },
-    "2025-08": {
-      avg: "621.53125",
-    },
-  });
+  const { rows: sqlRows } = await db.execute(
+    sql`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month_bucket,
+        AVG(subtotal + tax - discount)::float8             AS avg_net_total
+      FROM orders
+      WHERE (subtotal + tax - discount) > 1400
+      GROUP BY month_bucket
+      ORDER BY month_bucket ASC
+      LIMIT 12
+    `
+  );
+
+  const expectedByMonth: Record<string, { avg: number }> = Object.fromEntries(
+    sqlRows.map((row: any) => [
+      row.month_bucket,
+      { avg: Number(row.avg_net_total) },
+    ])
+  );
+
+  expect(Object.keys(byMonth)).toEqual(Object.keys(expectedByMonth));
+  for (const [month, expected] of Object.entries(expectedByMonth)) {
+    expect(byMonth[month]).toBeDefined();
+    expect(byMonth[month]!.avg).toBeCloseTo(expected.avg, 4);
+  }
 });

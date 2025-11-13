@@ -28,9 +28,9 @@ const MONTH_ORDER = [
 ];
 
 describe("groupBy dateComponent buckets", () => {
-  test("groups order line items by day of week with canonical ordering", async () => {
+  test("groups orders by day of week with canonical ordering", async () => {
     const iql = {
-      table: "fct_order_lineitem",
+      table: "orders",
       whereAndArray: [],
       operation: "groupBy",
       operationParameters: {
@@ -38,7 +38,7 @@ describe("groupBy dateComponent buckets", () => {
         groupBy: [
           {
             type: "dateComponent",
-            column: "fct_order_lineitem.ORDER_TIMESTAMP",
+            column: "orders.created_at",
             component: "dayOfWeek" as const,
             alias: "day_bucket",
           },
@@ -61,24 +61,22 @@ describe("groupBy dateComponent buckets", () => {
     const db = await getDb();
     const response = await groupBy(db, parsedQuery);
 
-    expect(Array.isArray(response.data)).toBe(true);
-    expect(response.data.length).toBeGreaterThan(0);
-    expect(response.data.length).toBeLessThanOrEqual(7);
+    const rows = "data" in response ? response.data : response;
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(7);
 
-    const seenOrder = response.data.map(
-      (row: any) => row.day_bucket
-    ) as string[];
+    const seenOrder = rows.map((row: any) => row.day_bucket) as string[];
     const orderIndexes = seenOrder.map((label) => DAY_ORDER.indexOf(label));
     expect(orderIndexes).not.toContain(-1);
     expect([...orderIndexes]).toEqual(
       [...orderIndexes].slice().sort((a, b) => a - b)
     );
-
   });
 
-  test("groups order line items by month with canonical ordering", async () => {
+  test("groups orders by month with canonical ordering", async () => {
     const iql = {
-      table: "fct_order_lineitem",
+      table: "orders",
       whereAndArray: [],
       operation: "groupBy",
       operationParameters: {
@@ -86,7 +84,7 @@ describe("groupBy dateComponent buckets", () => {
         groupBy: [
           {
             type: "dateComponent",
-            column: "fct_order_lineitem.ORDER_TIMESTAMP",
+            column: "orders.created_at",
             component: "monthOfYear" as const,
             alias: "month_bucket",
           },
@@ -109,13 +107,12 @@ describe("groupBy dateComponent buckets", () => {
     const db = await getDb();
     const response = await groupBy(db, parsedQuery);
 
-    expect(Array.isArray(response.data)).toBe(true);
-    expect(response.data.length).toBeGreaterThan(0);
-    expect(response.data.length).toBeLessThanOrEqual(12);
+    const rows = "data" in response ? response.data : response;
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(12);
 
-    const seenOrder = response.data.map(
-      (row: any) => row.month_bucket
-    ) as string[];
+    const seenOrder = rows.map((row: any) => row.month_bucket) as string[];
     const orderIndexes = seenOrder.map((label) => MONTH_ORDER.indexOf(label));
     expect(orderIndexes).not.toContain(-1);
     expect([...orderIndexes]).toEqual(
@@ -123,9 +120,9 @@ describe("groupBy dateComponent buckets", () => {
     );
   });
 
-  test("groups order line items by quarter of year", async () => {
+  test("groups orders by quarter of year", async () => {
     const iql = {
-      table: "fct_order_lineitem",
+      table: "orders",
       whereAndArray: [],
       operation: "groupBy",
       operationParameters: {
@@ -133,7 +130,7 @@ describe("groupBy dateComponent buckets", () => {
         groupBy: [
           {
             type: "dateComponent",
-            column: "fct_order_lineitem.ORDER_TIMESTAMP",
+            column: "orders.created_at",
             component: "quarterOfYear" as const,
             alias: "quarter_bucket",
           },
@@ -156,13 +153,12 @@ describe("groupBy dateComponent buckets", () => {
     const db = await getDb();
     const response = await groupBy(db, parsedQuery);
 
-    expect(Array.isArray(response.data)).toBe(true);
-    expect(response.data.length).toBeGreaterThan(0);
-    expect(response.data.length).toBeLessThanOrEqual(4);
+    const rows = "data" in response ? response.data : response;
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(4);
 
-    const seenOrder = response.data.map(
-      (row: any) => row.quarter_bucket
-    ) as string[];
+    const seenOrder = rows.map((row: any) => row.quarter_bucket) as string[];
     const quarterOrder = ["Q1", "Q2", "Q3", "Q4"];
     const orderIndexes = seenOrder.map((label) => quarterOrder.indexOf(label));
     expect(orderIndexes).not.toContain(-1);

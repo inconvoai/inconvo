@@ -3,7 +3,6 @@ import type {
   AggregateQuery,
   CountQuery,
   CountRelationsQuery,
-  CountWithJoinQuery,
   DateCondition,
   FindDistinctByEditDistanceQuery,
   FindDistinctQuery,
@@ -11,9 +10,9 @@ import type {
   GroupByQuery,
   QuestionConditions,
   TableConditions,
+  JoinPathHop,
 } from "~/server/userDatabaseConnector/types";
 import type { DBQuery, Operation } from "../types";
-import { generateJoinedTables } from "./tableRelations";
 
 export type ColumnLookup = Map<string, Map<string, string>>;
 export type ColumnAliasMap = Record<
@@ -231,8 +230,11 @@ export function canonicalizeQueryColumnReferences(
     case "findMany": {
       const params =
         query.operationParameters as FindManyQuery["operationParameters"];
-      const joinPathMap = buildJoinPathMap(schema, baseTableName);
-      const canonicalizedColumns = Object.entries(params.columns ?? {}).reduce<
+      const joinPathMap = buildJoinPathMap(
+        baseTableName,
+        params.joins ?? undefined
+      );
+      const canonicalizedSelect = Object.entries(params.select ?? {}).reduce<
         Record<string, string[]>
       >((acc, [path, columns]) => {
         if (!Array.isArray(columns)) return acc;
@@ -263,7 +265,7 @@ export function canonicalizeQueryColumnReferences(
         ...query,
         operationParameters: {
           ...params,
-          columns: canonicalizedColumns,
+          select: canonicalizedSelect,
           orderBy: canonicalizedOrderBy,
         },
       };
@@ -303,57 +305,66 @@ export function canonicalizeQueryColumnReferences(
     case "count": {
       const params =
         query.operationParameters as CountQuery["operationParameters"];
+      const canonicalizedJoins = canonicalizeJoinArray(
+        params.joins,
+        lookup,
+        aliasTracker
+      );
+      const canonicalizedCount = Array.isArray(params.count)
+        ? params.count.map((column) =>
+            canonicalizeMetricColumn(column, baseTableName, lookup, aliasTracker)
+          )
+        : null;
+      const canonicalizedCountDistinct = Array.isArray(params.countDistinct)
+        ? params.countDistinct.map((column) =>
+            canonicalizeMetricColumn(column, baseTableName, lookup, aliasTracker)
+          )
+        : null;
       return {
         ...query,
         operationParameters: {
           ...params,
-          count: params.count.map((column) =>
-            column === "_all"
-              ? column
-              : canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
-          ),
-          countDistinct: params.countDistinct
-            ? params.countDistinct.map((column) =>
-                canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
-              )
-            : null,
-        },
-      };
-    }
-    case "countWithJoin": {
-      const params =
-        query.operationParameters as CountWithJoinQuery["operationParameters"];
-      return {
-        ...query,
-        operationParameters: {
-          ...params,
-          count: params.count.map((column) =>
-            canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
-          ),
-          countDistinct: params.countDistinct
-            ? params.countDistinct.map((column) =>
-                canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
-              )
-            : null,
+          joins: canonicalizedJoins,
+          count: canonicalizedCount,
+          countDistinct: canonicalizedCountDistinct,
         },
       };
     }
     case "countRelations": {
       const params =
         query.operationParameters as CountRelationsQuery["operationParameters"];
-      const relationMap = buildRelationTargetMap(schema, baseTableName);
+      const canonicalizedJoins = canonicalizeJoinArray(
+        params.joins,
+        lookup,
+        aliasTracker
+      );
       return {
         ...query,
         operationParameters: {
           ...params,
+          joins: canonicalizedJoins,
           columns: params.columns.map((column) =>
             canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
           ),
           relationsToCount: params.relationsToCount.map((relation) => {
-            const targetTable = relationMap[relation.name];
-            if (!targetTable || !relation.distinct) {
+            if (!relation.distinct) {
               return relation;
             }
+            if (relation.distinct.includes(".")) {
+              return {
+                ...relation,
+                distinct: canonicalizeFullyQualifiedColumn(
+                  relation.distinct,
+                  lookup,
+                  aliasTracker
+                ),
+              };
+            }
+            const targetTable = resolveAliasTable(
+              relation.name,
+              baseTableName,
+              canonicalizedJoins ?? []
+            );
             return {
               ...relation,
               distinct: canonicalizeColumnName(
@@ -370,22 +381,33 @@ export function canonicalizeQueryColumnReferences(
     case "aggregate": {
       const params =
         query.operationParameters as AggregateQuery["operationParameters"];
-      const canonicalizeBaseColumns = (columns: string[] | null) =>
+      const canonicalizedJoins = canonicalizeJoinArray(
+        params.joins,
+        lookup,
+        aliasTracker
+      );
+      const canonicalizeAggregateColumns = (columns: string[] | null) =>
         columns
           ? columns.map((column) =>
-              canonicalizeColumnName(lookup, baseTableName, column, aliasTracker)
+              canonicalizeMetricColumn(
+                column,
+                baseTableName,
+                lookup,
+                aliasTracker
+              )
             )
           : null;
       return {
         ...query,
         operationParameters: {
           ...params,
-          avg: canonicalizeBaseColumns(params.avg),
-          sum: canonicalizeBaseColumns(params.sum),
-          min: canonicalizeBaseColumns(params.min),
-          max: canonicalizeBaseColumns(params.max),
-          count: canonicalizeBaseColumns(params.count),
-          median: canonicalizeBaseColumns(params.median),
+          joins: canonicalizedJoins,
+          avg: canonicalizeAggregateColumns(params.avg),
+          sum: canonicalizeAggregateColumns(params.sum),
+          min: canonicalizeAggregateColumns(params.min),
+          max: canonicalizeAggregateColumns(params.max),
+          count: canonicalizeAggregateColumns(params.count),
+          median: canonicalizeAggregateColumns(params.median),
         },
       };
     }
@@ -501,26 +523,6 @@ function canonicalizeColumnName(
   return canonical;
 }
 
-function buildJoinPathMap(schema: Schema, baseTableName: string) {
-  const depth = Math.max(schema.length, 1);
-  const { iqlPaths } = generateJoinedTables(schema, baseTableName, depth);
-  return iqlPaths;
-}
-
-function canonicalizeColumnForJoinPath(
-  lookup: ColumnLookup,
-  joinPathMap: Record<string, string>,
-  baseTable: string,
-  path: string,
-  column: string,
-  aliasTracker?: ColumnAliasMap
-) {
-  const tableName =
-    path === baseTable ? baseTable : joinPathMap[path] ?? undefined;
-  if (!tableName) return column;
-  return canonicalizeColumnName(lookup, tableName, column, aliasTracker);
-}
-
 function canonicalizeFullyQualifiedColumn(
   column: string,
   lookup: ColumnLookup,
@@ -541,20 +543,163 @@ function canonicalizeFullyQualifiedColumn(
   return `${tableName}.${canonicalizedColumn}`;
 }
 
+type CanonicalizableJoin = {
+  table: string;
+  name?: string;
+  path: JoinPathHop[];
+  joinType?: string;
+};
+
+function canonicalizeJoinArray<T extends CanonicalizableJoin>(
+  joins: T[] | null | undefined,
+  lookup: ColumnLookup,
+  aliasTracker?: ColumnAliasMap
+): T[] | null | undefined {
+  if (!joins) {
+    return joins;
+  }
+
+  return joins.map((join) => ({
+    ...join,
+    path: join.path.map((hop) => ({
+      source: hop.source.map((column) =>
+        canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+      ),
+      target: hop.target.map((column) =>
+        canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+      ),
+    })),
+  }));
+}
+
+function resolveLookupTableName(
+  lookup: ColumnLookup,
+  alias: string
+) {
+  if (lookup.has(alias)) {
+    return alias;
+  }
+
+  const segments = alias.split(".");
+  for (let index = segments.length - 1; index >= 0; index--) {
+    const candidate = segments[index];
+    if (candidate && lookup.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return alias;
+}
+
+function canonicalizeMetricColumn(
+  column: string,
+  baseTableName: string,
+  lookup: ColumnLookup,
+  aliasTracker?: ColumnAliasMap
+) {
+  if (column === "_all") return column;
+
+  const separatorIndex = column.lastIndexOf(".");
+  if (separatorIndex === -1) {
+    throw new Error(
+      `Column ${column} must be qualified as tableOrAlias.column before canonicalization.`
+    );
+  }
+
+  const alias = column.slice(0, separatorIndex);
+  const columnName = column.slice(separatorIndex + 1);
+  const lookupTable = resolveLookupTableName(lookup, alias);
+  const canonicalColumn = canonicalizeColumnName(
+    lookup,
+    lookupTable,
+    columnName,
+    aliasTracker
+  );
+  return `${alias}.${canonicalColumn}`;
+}
+
 function getTableSchema(schema: Schema, tableName: string) {
   return schema.find((table) => table.name === tableName);
 }
 
-function buildRelationTargetMap(schema: Schema, tableName: string) {
-  const tableSchema = getTableSchema(schema, tableName);
-  if (!tableSchema?.outwardRelations) {
-    return {};
+type JoinAliasMap = Map<string, string>;
+
+function buildJoinPathMap(
+  baseTableName: string,
+  joins: FindManyQuery["operationParameters"]["joins"]
+): JoinAliasMap {
+  const map: JoinAliasMap = new Map();
+  map.set(baseTableName, baseTableName);
+
+  (joins ?? []).forEach((join) => {
+    const alias = join.name ?? join.table;
+    if (!map.has(alias)) {
+      map.set(alias, join.table);
+    }
+    const segments = alias.split(".");
+    const terminal = segments[segments.length - 1];
+    if (terminal && !map.has(terminal)) {
+      map.set(terminal, join.table);
+    }
+  });
+
+  return map;
+}
+
+function canonicalizeColumnForJoinPath(
+  lookup: ColumnLookup,
+  joinAliasMap: JoinAliasMap,
+  baseTableName: string,
+  path: string,
+  column: string,
+  aliasTracker?: ColumnAliasMap
+) {
+  if (column.includes(".")) {
+    return canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker);
   }
-  return tableSchema.outwardRelations.reduce<Record<string, string>>(
-    (acc, relation) => {
-      acc[relation.name] = relation.targetTable.name;
-      return acc;
-    },
-    {}
+
+  const candidateAliases = [
+    path,
+    `${baseTableName}.${path}`,
+    path.split(".").pop(),
+    baseTableName,
+  ].filter((alias): alias is string => Boolean(alias));
+
+  for (const alias of candidateAliases) {
+    const tableName = joinAliasMap.get(alias);
+    if (tableName) {
+      return canonicalizeColumnName(
+        lookup,
+        tableName,
+        column,
+        aliasTracker
+      );
+    }
+  }
+
+  return canonicalizeColumnName(lookup, baseTableName, column, aliasTracker);
+}
+
+function resolveAliasTable(
+  alias: string,
+  baseTableName: string,
+  joins: Array<{ table: string; name?: string }> | null | undefined
+): string {
+  if (!joins?.length || alias === baseTableName) {
+    return baseTableName;
+  }
+
+  const direct = joins.find((join) => (join.name ?? join.table) === alias);
+  if (direct) {
+    return direct.table;
+  }
+
+  const suffixMatch = joins.find((join) =>
+    (join.name ?? join.table).endsWith(`.${alias}`)
   );
+  if (suffixMatch) {
+    return suffixMatch.table;
+  }
+
+  return alias;
 }

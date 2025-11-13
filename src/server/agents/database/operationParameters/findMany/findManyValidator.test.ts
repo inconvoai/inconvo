@@ -2,25 +2,52 @@ import { describe, it, expect } from "vitest";
 import {
   buildFindManyZodSchema,
   validateFindManyCandidate,
+  type FindManyValidatorContext,
 } from "./findManyValidator";
 
-const ctx = {
+const ctx: FindManyValidatorContext = {
+  baseTable: "users",
   selectableTableColumns: {
-    base: ["id", "name", "createdAt"],
-    "base>orders": ["id", "total", "createdAt"],
+    users: ["id", "name", "createdAt"],
+    "users.orders": ["id", "total", "createdAt"],
   },
   baseColumns: ["id", "name", "createdAt"],
   baseComputedColumns: ["_row_number"],
+  joinOptions: [
+    {
+      name: "users.orders",
+      table: "orders",
+      path: [
+        {
+          source: ["users.id"],
+          target: ["orders.user_id"],
+        },
+      ],
+      selectableColumns: ["id", "total", "createdAt"],
+    },
+  ],
 };
 
 describe("findMany validator", () => {
   it("builds a schema that validates a correct candidate and strips empty arrays", () => {
     const schema = buildFindManyZodSchema(ctx);
     const candidate = {
-      columns: {
-        base: ["id", "name"],
-        "base>orders": [], // should be stripped
+      select: {
+        users: ["id", "name"],
+        "users.orders": [], // should be stripped
       },
+      joins: [
+        {
+          table: "orders",
+          name: "users.orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+          ],
+        },
+      ],
       orderBy: { direction: "asc", column: "id" },
       limit: 25,
     };
@@ -29,14 +56,15 @@ describe("findMany validator", () => {
     const result = validateFindManyCandidate(candidate, ctx);
     expect(result.status).toBe("valid");
     if (result.status === "valid") {
-      expect(result.result.columns).toEqual({ base: ["id", "name"] });
+      expect(result.result.select).toEqual({ users: ["id", "name"] });
+      expect(result.result.joins?.length).toBe(1);
       expect(result.result.limit).toBe(25);
     }
   });
 
   it("returns invalid with issues for bad orderBy column and limit", () => {
     const bad = {
-      columns: { base: ["id"] },
+      select: { users: ["id"] },
       orderBy: { direction: "asc", column: "nonexistent" },
       limit: 50000,
     };
@@ -50,7 +78,7 @@ describe("findMany validator", () => {
 
   it("allows null orderBy", () => {
     const candidate = {
-      columns: { base: ["id"] },
+      select: { users: ["id"] },
       orderBy: null,
       limit: 5,
     };

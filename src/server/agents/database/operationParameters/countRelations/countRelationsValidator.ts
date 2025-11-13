@@ -1,9 +1,23 @@
 import { z } from "zod";
-import type { CountRelationsQuery } from "~/server/userDatabaseConnector/types";
+import {
+  joinDescriptorSchema,
+  type CountRelationsQuery,
+  type JoinPathHop,
+} from "~/server/userDatabaseConnector/types";
 import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
+
+const countRelationsJoinSchema = joinDescriptorSchema
+  .extend({
+    name: z.string().min(1),
+  })
+  .strip();
+
+type CountRelationsJoinInput = z.infer<typeof countRelationsJoinSchema>;
 
 export interface CountRelationsRelationOption {
   name: string;
+  table: string;
+  path: JoinPathHop[];
   targetColumns: string[]; // unqualified column names in the related table
 }
 
@@ -57,7 +71,7 @@ export function buildCountRelationsZodSchema(
       relationsToCount: z.array(z.never()).min(1),
       orderBy: z
         .object({
-          relation: z.string(),
+          name: z.string(),
           direction: z.enum(["asc", "desc"]),
         })
         .nullable(),
@@ -70,10 +84,29 @@ export function buildCountRelationsZodSchema(
     ctx.relationOptions.map((r) => r.name)
   );
 
+  const joinDescription =
+    ctx.relationOptions.length > 0
+      ? [
+          "Array of join descriptors. Each relation must appear here with name matching the relation.",
+          "Available joins:",
+          ...ctx.relationOptions.map(
+            (option) =>
+              `${option.name} (${option.table}) path=${formatJoinPath(
+                option.path
+              )}`
+          ),
+        ].join("\n")
+      : "Array of join descriptors (no relations available).";
+
   return z.object({
     columns: z
       .array(baseColEnum)
       .min(1, "Select at least one base table column to include"),
+    joins: z
+      .array(countRelationsJoinSchema)
+      .nullable()
+      .optional()
+      .describe(joinDescription),
     relationsToCount: z
       .array(
         z.union(
@@ -87,7 +120,7 @@ export function buildCountRelationsZodSchema(
       .min(1, "Select at least one relation to count"),
     orderBy: z
       .object({
-        relation: relationNameEnum,
+        name: relationNameEnum,
         direction: z.enum(["asc", "desc"]),
       })
       .nullable(),
@@ -114,6 +147,17 @@ export function validateCountRelationsCandidate(
 
   const data = parsed.data;
   const issues: CountRelationsInvalidResultIssue[] = [];
+
+  const joinsInput =
+    "joins" in data
+      ? (data as { joins?: CountRelationsJoinInput[] | null }).joins ?? null
+      : null;
+
+  const validatedJoins = validateJoins(
+    joinsInput,
+    ctx,
+    issues
+  );
 
   // Type the relationsToCount properly to avoid unsafe access
   const relationsToCount = data.relationsToCount as Array<{
@@ -149,11 +193,38 @@ export function validateCountRelationsCandidate(
     }
   });
 
+  relationsToCount.forEach((rel, idx) => {
+    const hasJoin = validatedJoins?.some((join) => join.name === rel.name);
+    if (!hasJoin) {
+      issues.push({
+        path: `relationsToCount.${idx}.name`,
+        message: `Relation ${rel.name} must have a matching join descriptor in joins array.`,
+        code: "missing_join_descriptor",
+      });
+    }
+  });
+
+  // Disallow stray joins not tied to relation options
+  if (validatedJoins) {
+    validatedJoins.forEach((join, index) => {
+      const relationAllowed = ctx.relationOptions.some(
+        (option) => option.name === join.name
+      );
+      if (!relationAllowed) {
+        issues.push({
+          path: `joins.${index}.name`,
+          message: `Join alias ${join.name} does not match any countable relation.`,
+          code: "unknown_join_alias",
+        });
+      }
+    });
+  }
+
   // orderBy relation must be among listed relationsToCount
-  if (data.orderBy && !relationSet.has(data.orderBy.relation)) {
+  if (data.orderBy && !relationSet.has(data.orderBy.name)) {
     issues.push({
-      path: "orderBy.relation",
-      message: "orderBy.relation must be one of relationsToCount names",
+      path: "orderBy.name",
+      message: "orderBy.name must be one of relationsToCount names",
       code: "orderBy_not_counted",
     });
   }
@@ -164,6 +235,7 @@ export function validateCountRelationsCandidate(
 
   const result: CountRelationsQuery["operationParameters"] = {
     columns: data.columns,
+    joins: validatedJoins ?? null,
     relationsToCount: relationsToCount.map((r) => ({
       name: r.name,
       distinct: r.distinct ?? null,
@@ -173,4 +245,88 @@ export function validateCountRelationsCandidate(
   };
 
   return { status: "valid", result };
+}
+
+function validateJoins(
+  joins: CountRelationsJoinInput[] | null | undefined,
+  ctx: CountRelationsValidatorContext,
+  issues: CountRelationsInvalidResultIssue[]
+): CountRelationsQuery["operationParameters"]["joins"] | undefined {
+  if (!joins || joins.length === 0) {
+    return undefined;
+  }
+
+  const optionsByName = new Map(
+    ctx.relationOptions.map((option) => [option.name, option])
+  );
+  const seenAliases = new Set<string>();
+
+  const validated = joins
+    .map((join, index) => {
+      const alias = join.name;
+      if (seenAliases.has(alias)) {
+        issues.push({
+          path: `joins.${index}.name`,
+          message: `Join alias ${alias} appears more than once.`,
+          code: "duplicate_join_alias",
+        });
+        return null;
+      }
+
+      const option = optionsByName.get(alias);
+      if (!option) {
+        issues.push({
+          path: `joins.${index}.name`,
+          message: `Join alias ${alias} does not correspond to a known relation.`,
+          code: "unknown_join_alias",
+        });
+        return null;
+      }
+
+      const candidateKey = joinPathKey(join.path);
+      const expectedKey = joinPathKey(option.path);
+      if (candidateKey !== expectedKey) {
+        issues.push({
+          path: `joins.${index}.path`,
+          message: `Join path for ${alias} does not match the relation's columns.`,
+          code: "invalid_join_path",
+        });
+      }
+
+      if (join.table !== option.table) {
+        issues.push({
+          path: `joins.${index}.table`,
+          message: `Join table must be ${option.table} for relation ${alias}.`,
+          code: "invalid_join_table",
+        });
+      }
+
+      seenAliases.add(alias);
+
+      return {
+        name: option.name,
+        table: option.table,
+        path: option.path,
+        joinType: join.joinType,
+      } satisfies NonNullable<
+        CountRelationsQuery["operationParameters"]["joins"]
+      >[number];
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return validated.length > 0 ? validated : undefined;
+}
+
+function joinPathKey(path: JoinPathHop[]) {
+  return path
+    .map((hop) => `${hop.source.join(",")}=>${hop.target.join(",")}`)
+    .join("|");
+}
+
+function formatJoinPath(path: JoinPathHop[]) {
+  return path
+    .map(
+      (hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`
+    )
+    .join(" | ");
 }

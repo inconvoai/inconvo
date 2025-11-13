@@ -1,59 +1,6 @@
 import assert from "assert";
 import type { Schema } from "~/server/db/schema";
-
-export function generateJoinedTables(
-  schema: Schema,
-  startingTableName: string,
-  maxDepth: number
-) {
-  const tableSchema = schema.find((table) => table.name === startingTableName);
-  assert(tableSchema, `Table ${startingTableName} not found in schema`);
-
-  const paths: [string, string][][] = [];
-  for (const relation of tableSchema.outwardRelations ?? []) {
-    const relationName = relation.name;
-    paths.push([
-      [startingTableName, startingTableName],
-      [relationName, relation.targetTable.name],
-    ]);
-  }
-
-  for (let i = 1; i < maxDepth; i++) {
-    const pathsToExtend = paths.filter((path) => path.length == i + 1);
-    for (const path of pathsToExtend) {
-      const endTableSchema = schema.find(
-        (table) => table.name === path.at(-1)?.[1]
-      );
-      const tablesInPath = path.map((pair) => pair[1]);
-      assert(endTableSchema, "Table does not exist");
-      for (const relation of endTableSchema.outwardRelations ?? []) {
-        const relationName = relation.name;
-        if (tablesInPath.includes(relation.targetTable.name)) continue;
-        if (relation.targetTable.name === startingTableName) continue;
-        paths.push([...path, [relationName, relation.targetTable.name]]);
-      }
-    }
-  }
-
-  const iqlPaths: Record<string, string> = {
-    [startingTableName]: startingTableName,
-  };
-
-  paths.forEach(
-    (path) =>
-      (iqlPaths[
-        path
-          .map((rel) => rel[0])
-          .flat()
-          .join(".")
-      ] = path.at(-1)![1])
-  );
-
-  const tables = [...paths.map((path) => path.at(-1)![1]), startingTableName];
-  const uniqueTableNames = Array.from(new Set(tables));
-
-  return { iqlPaths, uniqueTableNames };
-}
+import type { JoinPathHop } from "~/server/userDatabaseConnector/types";
 
 export function findRelationsToAColumn(
   schema: Schema,
@@ -86,4 +33,152 @@ export function findRelationsToAColumn(
   }
 
   return null;
+}
+
+export interface GeneratedJoinOption {
+  name: string;
+  table: string;
+  path: JoinPathHop[];
+  selectableColumns: string[];
+}
+
+export interface GeneratedJoinGraph {
+  baseAlias: string;
+  aliasToTable: Record<string, string>;
+  joinOptions: GeneratedJoinOption[];
+  uniqueTableNames: string[];
+}
+
+type QueueEntry = {
+  alias: string;
+  table: string;
+  path: JoinPathHop[];
+  depth: number;
+  visitedTables: Set<string>;
+};
+
+export function generateJoinGraph(
+  schema: Schema,
+  startingTableName: string,
+  maxDepth: number
+): GeneratedJoinGraph {
+  const baseTableSchema = schema.find((table) => table.name === startingTableName);
+  assert(baseTableSchema, `Table ${startingTableName} not found in schema`);
+
+  const aliasToTable: Record<string, string> = {
+    [startingTableName]: startingTableName,
+  };
+  const joinOptions: GeneratedJoinOption[] = [];
+  const uniqueTableNames = new Set<string>([startingTableName]);
+
+  const queue: QueueEntry[] = [];
+  const minDepthByTable = new Map<string, number>([[startingTableName, 0]]);
+
+  for (const relation of baseTableSchema.outwardRelations ?? []) {
+    const entry = buildQueueEntry(
+      startingTableName,
+      relation,
+      1,
+      null,
+      new Set([startingTableName])
+    );
+    if (entry) {
+      queue.push(entry);
+    }
+  }
+
+  const visitedAliases = new Set<string>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visitedAliases.has(current.alias)) continue;
+    visitedAliases.add(current.alias);
+
+    const existingDepth = minDepthByTable.get(current.table);
+    if (existingDepth !== undefined && existingDepth <= current.depth) {
+      continue;
+    }
+    minDepthByTable.set(current.table, current.depth);
+
+    aliasToTable[current.alias] = current.table;
+    uniqueTableNames.add(current.table);
+
+    const tableSchema = schema.find((table) => table.name === current.table);
+    if (!tableSchema) continue;
+
+    joinOptions.push({
+      name: current.alias,
+      table: current.table,
+      path: current.path,
+      selectableColumns: collectSelectableColumns(tableSchema),
+    });
+
+    if (current.depth >= maxDepth) continue;
+
+    for (const relation of tableSchema.outwardRelations ?? []) {
+      const entry = buildQueueEntry(
+        current.table,
+        relation,
+        current.depth + 1,
+        current,
+        current.visitedTables
+      );
+      if (entry) {
+        queue.push(entry);
+      }
+    }
+  }
+
+  return {
+    baseAlias: startingTableName,
+    aliasToTable,
+    joinOptions,
+    uniqueTableNames: Array.from(uniqueTableNames),
+  };
+}
+
+function buildQueueEntry(
+  sourceTable: string,
+  relation: NonNullable<Schema[number]["outwardRelations"]>[number],
+  depth: number,
+  parent: QueueEntry | null,
+  visited: Set<string>
+): QueueEntry | null {
+  const targetTableName = relation.targetTable?.name;
+  if (!targetTableName) return null;
+  if (!relation.sourceColumns?.length || !relation.targetColumns?.length) return null;
+
+  const visitedTables = parent
+    ? new Set(parent.visitedTables)
+    : new Set(visited);
+
+  if (visitedTables.has(targetTableName)) {
+    return null;
+  }
+  visitedTables.add(targetTableName);
+
+  const relationLabel = relation.relationName ?? relation.name ?? targetTableName;
+  const alias = parent ? `${parent.alias}.${relationLabel}` : `${sourceTable}.${relationLabel}`;
+
+  const hop: JoinPathHop = {
+    source: relation.sourceColumns.map((column) => `${sourceTable}.${column}`),
+    target: relation.targetColumns.map((column) => `${targetTableName}.${column}`),
+  };
+
+  const path: JoinPathHop[] = parent ? [...parent.path, hop] : [hop];
+
+  return {
+    alias,
+    table: targetTableName,
+    path,
+    depth,
+    visitedTables,
+  };
+}
+
+function collectSelectableColumns(tableSchema: Schema[number]) {
+  return [
+    ...tableSchema.columns.map((column) => column.name),
+    ...(tableSchema.computedColumns ?? []).map((column) => column.name),
+  ];
 }

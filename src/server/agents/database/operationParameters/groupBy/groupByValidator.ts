@@ -1,28 +1,27 @@
 import { z } from "zod";
-import type {
-  GroupByKey,
-  GroupByOrderBy,
-  GroupByQuery,
+import {
+  joinDescriptorSchema,
+  joinPathHopSchema,
+  joinTypeSchema,
+  type GroupByKey,
+  type GroupByQuery,
+  type JoinPathHop,
 } from "~/server/userDatabaseConnector/types";
 import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
 export interface GroupByJoinOption {
+  name: string;
   table: string;
-  joinPath: string;
+  path: JoinPathHop[];
 }
 
 export interface GroupByValidatorContext {
   baseTableName: string;
-  joinOptions: GroupByJoinOption[]; // possible joins (1 hop)
-  allColumns: string[]; // fully qualified table.column (base + all joins)
-  groupableColumns: string[]; // subset eligible for plain column grouping (non-temporal)
-  intervalColumns: string[]; // subset eligible for date interval/component grouping
-  numericalColumns: string[]; // subset of allColumns that are numeric/computed numeric
-}
-
-export interface GroupByValidResult {
-  status: "valid";
-  result: GroupByQuery["operationParameters"];
+  joinOptions: GroupByJoinOption[];
+  allColumns: string[];
+  groupableColumns: string[];
+  intervalColumns: string[];
+  numericalColumns: string[];
 }
 
 export interface GroupByInvalidResultIssue {
@@ -36,31 +35,18 @@ export interface GroupByInvalidResult {
   issues: GroupByInvalidResultIssue[];
 }
 
-export type GroupByValidationResult = GroupByValidResult | GroupByInvalidResult;
+export type GroupByValidationResult =
+  | { status: "valid"; result: GroupByQuery["operationParameters"] }
+  | GroupByInvalidResult;
 
-// Build dynamic zod schema (broad superset); fine-grained rules enforced manually afterwards
+const joinSchema = joinDescriptorSchema
+  .extend({
+    path: z.array(joinPathHopSchema).min(1),
+    joinType: joinTypeSchema.optional(),
+  })
+  .strip();
+
 export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
-  const joinLiteralSchemas = ctx.joinOptions.map((opt) =>
-    z.object({
-      table: z.literal(opt.table),
-      joinPath: z.literal(opt.joinPath),
-      joinType: z.enum(["inner", "left", "right"]),
-    })
-  );
-
-  const joinsSchema = z
-    .array(
-      z.union(
-        joinLiteralSchemas as unknown as [
-          z.ZodTypeAny,
-          z.ZodTypeAny,
-          ...z.ZodTypeAny[]
-        ]
-      )
-    )
-    .nullable()
-    .describe("Chosen joins (subset of available); null or empty for none");
-
   const buildEnum = (values: string[]) =>
     values.length ? stringArrayToZodEnum(values) : null;
 
@@ -69,18 +55,9 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   const groupableColumnsEnum = buildEnum(ctx.groupableColumns);
   const intervalColumnsEnum = buildEnum(ctx.intervalColumns);
 
-  const allColumnsEnumOrNever = allColumnsEnum ?? z.never();
-
   const buildAggregateArraySchema = (
     enumSchema: z.ZodEnum<[string, ...string[]]> | null
-  ) =>
-    enumSchema
-      ? z
-          .array(enumSchema)
-          .min(1)
-          .describe("Columns for this aggregate (fully qualified)")
-          .nullable()
-      : z.null();
+  ) => (enumSchema ? z.array(enumSchema).min(1).nullable() : z.null());
 
   type ColumnGroupKey = Extract<GroupByKey, { type: "column" }>;
   type IntervalGroupKey = Extract<GroupByKey, { type: "dateInterval" }>;
@@ -121,22 +98,13 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
       })
       .strict();
 
-  const columnKeySchema = groupableColumnsEnum
-    ? buildColumnGroupKeySchema(groupableColumnsEnum)
-    : null;
-
-  const intervalKeySchema = intervalColumnsEnum
-    ? buildIntervalGroupKeySchema(intervalColumnsEnum)
-    : null;
-
-  const componentKeySchema = intervalColumnsEnum
-    ? buildComponentGroupKeySchema(intervalColumnsEnum)
-    : null;
-
   const keySchemas: z.ZodTypeAny[] = [];
-  if (columnKeySchema) keySchemas.push(columnKeySchema);
-  if (intervalKeySchema) keySchemas.push(intervalKeySchema);
-  if (componentKeySchema) keySchemas.push(componentKeySchema);
+  if (groupableColumnsEnum)
+    keySchemas.push(buildColumnGroupKeySchema(groupableColumnsEnum));
+  if (intervalColumnsEnum) {
+    keySchemas.push(buildIntervalGroupKeySchema(intervalColumnsEnum));
+    keySchemas.push(buildComponentGroupKeySchema(intervalColumnsEnum));
+  }
 
   let groupByKeySchema: z.ZodType<GroupByKey>;
   if (keySchemas.length === 0) {
@@ -145,13 +113,11 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     groupByKeySchema = keySchemas[0] as z.ZodType<GroupByKey>;
   } else {
     groupByKeySchema = z.union(
-      keySchemas as [
-        z.ZodTypeAny,
-        z.ZodTypeAny,
-        ...z.ZodTypeAny[]
-      ]
+      keySchemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]
     ) as z.ZodType<GroupByKey>;
   }
+
+  const allColumnsEnumOrNever = allColumnsEnum ?? z.never();
 
   const groupKeyOrderSchema = z
     .object({
@@ -164,24 +130,15 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   const aggregateOrderSchema = z
     .object({
       type: z.literal("aggregate"),
-      function: z.enum(
-        ctx.numericalColumns.length
-          ? (["count", "sum", "min", "max", "avg"] as const)
-          : (["count"] as const)
-      ),
-      column: allColumnsEnumOrNever.describe(
-        "Column referenced by order by function"
-      ),
+      function: z.enum(["count", "sum", "min", "max", "avg"]),
+      column: allColumnsEnumOrNever,
       direction: z.enum(["asc", "desc"]),
     })
     .strict();
 
   return z.object({
-    joins: joinsSchema.optional(),
-    groupBy: z
-      .array(groupByKeySchema)
-      .min(1)
-    .describe("Columns, date intervals, or date components to group by"),
+    joins: z.array(joinSchema).nullable().optional(),
+    groupBy: z.array(groupByKeySchema).min(1),
     count: buildAggregateArraySchema(allColumnsEnum),
     sum: buildAggregateArraySchema(numericalColumnsEnum),
     min: buildAggregateArraySchema(numericalColumnsEnum),
@@ -200,45 +157,34 @@ export function validateGroupByCandidate(
   const parsed = schema.safeParse(candidate);
   if (!parsed.success) {
     const issues: GroupByInvalidResultIssue[] = parsed.error.issues.map(
-      (i) => ({
-        path: i.path.join(".") || "<root>",
-        message: i.message,
-        code: i.code,
+      (issue) => ({
+        path: issue.path.join(".") || "<root>",
+        message: issue.message,
+        code: issue.code,
       })
     );
     return { status: "invalid", issues };
   }
 
-  const data = parsed.data as {
-    joins?: GroupByQuery["operationParameters"]["joins"];
-    groupBy: GroupByKey[];
-    count: string[] | null;
-    sum: string[] | null;
-    min: string[] | null;
-    max: string[] | null;
-    avg: string[] | null;
-    orderBy: GroupByOrderBy;
-    limit: number;
-  };
-
-  // Type the joins properly to avoid unsafe access
-  const joins = data.joins as
-    | Array<{
-        table: string;
-        joinPath: string;
-        joinType: "inner" | "left" | "right";
-      }>
-    | null
-    | undefined;
-
-  const selectedJoinTables = new Set([
-    ctx.baseTableName,
-    ...(joins?.map((j) => j.table) ?? []),
-  ]);
+  const data = parsed.data;
 
   const issues: GroupByInvalidResultIssue[] = [];
+  const validatedJoins = validateJoins(data.joins ?? null, ctx, issues);
 
-  // Helper to check table portion
+  if (issues.length) {
+    return { status: "invalid", issues };
+  }
+
+  const aliasToTable = new Map<string, string>();
+  aliasToTable.set(ctx.baseTableName, ctx.baseTableName);
+  validatedJoins?.forEach((join) => {
+    const alias = join.name ?? join.table;
+    aliasToTable.set(alias, join.table);
+    aliasToTable.set(join.table, join.table);
+  });
+
+  const selectedJoinTables = new Set(aliasToTable.keys());
+
   const tablePart = (fq: string) => fq.split(".")[0] ?? "";
 
   const ensureColumnTablesAllowed = (
@@ -247,7 +193,8 @@ export function validateGroupByCandidate(
   ) => {
     if (!cols) return;
     cols.forEach((c) => {
-      if (!selectedJoinTables.has(tablePart(c))) {
+      const tableAlias = tablePart(c);
+      if (!selectedJoinTables.has(tableAlias)) {
         issues.push({
           path,
           message: `Column ${c} references table not selected in joins`,
@@ -259,6 +206,7 @@ export function validateGroupByCandidate(
 
   const resolvedGroupBy: GroupByKey[] = [];
   const aliasSet = new Set<string>();
+
   data.groupBy.forEach((key, index) => {
     const defaultAlias =
       key.type === "column"
@@ -266,10 +214,7 @@ export function validateGroupByCandidate(
         : key.type === "dateInterval"
         ? `${key.column}|${key.interval}`
         : `${key.column}|${key.component}`;
-    const aliasCandidate =
-      key.alias && key.alias.trim().length > 0
-        ? key.alias.trim()
-        : defaultAlias;
+    const aliasCandidate = (key.alias ?? defaultAlias).trim() || defaultAlias;
 
     if (aliasSet.has(aliasCandidate)) {
       issues.push({
@@ -321,7 +266,6 @@ export function validateGroupByCandidate(
   ensureColumnTablesAllowed(data.max ?? undefined, "max");
   ensureColumnTablesAllowed(data.avg ?? undefined, "avg");
 
-  // orderBy validation
   if (data.orderBy.type === "groupKey") {
     if (!aliasSet.has(data.orderBy.key)) {
       issues.push({
@@ -342,11 +286,10 @@ export function validateGroupByCandidate(
       });
     }
 
-    const allowedTables = selectedJoinTables;
-    if (!allowedTables.has(tablePart(data.orderBy.column))) {
+    if (!selectedJoinTables.has(tablePart(data.orderBy.column))) {
       issues.push({
         path: "orderBy.column",
-        message: `OrderBy column table not in selected joins`,
+        message: `OrderBy column ${data.orderBy.column} references table not selected in joins`,
         code: "orderBy_table_missing",
       });
     }
@@ -377,12 +320,11 @@ export function validateGroupByCandidate(
     return { status: "invalid", issues };
   }
 
-  // Strip empty aggregate columns arrays (should not happen due to min(1), but defensively)
   const cleanAgg = (agg: string[] | null | undefined) =>
     agg && agg.length > 0 ? agg : null;
 
   const result: GroupByQuery["operationParameters"] = {
-    joins: data.joins && data.joins.length > 0 ? data.joins : null,
+    joins: validatedJoins ?? null,
     groupBy: resolvedGroupBy,
     count: cleanAgg(data.count),
     sum: cleanAgg(data.sum),
@@ -406,4 +348,71 @@ export function validateGroupByCandidate(
   };
 
   return { status: "valid", result };
+}
+
+function validateJoins(
+  joins: z.infer<typeof joinSchema>[] | null,
+  ctx: GroupByValidatorContext,
+  issues: GroupByInvalidResultIssue[]
+): GroupByQuery["operationParameters"]["joins"] | undefined {
+  if (!joins || joins.length === 0) {
+    return undefined;
+  }
+
+  const joinOptionsByKey = new Map(
+    ctx.joinOptions.map((option) => [joinPathKey(option.path), option])
+  );
+  const seenAliases = new Set<string>();
+
+  const validated = joins
+    .map((join, index) => {
+      const key = joinPathKey(join.path);
+      const option = joinOptionsByKey.get(key);
+      if (!option) {
+        issues.push({
+          path: `joins.${index}.path`,
+          message: "Join path does not match any available relation path.",
+          code: "invalid_join_path",
+        });
+        return null;
+      }
+
+      if (join.table !== option.table) {
+        issues.push({
+          path: `joins.${index}.table`,
+          message: `Join table must be ${option.table} for the selected path.`,
+          code: "mismatched_join_table",
+        });
+        return null;
+      }
+
+      const alias = join.name ?? option.name;
+      if (seenAliases.has(alias)) {
+        issues.push({
+          path: `joins.${index}.name`,
+          message: `Join alias ${alias} has already been selected.`,
+          code: "duplicate_join_alias",
+        });
+        return null;
+      }
+      seenAliases.add(alias);
+
+      return {
+        table: option.table,
+        name: alias,
+        path: option.path,
+        joinType: join.joinType,
+      } satisfies NonNullable<
+        GroupByQuery["operationParameters"]["joins"]
+      >[number];
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return validated.length > 0 ? validated : undefined;
+}
+
+function joinPathKey(path: JoinPathHop[]) {
+  return path
+    .map((hop) => `${hop.source.join(",")}=>${hop.target.join(",")}`)
+    .join("|");
 }

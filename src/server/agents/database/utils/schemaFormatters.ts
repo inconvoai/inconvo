@@ -1,6 +1,34 @@
 import type { Schema } from "~/server/db/schema";
+import { type SQLComputedColumnAst } from "~/server/userDatabaseConnector/types";
 
 type TableSchema = Schema[number];
+
+export function stringifyComputedColumnAst(
+  columnAst: SQLComputedColumnAst
+): string {
+  switch (columnAst.type) {
+    case "column":
+      return columnAst.name;
+    case "value":
+      return String(columnAst.value);
+    case "operation": {
+      if (columnAst.operands.length === 0) {
+        return "";
+      }
+      const operandStrings = columnAst.operands.map((operand) =>
+        stringifyComputedColumnAst(operand)
+      );
+      const combined = operandStrings.join(` ${columnAst.operator} `);
+      return `(${combined})`;
+    }
+    case "brackets":
+      return `(${stringifyComputedColumnAst(columnAst.expression)})`;
+    default: {
+      const _exhaustiveCheck: never = columnAst;
+      return _exhaustiveCheck;
+    }
+  }
+}
 
 export function buildTableSchemaStringFromTableSchema(
   tableSchema: TableSchema
@@ -13,9 +41,7 @@ export function buildTableSchemaStringFromTableSchema(
   const columns = tableSchema.columns
     .map((column) => {
       const unitSuffix = column.unit ? ` [${column.unit}]` : "";
-      const displayName = column.rename?.trim()
-        ? column.rename
-        : column.name;
+      const displayName = column.rename?.trim() ? column.rename : column.name;
       const notesSuffix = column.notes ? ` - Notes: ${column.notes}` : "";
       return `\t\t- ${displayName} (${column.type}${unitSuffix})${notesSuffix}`;
     })
@@ -24,7 +50,11 @@ export function buildTableSchemaStringFromTableSchema(
   const computedColumns = tableSchema.computedColumns
     .map((column, index) => {
       const unitSuffix = column.unit ? ` [${column.unit}]` : "";
-      return `${index === 0 ? "\n" : ""}\t\t- ${column.name} (${column.type}${unitSuffix})`;
+      return `${index === 0 ? "\n" : ""}\t\t- ${column.name} (${
+        column.type
+      }${unitSuffix}) Alias for: ${stringifyComputedColumnAst(
+        column.ast as SQLComputedColumnAst
+      )}`;
     })
     .join("\n");
   const relations =

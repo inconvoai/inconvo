@@ -15,14 +15,13 @@ import type {
 import type { Schema } from "~/server/db/schema";
 import { getAIModel } from "~/server/agents/utils/getAIModel";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
-import { generateJoinedTables } from "../utils/tableRelations";
+import { generateJoinGraph } from "../utils/tableRelations";
 import { getPrompt } from "../../utils/getPrompt";
 import {
   type AIMessage,
   HumanMessage,
-  isToolMessage,
+  ToolMessage,
   type BaseMessage,
-  type ToolMessage,
 } from "@langchain/core/messages";
 import assert from "assert";
 import { createQuestionConditionsDynamicSchema } from "./dynamicSchema";
@@ -60,7 +59,7 @@ interface RequestParams {
 export async function questionWhereConditionAgent(params: RequestParams) {
   const llm = getAIModel("azure:gpt-5");
 
-  const relatedTables = generateJoinedTables(
+  const relatedTables = generateJoinGraph(
     params.schema,
     params.tableName,
     1
@@ -203,7 +202,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const graphResult = await app.invoke({ messages: initialMessages });
 
   const validToolMessage = graphResult.messages.toReversed().find((m) => {
-    if (!isToolMessage(m)) return false;
+    if (!ToolMessage.isInstance(m)) return false;
     if (m.name !== "applyFilterTool") return false;
     const art = m.artifact as WhereConditionArtifact;
     return art.status === "valid" && art.filter !== undefined;

@@ -1,7 +1,7 @@
 export const operationDocs = {
   findMany: {
     description:
-      "Returns 1 or more records for a given table and specified columns. You can optionally order the results with the order object, if not ordering set order to null. You may join to any related tables",
+      "Returns one or more records for a given table using a `select` map keyed by table alias. Each key lists the columns to fetch for that alias. You can optionally include joins and an order clause (set to null if not ordering).",
     examples: [
       {
         question:
@@ -10,10 +10,22 @@ export const operationDocs = {
           table: "user",
           operation: "findMany",
           operationParameters: {
-            columns: {
+            select: {
               user: ["name"],
-              address: ["line1", "line2", "city", "state", "zip"],
+              "user.address": ["line1", "line2", "city", "state", "zip"],
             },
+            joins: [
+              {
+                table: "address",
+                name: "user.address",
+                path: [
+                  {
+                    source: ["user.address_id"],
+                    target: ["address.id"],
+                  },
+                ],
+              },
+            ],
             orderBy: {
               column: "createdAt",
               direction: "desc",
@@ -44,11 +56,72 @@ export const operationDocs = {
           },
         ],
       },
+      {
+        question:
+          "For the 5 most recently created users, show their orders with subtotal and product name.",
+        query: {
+          table: "users",
+          operation: "findMany",
+          operationParameters: {
+            select: {
+              users: ["id", "name", "created_at"],
+              "users.orders": ["id", "subtotal", "created_at"],
+              "users.orders.products": ["title"],
+            },
+            joins: [
+              {
+                table: "orders",
+                name: "users.orders",
+                path: [
+                  {
+                    source: ["users.id"],
+                    target: ["orders.user_id"],
+                  },
+                ],
+              },
+              {
+                table: "products",
+                name: "users.orders.products",
+                path: [
+                  {
+                    source: ["users.id"],
+                    target: ["orders.user_id"],
+                  },
+                  {
+                    source: ["orders.product_id"],
+                    target: ["products.id"],
+                  },
+                ],
+              },
+            ],
+            orderBy: {
+              column: "created_at",
+              direction: "desc",
+            },
+            limit: 5,
+          },
+        },
+        response: [
+          {
+            id: 1,
+            name: "Alice",
+            created_at: "2024-10-01T12:00:00.000Z",
+            orders: [
+              {
+                id: 301,
+                subtotal: 199.99,
+                created_at: "2024-10-02T09:00:00.000Z",
+                products: [{ title: "Noise Cancelling Headphones" }],
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
   findDistinct: {
     description:
-      "Returns a list of distinct values for a given column in a table.",
+      "Returns a list of distinct values for a given column in a table. Columns must be fully qualified (`table.column`).",
     examples: [
       {
         question: "Find all distinct countries in the user table.",
@@ -56,7 +129,7 @@ export const operationDocs = {
           table: "user",
           operation: "findDistinct",
           operationParameters: {
-            column: "country",
+            column: "user.country",
           },
         },
         response: [{ country: "USA" }, { country: "UK" }, { country: "IRE" }],
@@ -65,7 +138,7 @@ export const operationDocs = {
   },
   count: {
     description:
-      "Returns the count and/or count distinct of specified columns in a table. Use `count` for regular counts (including _all for count(*)), and `countDistinct` for counting unique values. Set countDistinct to null if not needed.",
+      "Returns the count and/or count distinct of specified columns in a table. Use `count` for regular counts (including `_all` for count(*)); remember that counting a column aggregates every row produced by the joins, so choose `countDistinct` whenever you only want unique values. Base-table metrics must be written as `table.column`; joined metrics must be `alias.column`. Provide at least one of `count` or `countDistinct` and set the unused option to null. Include `joins` when a metric references a related table; each hop pairs fully-qualified source/target columns in the relationship path.",
     examples: [
       {
         question:
@@ -74,41 +147,41 @@ export const operationDocs = {
           table: "order",
           operation: "count",
           operationParameters: {
-            count: ["id", "_all"],
-            countDistinct: ["customerId"],
+            count: ["order.id", "_all"],
+            countDistinct: ["order.customerId"],
           },
         },
         response: {
-          _count: { id: 100, _all: 100 },
-          _countDistinct: { customerId: 45 },
+          _count: { "order.id": 100, _all: 100 },
+          _countDistinct: { "order.customerId": 45 },
         },
       },
-    ],
-  },
-  countWithJoin: {
-    description:
-      "Returns the count of non-null values after joining with related tables. You can count matching records using `count`, or count distinct values using `countDistinct`. Column names must be in 'table.column' format. Supports join types: 'inner' (default), 'left', 'right'. The joinPath follows the format 'parentTable.relationName' where relationName is the defined relationship in your schema.",
-    examples: [
       {
         question:
-          "Count the number of posts and users who has made posts by users with a verified email.",
+          "How many posts did verified users create, and how many unique users posted?",
         query: {
           table: "user",
-          operation: "countWithJoin",
+          operation: "count",
           operationParameters: {
             joins: [
               {
                 table: "posts",
-                joinPath: "user.posts",
+                name: "posts",
+                path: [
+                  {
+                    source: ["user.id"],
+                    target: ["posts.user_id"],
+                  },
+                ],
                 joinType: "inner",
               },
             ],
             count: ["posts.id"],
             countDistinct: ["user.id"],
           },
-          where: [
+          whereAndArray: [
             {
-              emailVerified: true,
+              emailVerified: { equals: true },
             },
           ],
         },
@@ -125,7 +198,7 @@ export const operationDocs = {
   },
   countRelations: {
     description:
-      "Returns the count of relations for each row in the starting table. Result set will be of the same length as the number of rows in the starting table. You can optionally count distinct values for a specific column in each relation. You can also optionally order the results with the order object, if not ordering set order to null.",
+      "Returns the count of relations for each row in the starting table. Provide a `joins` array where each descriptor names the relation and supplies hop-based paths (source/target column pairs) so the connector can traverse the relationship. Result set matches the number of base rows. Optionally count distinct values per relation and choose an `orderBy` entry keyed by relation name. Set unused options to null.",
     examples: [
       {
         question: "How many posts does each user have?",
@@ -134,11 +207,23 @@ export const operationDocs = {
           operation: "countRelations",
           operationParameters: {
             columns: ["id", "name"],
+            joins: [
+              {
+                table: "posts",
+                name: "posts",
+                path: [
+                  {
+                    source: ["user.id"],
+                    target: ["posts.user_id"],
+                  },
+                ],
+              },
+            ],
             relationsToCount: [
               { name: "posts", distinct: null }, // distinct is optional/nullable
             ],
             orderBy: {
-              relation: "posts",
+              name: "posts",
               direction: "desc",
             },
             limit: 2,
@@ -153,7 +238,7 @@ export const operationDocs = {
   },
   aggregate: {
     description:
-      "Returns aggregated values (min, max, average, sum, count, median) for specified columns in a table. Each aggregation type can be applied to different columns. Only supports columns of type number (or Date for MIN and Max only)",
+      "Returns aggregated values (min, max, average, sum, count, median) for specified columns in a table. Provide fully-qualified column names (`alias.column`). When aggregating across relations, include hop-based join descriptors in `joins`. Numeric aggregates require numeric columns (computed columns count as numeric). MIN/MAX also support temporal columns. Set unused aggregate arrays to null.",
     examples: [
       {
         question:
@@ -162,11 +247,11 @@ export const operationDocs = {
           table: "user",
           operation: "aggregate",
           operationParameters: {
-            min: ["age", "salary"],
-            max: ["age"],
-            avg: ["salary"],
+            min: ["user.age", "user.salary"],
+            max: ["user.age"],
+            avg: ["user.salary"],
             sum: null,
-            count: ["id"],
+            count: ["user.id"],
             median: null,
           },
         },
@@ -181,7 +266,7 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      "Groups rows by one or more keys drawn from the starting table or joined tables. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, sum, min, max, avg) should be declared as arrays of fully-qualified column names, or set to null when unused. When joins are not needed set joins to null. Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Make sure any alias you provide in the groupBy array is unique. Supports join types: 'inner' (default), 'left', 'right'.",
+      "Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.",
     examples: [
       {
         question:
@@ -193,7 +278,13 @@ export const operationDocs = {
             joins: [
               {
                 table: "country",
-                joinPath: "user.country",
+                name: "user.country",
+                path: [
+                  {
+                    source: ["user.countryId"],
+                    target: ["country.id"],
+                  },
+                ],
                 joinType: "inner",
               },
             ],

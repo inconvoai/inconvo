@@ -3,9 +3,6 @@ import {
   HumanMessage,
   ToolMessage,
   type BaseMessage,
-  isAIMessage,
-  isToolMessage,
-  type MessageContentText,
 } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
@@ -111,14 +108,14 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
 
   // First pass: map tool_call_id -> ToolMessage for O(1) lookup
   messages.forEach((msg) => {
-    if (isToolMessage(msg) && msg.tool_call_id) {
+    if (ToolMessage.isInstance(msg) && msg.tool_call_id) {
       messageMap.set(msg.tool_call_id, msg);
     }
   });
 
   // Second pass: find AI messages with the specified tool calls and their responses
   messages.forEach((msg) => {
-    if (isAIMessage(msg)) {
+    if (AIMessage.isInstance(msg)) {
       const matchingCalls = [
         ...(msg.tool_calls ?? []),
         ...(msg.invalid_tool_calls ?? []),
@@ -145,7 +142,7 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
 function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
   return messages.some(
     (msg) =>
-      isAIMessage(msg) &&
+      AIMessage.isInstance(msg) &&
       (msg.tool_calls?.some((call) => call.name === "databaseRetriever") ??
         msg.invalid_tool_calls?.some(
           (call) => call.name === "databaseRetriever"
@@ -153,9 +150,7 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
   );
 }
 
-function extractTextFromMessage(
-  message: BaseMessage | null | undefined
-): string[] {
+function extractTextFromMessage(message: AIMessage): string[] {
   if (!message) return [""];
 
   const { content } = message;
@@ -169,8 +164,11 @@ function extractTextFromMessage(
   }
 
   const textMessages = content
-    .filter((m): m is MessageContentText => m.type === "text")
-    .map((tm) => tm.text);
+    .filter((block) => block.type === "text")
+    .map((block) => {
+      const textBlock = block.text as string;
+      return textBlock;
+    });
 
   return textMessages;
 }
@@ -204,7 +202,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           // 1. Collect all databaseRetriever tool_call ids present in the current history
           const dbToolCallIds = new Set<string>();
           x.forEach((msg) => {
-            if (isAIMessage(msg)) {
+            if (AIMessage.isInstance(msg)) {
               const calls = [
                 ...(msg.tool_calls ?? []),
                 ...(msg.invalid_tool_calls ?? []),
@@ -219,11 +217,11 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
           const filteredHistory = x.filter((msg) => {
             // Remove only tool messages whose tool_call_id maps to a databaseRetriever call
-            if (isToolMessage(msg) && msg.tool_call_id) {
+            if (ToolMessage.isInstance(msg) && msg.tool_call_id) {
               if (dbToolCallIds.has(msg.tool_call_id)) return false;
             }
             // Remove AI messages that contain databaseRetriever tool calls
-            if (isAIMessage(msg)) {
+            if (AIMessage.isInstance(msg)) {
               const hasDbCall =
                 msg.tool_calls?.some((c) => c.name === "databaseRetriever") ??
                 msg.invalid_tool_calls?.some(
@@ -271,7 +269,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   const toolNode = new ToolNode(tools);
 
   const model = getAIModel("azure:gpt-5", {
-    reasoning: { effort: "low", summary: "detailed" },
+    reasoning: { effort: "minimal", summary: "detailed" },
   });
 
   const tableContext = params.schema
@@ -516,7 +514,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const { messages } = state;
     const lastMessage = messages?.at(-1) as AIMessage;
     if (
-      isAIMessage(lastMessage) &&
+      AIMessage.isInstance(lastMessage) &&
       (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0)
     ) {
       return "formatResponse";
@@ -548,10 +546,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       await sandbox.destroySandbox();
     }
 
+    const lastAiMessage =
+      state.messages
+        ?.slice()
+        .reverse()
+        .find((msg) => AIMessage.isInstance(msg)) ?? new AIMessage("");
+
     // Extract potential JSON responses from the last message
-    const potentialJsonResponses = extractTextFromMessage(
-      state.messages?.at(-1)
-    );
+    const potentialJsonResponses = extractTextFromMessage(lastAiMessage);
 
     // Filter to only valid JSON that matches inconvoResponseSchema
     type InconvoResponse = z.infer<typeof inconvoResponseSchema>;

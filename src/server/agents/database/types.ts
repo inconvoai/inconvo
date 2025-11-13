@@ -8,7 +8,6 @@ export type Operation =
   | "findDistinct"
   | "findDistinctByEditDistance"
   | "count"
-  | "countWithJoin"
   | "countRelations"
   | "aggregate"
   | "groupBy";

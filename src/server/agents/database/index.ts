@@ -152,7 +152,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     }
 
     const tablesWithJsonToFlatten = state.schema.filter((table) =>
-      table.columns.some((column) => column.type === "Json")
+      table.columns.some(
+        (column: Schema[number]["columns"][number]) => column.type === "Json"
+      )
     );
 
     if (tablesWithJsonToFlatten.length === 0) {
@@ -162,8 +164,10 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     let jsonColumns: string[] = [];
     tablesWithJsonToFlatten.forEach((table) => {
       jsonColumns = table.columns
-        .filter((column) => column.type === "Json")
-        .map((column) => column.name);
+        .filter(
+          (column: Schema[number]["columns"][number]) => column.type === "Json"
+        )
+        .map((column: Schema[number]["columns"][number]) => column.name);
       if (jsonColumns.length > 1) {
         throw new Error(
           `Not Supported: Table ${table.name} has more than one JSON column`
@@ -179,16 +183,17 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const jsonColumnSchemas = await Promise.all(
       tablesWithJsonToFlatten.map(async (table) => {
         const orderByColumn = table.columns.find(
-          (column) => column.type === "Int" || column.type === "String"
+          (column: Schema[number]["columns"][number]) =>
+            column.type === "Int" || column.type === "String"
         )?.name;
         const jsonColumn = table.columns.find(
-          (column) => column.type === "Json"
+          (column: Schema[number]["columns"][number]) => column.type === "Json"
         );
         const q = {
           table: table.name,
           operation: "findMany",
           operationParameters: {
-            columns: {
+            select: {
               [table.name]: [jsonColumn?.name],
             },
             orderBy: { column: orderByColumn, direction: "asc" },
@@ -246,7 +251,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
     const model = getAIModel("azure:gpt-4.1");
-    const selectTablePrompt = await getPrompt("select_table:90d4f02c");
+    const selectTablePrompt = await getPrompt("select_table:dbe22856");
     const tableNames = state.schema
       .filter((table) => table.access === "QUERYABLE")
       .map((table) => table.name);
@@ -281,18 +286,19 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   ) => {
     const model = getAIModel("azure:gpt-4.1");
     const operationSelectorPrompt = await getPrompt(
-      "select_operation:a6815489"
+      "select_operation:c7269ac1"
     );
 
-    const { columns = [], outwardRelations: relations = [] } =
-      state.tableSchema;
+    const columns = state.tableSchema.columns;
+    const relations = state.tableSchema.outwardRelations ?? [];
     assert(columns.length > 0, "Table has no columns");
 
     const ops: string[] = [];
     const docs: Record<string, unknown> = {};
 
-    const tableHasOneToManyRelations =
-      relations.filter((relation) => relation.isList).length >= 1;
+    const tableHasOneToManyRelations = relations.some(
+      (relation: Schema[number]["outwardRelations"][number]) => relation.isList
+    );
 
     for (const [key, value] of Object.entries(operationDocs)) {
       if ("requiresOneToManyRelation" in value && !tableHasOneToManyRelations) {
@@ -401,14 +407,21 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       canonicalizedDateCondition
     );
 
-    const relatedTableNames = new Set([
+    const relatedTableNames = new Set<string>([
       state.tableName,
-      ...state.tableSchema.outwardRelations.map((r) => r.targetTable.name),
+      ...(state.tableSchema.outwardRelations ?? []).map(
+        (relation: Schema[number]["outwardRelations"][number]) =>
+          relation.targetTable.name
+      ),
     ]);
 
     const computedColumns = state.schema
-      .filter((t) => relatedTableNames.has(t.name) && t.computedColumns?.length)
-      .flatMap((t) => t.computedColumns);
+      .filter(
+        (table: Schema[number]) =>
+          relatedTableNames.has(table.name) &&
+          (table.computedColumns?.length ?? 0) > 0
+      )
+      .flatMap((table: Schema[number]) => table.computedColumns ?? []);
 
     if (computedColumns.length > 0) {
       queryWithConditions.computedColumns = computedColumns;

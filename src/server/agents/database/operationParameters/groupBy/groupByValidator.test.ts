@@ -7,8 +7,26 @@ import {
 const ctx = {
   baseTableName: "users",
   joinOptions: [
-    { table: "orders", joinPath: "users>orders" },
-    { table: "profiles", joinPath: "users>profiles" },
+    {
+      name: "users.orders",
+      table: "orders",
+      path: [
+        {
+          source: ["users.id"],
+          target: ["orders.user_id"],
+        },
+      ],
+    },
+    {
+      name: "users.profiles",
+      table: "profiles",
+      path: [
+        {
+          source: ["users.id"],
+          target: ["profiles.user_id"],
+        },
+      ],
+    },
   ],
   allColumns: [
     "users.id",
@@ -35,7 +53,19 @@ describe("groupBy validator", () => {
   it("valid candidate passes and strips empty joins", () => {
     const schema = buildGroupByZodSchema(ctx);
     const candidate = {
-      joins: [{ table: "orders", joinPath: "users>orders", joinType: "left" }],
+      joins: [
+        {
+          table: "orders",
+          name: "users.orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+          ],
+          joinType: "left" as const,
+        },
+      ],
       groupBy: [{ type: "column", column: "users.id" }],
       count: ["users.id"],
       sum: ["orders.total"],

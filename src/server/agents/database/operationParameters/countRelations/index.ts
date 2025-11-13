@@ -1,23 +1,7 @@
 import assert from "assert";
 import { z } from "zod";
-import type {
-  BaseMessage,
-  ToolMessage,
-  AIMessage,
-} from "@langchain/core/messages";
-import { HumanMessage, isToolMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import {
-  MessagesAnnotation,
-  START,
-  END,
-  StateGraph,
-} from "@langchain/langgraph";
-import { getAIModel } from "~/server/agents/utils/getAIModel";
-import { getPrompt } from "~/server/agents/utils/getPrompt";
 import { buildTableSchemaStringFromTableSchema } from "../../utils/schemaFormatters";
-import { operationDocs } from "../../utils/operationDocs";
 import type { Schema } from "~/server/db/schema";
 import type { CountRelationsQuery } from "~/server/userDatabaseConnector/types";
 import {
@@ -28,11 +12,10 @@ import type {
   CountRelationsValidatorContext,
   CountRelationsValidationResult,
 } from "./countRelationsValidator";
-
-// Extended ToolMessage type with artifact
-interface ToolMessageWithArtifact extends ToolMessage {
-  artifact?: CountRelationsValidationResult;
-}
+import {
+  buildOperationParametersPromptMessages,
+  createOperationParametersAgent,
+} from "../utils/operationParametersAgent";
 
 export interface DefineCountRelationsOperationParametersParams {
   schema: Schema;
@@ -45,26 +28,65 @@ export interface DefineCountRelationsOperationParametersParams {
 export async function defineCountRelationsOperationParameters(
   params: DefineCountRelationsOperationParametersParams
 ) {
-  const model = getAIModel("azure:gpt-5");
-
   // Gather base columns
-  const baseTable = params.schema.find((t) => t.name === params.tableName);
+  const baseTable = params.schema.find(
+    (t: Schema[number]) => t.name === params.tableName
+  );
   assert(baseTable, "Base table not found");
-  const baseColumns = baseTable.columns.map((c) => c.name);
-
-  // Outward list relations only
-  const outwardListRelations = params.tableSchema.outwardRelations.filter(
-    (r) => r.isList
+  const baseColumns = baseTable.columns.map(
+    (c: Schema[number]["columns"][number]) => c.name
   );
 
-  const relationOptions = outwardListRelations.map((rel) => {
-    const target = params.schema.find((t) => t.name === rel.targetTable.name);
-    assert(target, `Target table ${rel.targetTable.name} not found`);
-    return {
-      name: rel.name,
-      targetColumns: target.columns.map((c) => c.name),
-    } as CountRelationsValidatorContext["relationOptions"][number];
-  });
+  // Outward list relations only
+  const outwardListRelations = (
+    params.tableSchema.outwardRelations ?? []
+  ).filter(
+    (relation: Schema[number]["outwardRelations"][number]) => relation.isList
+  );
+
+  const relationOptions: CountRelationsValidatorContext["relationOptions"] = [];
+
+  outwardListRelations.forEach(
+    (rel: Schema[number]["outwardRelations"][number]) => {
+      const target = params.schema.find(
+        (t: Schema[number]) => t.name === rel.targetTable.name
+      );
+      if (!target) {
+        console.warn(
+          `Target table ${rel.targetTable.name} not found for relation ${rel.name}`
+        );
+        return;
+      }
+
+      const sourceColumns = rel.sourceColumns ?? [];
+      const targetColumns = rel.targetColumns ?? [];
+
+      if (sourceColumns.length === 0 || targetColumns.length === 0) {
+        console.warn(
+          `Relation ${rel.name} is missing column metadata and cannot be used for countRelations joins`
+        );
+        return;
+      }
+
+      relationOptions.push({
+        name: rel.name,
+        table: rel.targetTable.name,
+        path: [
+          {
+            source: sourceColumns.map(
+              (column) => `${params.tableName}.${column}`
+            ),
+            target: targetColumns.map(
+              (column) => `${rel.targetTable.name}.${column}`
+            ),
+          },
+        ],
+        targetColumns: target.columns.map(
+          (c: Schema[number]["columns"][number]) => c.name
+        ),
+      });
+    }
+  );
 
   const applyCountRelationsOperationParametersTool = tool(
     async (input: {
@@ -91,11 +113,9 @@ export async function defineCountRelationsOperationParameters(
     }
   );
 
-  // PROMPT
-  const agentPrompt = await getPrompt("extend_query:f100254a");
   const relatedTargetTableNames = relationOptions.map((r) => {
-    const outward = params.tableSchema.outwardRelations.find(
-      (o) => o.name === r.name
+    const outward = (params.tableSchema.outwardRelations ?? []).find(
+      (o: Schema[number]["outwardRelations"][number]) => o.name === r.name
     );
     return outward?.targetTable.name;
   });
@@ -104,113 +124,33 @@ export async function defineCountRelationsOperationParameters(
     ...relatedTargetTableNames.filter(Boolean),
   ];
   const tableSchemasString = tablesForSchema
-    .map((tName) => params.schema.find((t) => t.name === tName))
+    .map((tName) => params.schema.find((t: Schema[number]) => t.name === tName))
     .filter((tSchema): tSchema is NonNullable<typeof tSchema> =>
       Boolean(tSchema)
     )
     .map((tSchema) => buildTableSchemaStringFromTableSchema(tSchema))
     .join("\n---\n");
 
-  const agentPromptFormatted = (await agentPrompt.invoke({
-    operation: params.operation,
-    table: params.tableName,
-    operationDocs: JSON.stringify(operationDocs[params.operation], null, 2),
-    queryCurrentState: "no operation parameters defined",
-    tableSchema: tableSchemasString,
-    question: params.question,
-  })) as Record<"messages", BaseMessage[]>;
+  const messages = await buildOperationParametersPromptMessages(
+    params,
+    tableSchemasString
+  );
 
-  const modelWithTools = model.bindTools([
-    applyCountRelationsOperationParametersTool,
-  ]);
-  type MsgState = typeof MessagesAnnotation.State;
-
-  const callModel = async (state: MsgState) => {
-    const response = await modelWithTools.invoke(state.messages);
-    return { messages: [response] };
-  };
-
-  const jsonDetectedFeedback = async (_state: MsgState) => {
-    return {
-      messages: new HumanMessage(
-        "You produced JSON-like content but did not call applyCountRelationsOperationParametersTool. You MUST now call it exactly once with { candidateOperationParameters: <object> }."
-      ),
-    };
-  };
-
-  const aiMessageContainsJsonLikeText = (msg?: AIMessage) => {
-    if (!msg) return false;
-    const text =
-      typeof msg.content === "string"
-        ? msg.content
-        : JSON.stringify(msg.content);
-    return /\{[\s\S]*\}/.test(text) && !msg.tool_calls?.length;
-  };
-
-  const shouldContinue = (state: MsgState) => {
-    const last = state.messages.at(-1) as AIMessage;
-    if (last && Array.isArray(last.tool_calls) && last.tool_calls.length > 0) {
-      return "message_operation_params_agent_tools";
-    }
-    if (aiMessageContainsJsonLikeText(last)) {
-      return "json_detected_feedback";
-    }
-    return END;
-  };
-
-  const hasValidOperationParams = (state: MsgState) => {
-    const last = state.messages.at(-1) as ToolMessageWithArtifact;
-    if (
-      last.name === "applyCountRelationsOperationParametersTool" &&
-      last.artifact?.status === "valid"
-    ) {
-      return END;
-    }
-    return "message_operation_params_agent";
-  };
-
-  const workflow = new StateGraph(MessagesAnnotation)
-    .addNode("message_operation_params_agent", callModel)
-    .addNode("json_detected_feedback", jsonDetectedFeedback)
-    .addNode(
-      "message_operation_params_agent_tools",
-      new ToolNode([applyCountRelationsOperationParametersTool])
-    )
-    .addEdge(START, "message_operation_params_agent")
-    .addConditionalEdges("message_operation_params_agent", shouldContinue, {
-      message_operation_params_agent_tools:
-        "message_operation_params_agent_tools",
-      json_detected_feedback: "json_detected_feedback",
-      [END]: END,
-    })
-    .addEdge("json_detected_feedback", "message_operation_params_agent")
-    .addConditionalEdges(
-      "message_operation_params_agent_tools",
-      hasValidOperationParams,
-      {
-        [END]: END,
-        message_operation_params_agent: "message_operation_params_agent",
+  const agent = createOperationParametersAgent<
+    CountRelationsQuery["operationParameters"] | undefined,
+    CountRelationsValidationResult
+  >({
+    tool: applyCountRelationsOperationParametersTool,
+    toolName: "applyCountRelationsOperationParametersTool",
+    jsonDetectedMessage:
+      "You produced JSON-like content but did not call applyCountRelationsOperationParametersTool. You MUST now call it exactly once with { candidateOperationParameters: <object> }.",
+    onComplete: (artifact) => {
+      if (artifact?.status !== "valid" || artifact.result === undefined) {
+        return undefined;
       }
-    );
+      return artifact.result;
+    },
+  });
 
-  const app = workflow.compile();
-  const promptMessages = agentPromptFormatted.messages;
-  const graphResult = await app.invoke({ messages: promptMessages });
-
-  const validToolMessage = graphResult.messages.toReversed().find((m) => {
-    if (!isToolMessage(m)) return false;
-    if (m.name !== "applyCountRelationsOperationParametersTool") return false;
-    const toolMsg = m as ToolMessageWithArtifact;
-    return (
-      toolMsg.artifact?.status === "valid" &&
-      toolMsg.artifact.result !== undefined
-    );
-  }) as ToolMessageWithArtifact | undefined;
-
-  let artifact: unknown = null;
-  if (validToolMessage?.artifact?.status === "valid") {
-    artifact = validToolMessage.artifact.result;
-  }
-
-  return artifact as CountRelationsQuery["operationParameters"] | undefined;
+  return agent.invoke({ messages });
 }

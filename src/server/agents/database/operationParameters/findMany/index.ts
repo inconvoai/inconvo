@@ -1,38 +1,24 @@
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
-import {
-  type AIMessage,
-  HumanMessage,
-  isToolMessage,
-  type BaseMessage,
-  type ToolMessage,
-} from "@langchain/core/messages";
 import assert from "assert";
-import { getAIModel } from "~/server/agents/utils/getAIModel";
-import { generateJoinedTables } from "../../utils/tableRelations";
-import { buildTableSchemaStringFromTableSchema } from "../../utils/schemaFormatters";
+import { generateJoinGraph } from "../../utils/tableRelations";
+import {
+  buildOperationParametersPromptMessages,
+  buildOperationParametersTableSchemasString,
+  createOperationParametersAgent,
+} from "../utils/operationParametersAgent";
 import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
 import {
   validateFindManyCandidate,
   type FindManyValidationResult,
 } from "./findManyValidator";
-import { operationDocs } from "../../utils/operationDocs";
 import type { Schema } from "~/server/db/schema";
-import { findManySchema } from "~/server/userDatabaseConnector/types";
 import {
-  END,
-  MessagesAnnotation,
-  START,
-  StateGraph,
-} from "@langchain/langgraph";
-import { getPrompt } from "~/server/agents/utils/getPrompt";
-import { aiMessageContainsJsonLikeText } from "~/server/agents/utils/langchainMessageUtils";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-
-// Extended ToolMessage type with artifact
-interface ToolMessageWithArtifact extends ToolMessage {
-  artifact?: FindManyValidationResult;
-}
+  findManySchema,
+  joinDescriptorSchema,
+  joinPathHopSchema,
+  type FindManyQuery,
+} from "~/server/userDatabaseConnector/types";
 
 export interface DefineFindManyOperationParametersParams {
   schema: Schema;
@@ -45,42 +31,65 @@ export interface DefineFindManyOperationParametersParams {
 export async function defineFindManyOperationParameters(
   params: DefineFindManyOperationParametersParams
 ) {
-  const model = getAIModel("azure:gpt-5");
   const baseTableSchema = params.schema.find(
-    (t) => t.name === params.tableName
+    (t: Schema[number]) => t.name === params.tableName
   );
   assert(baseTableSchema, `Base table ${params.tableName} not found`);
-  const baseColumns = baseTableSchema.columns.map((c) => c.name);
+  const baseColumns = baseTableSchema.columns.map(
+    (c: Schema[number]["columns"][number]) => c.name
+  );
   const baseComputedColumns = baseTableSchema.computedColumns.map(
-    (c) => c.name
+    (c: NonNullable<Schema[number]["computedColumns"]>[number]) => c.name
   );
 
-  const { iqlPaths, uniqueTableNames } = generateJoinedTables(
+  const { aliasToTable, joinOptions, uniqueTableNames } = generateJoinGraph(
     params.schema,
     params.tableName,
     2
   );
-  assert(iqlPaths, "Failed to generate joined tables");
   assert(uniqueTableNames, "Failed to generate unique table names");
 
-  const tableSchemasString = uniqueTableNames
-    .map((tName) => {
-      const ts = params.schema.find((t) => t.name === tName);
-      return ts
-        ? buildTableSchemaStringFromTableSchema(ts)
-        : `# Missing schema for ${tName}`;
-    })
-    .join("\n---\n");
+  const tableSchemasString = buildOperationParametersTableSchemasString(
+    params.schema,
+    uniqueTableNames
+  );
 
-  const selectableTableColumns: Record<string, string[]> = {};
-  Object.entries(iqlPaths).forEach(([path, tName]) => {
-    const tSchema = params.schema.find((t) => t.name === tName);
-    if (!tSchema) return;
-    selectableTableColumns[path] = [
-      ...tSchema.columns.map((c) => c.name),
-      ...tSchema.computedColumns.map((c) => c.name),
+  const selectableTableColumns: Record<string, string[]> = Object.entries(
+    aliasToTable
+  ).reduce<Record<string, string[]>>((acc, [alias, tableName]) => {
+    const tableSchema = params.schema.find(
+      (table: Schema[number]) => table.name === tableName
+    );
+    if (!tableSchema) return acc;
+    acc[alias] = [
+      ...tableSchema.columns.map(
+        (column: Schema[number]["columns"][number]) => column.name
+      ),
+      ...tableSchema.computedColumns.map(
+        (column: NonNullable<Schema[number]["computedColumns"]>[number]) =>
+          column.name
+      ),
     ];
-  });
+    return acc;
+  }, {});
+
+  const joinSchema = joinDescriptorSchema
+    .omit({ joinType: true })
+    .extend({
+      path: z.array(joinPathHopSchema).min(1),
+    })
+    .strict();
+
+  const joinOptionDescriptions = joinOptions
+    .map((option) => {
+      const pathDescription = option.path
+        .map(
+          (hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`
+        )
+        .join(" | ");
+      return `${option.name} (${option.table}) path=${pathDescription}`;
+    })
+    .join("\n");
 
   const applyFindManyOperationParametersTool = tool(
     async (input: {
@@ -89,9 +98,11 @@ export async function defineFindManyOperationParameters(
       const result = validateFindManyCandidate(
         input.candidateOperationParameters,
         {
+          baseTable: params.tableName,
           selectableTableColumns,
           baseColumns,
           baseComputedColumns,
+          joinOptions,
         }
       );
       return [result, result];
@@ -103,8 +114,8 @@ export async function defineFindManyOperationParameters(
       schema: z.object({
         candidateOperationParameters: z
           .object({
-            columns: z.object(
-              Object.keys(iqlPaths).reduce(
+            select: z.object(
+              Object.keys(selectableTableColumns).reduce(
                 (
                   acc: Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>,
                   key
@@ -115,6 +126,7 @@ export async function defineFindManyOperationParameters(
                 {} as Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>
               )
             ),
+            joins: z.array(joinSchema).nullable().optional(),
             orderBy: z
               .object({
                 direction: z.enum(["asc", "desc"]),
@@ -129,7 +141,9 @@ export async function defineFindManyOperationParameters(
             limit: z.number().int().positive().max(1000),
           })
           .describe(
-            "Candidate findMany params object; if valid it will be added to the query"
+            joinOptionDescriptions
+              ? `Candidate findMany params object. Available joins:\n${joinOptionDescriptions}`
+              : "Candidate findMany params object; if valid it will be added to the query"
           ),
       }),
       responseFormat: "content_and_artifact",
@@ -137,102 +151,36 @@ export async function defineFindManyOperationParameters(
     }
   );
 
-  const agentPrompt = await getPrompt("extend_query:f100254a");
-  const agentPromptFormatted = (await agentPrompt.invoke({
-    operation: params.operation,
-    table: params.tableName,
-    operationDocs: JSON.stringify(operationDocs[params.operation], null, 2),
-    queryCurrentState: "no operation parameters defined",
-    tableSchema: tableSchemasString,
-    question: params.question,
-  })) as Record<"messages", BaseMessage[]>;
+  const messages = await buildOperationParametersPromptMessages(
+    params,
+    tableSchemasString
+  );
 
-  const modelWithTools = model.bindTools([
-    applyFindManyOperationParametersTool,
-  ]);
-  type MsgState = typeof MessagesAnnotation.State;
+  const jsonDetectedMessage =
+    "JSON-like content was detected in your last response, but you did not call applyFindManyOperationParametersTool. \n" +
+    "You MUST now call applyFindManyOperationParametersTool exactly once with a candidate operationParameters object. \n" +
+    "Call the tool with { candidateOperationParameters: <object-or-null> }.";
 
-  const callModel = async (state: MsgState) => {
-    const response = await modelWithTools.invoke(state.messages);
-    return { messages: [response] };
-  };
-
-  const jsonDetectedFeedback = async (_state: MsgState) => {
-    return {
-      messages: new HumanMessage(
-        "JSON-like content was detected in your last response, but you did not call applyFindManyOperationParametersTool. \n" +
-          "You MUST now call applyFindManyOperationParametersTool exactly once with a candidate operationParameters object. \n" +
-          "Call the tool with { candidateOperationParameters: <object-or-null> }."
-      ),
-    };
-  };
-
-  const shouldContinue = (state: MsgState) => {
-    const last = state.messages.at(-1) as AIMessage;
-    if (last && Array.isArray(last.tool_calls) && last.tool_calls.length > 0) {
-      return "message_operation_params_agent_tools";
-    }
-    if (aiMessageContainsJsonLikeText(last)) {
-      return "json_detected_feedback";
-    }
-    return END;
-  };
-
-  const hasValidOperationParams = (state: MsgState) => {
-    const last = state.messages.at(-1) as ToolMessageWithArtifact;
-    if (
-      last.name === "applyFindManyOperationParametersTool" &&
-      last.artifact?.status === "valid"
-    ) {
-      return END;
-    }
-    return "message_operation_params_agent";
-  };
-
-  const workflow = new StateGraph(MessagesAnnotation)
-    .addNode("message_operation_params_agent", callModel)
-    .addNode("json_detected_feedback", jsonDetectedFeedback)
-    .addNode(
-      "message_operation_params_agent_tools",
-      new ToolNode([applyFindManyOperationParametersTool])
-    )
-    .addEdge(START, "message_operation_params_agent")
-    .addConditionalEdges("message_operation_params_agent", shouldContinue, {
-      message_operation_params_agent_tools:
-        "message_operation_params_agent_tools",
-      json_detected_feedback: "json_detected_feedback",
-      [END]: END,
-    })
-    .addEdge("json_detected_feedback", "message_operation_params_agent")
-    .addConditionalEdges(
-      "message_operation_params_agent_tools",
-      hasValidOperationParams,
-      {
-        [END]: END,
-        message_operation_params_agent: "message_operation_params_agent",
+  const agent = createOperationParametersAgent<
+    FindManyQuery["operationParameters"] | null,
+    FindManyValidationResult
+  >({
+    tool: applyFindManyOperationParametersTool,
+    toolName: "applyFindManyOperationParametersTool",
+    jsonDetectedMessage,
+    onComplete: (artifact) => {
+      if (artifact?.status !== "valid" || !artifact.result) {
+        return null;
       }
-    );
+      const parsed = findManySchema.shape.operationParameters.parse({
+        select: artifact.result.select,
+        joins: artifact.result.joins ?? null,
+        orderBy: artifact.result.orderBy,
+        limit: artifact.result.limit,
+      });
+      return parsed satisfies FindManyQuery["operationParameters"];
+    },
+  });
 
-  const app = workflow.compile();
-
-  const promptMessages = agentPromptFormatted.messages;
-  const graphResult = await app.invoke({ messages: promptMessages });
-
-  const validToolMessage = graphResult.messages.toReversed().find((m) => {
-    if (!isToolMessage(m)) return false;
-    if (m.name !== "applyFindManyOperationParametersTool") return false;
-    const toolMsg = m as ToolMessageWithArtifact;
-    return (
-      toolMsg.artifact?.status === "valid" &&
-      toolMsg.artifact.result !== undefined
-    );
-  }) as ToolMessageWithArtifact | undefined;
-
-  let artifact: unknown = null;
-  if (validToolMessage?.artifact?.status === "valid") {
-    artifact = validToolMessage.artifact.result;
-  }
-
-  const parsed = findManySchema.shape.operationParameters.safeParse(artifact);
-  return parsed.data;
+  return agent.invoke({ messages });
 }

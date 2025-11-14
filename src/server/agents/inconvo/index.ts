@@ -269,7 +269,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   const toolNode = new ToolNode(tools);
 
   const model = getAIModel("azure:gpt-5", {
-    reasoning: { effort: "minimal", summary: "detailed" },
+    reasoning: { effort: "low", summary: "detailed" },
   });
 
   const tableContext = params.schema

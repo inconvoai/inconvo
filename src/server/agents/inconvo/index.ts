@@ -268,7 +268,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     [];
   const toolNode = new ToolNode(tools);
 
-  const model = getAIModel("azure:gpt-5", {
+  const model = getAIModel("azure:gpt-5.1", {
     reasoning: { effort: "low", summary: "detailed" },
   });
 
@@ -524,7 +524,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:576b20e6");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:1a94dfd9");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,

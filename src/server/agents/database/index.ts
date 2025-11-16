@@ -250,7 +250,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
-    const model = getAIModel("azure:gpt-4.1");
+    const model = getAIModel("azure:gpt-5.1");
     const selectTablePrompt = await getPrompt("select_table:dbe22856");
     const tableNames = state.schema
       .filter((table) => table.access === "QUERYABLE")
@@ -284,7 +284,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const selectDatabaseOperation = async (
     state: typeof DatabaseAgentState.State
   ) => {
-    const model = getAIModel("azure:gpt-4.1");
+    const model = getAIModel("azure:gpt-5.1");
     const operationSelectorPrompt = await getPrompt(
       "select_operation:c7269ac1"
     );

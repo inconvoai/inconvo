@@ -1,4 +1,9 @@
-import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
+import {
+  HumanMessage,
+  ToolMessage,
+  type AIMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
@@ -38,7 +43,9 @@ export function createOperationParametersAgent<Result, Artifact>(
       return status === "valid";
     });
 
-  const modelWithTools = getAIModel("azure:gpt-5").bindTools([options.tool]);
+  const modelWithTools = getAIModel("azure:gpt-5.1", {
+    reasoning: { effort: "low", summary: "detailed" },
+  }).bindTools([options.tool]);
   type MsgState = typeof MessagesAnnotation.State;
 
   const callModel = async (state: MsgState) => {
@@ -68,12 +75,15 @@ export function createOperationParametersAgent<Result, Artifact>(
 
   const hasValidOperationParams = (state: MsgState) => {
     const last = state.messages.at(-1);
-    if (!last || !ToolMessage.isInstance(last) || last.name !== options.toolName) {
+    if (
+      !last ||
+      !ToolMessage.isInstance(last) ||
+      last.name !== options.toolName
+    ) {
       return "message_operation_params_agent";
     }
-    const artifact = (last as ToolMessage & { artifact?: Artifact }).artifact as
-      | Artifact
-      | undefined;
+    const artifact = (last as ToolMessage & { artifact?: Artifact })
+      .artifact as Artifact | undefined;
     if (isValidArtifact(artifact)) {
       return END;
     }
@@ -109,12 +119,10 @@ export function createOperationParametersAgent<Result, Artifact>(
   return {
     async invoke(args: { messages: BaseMessage[] }) {
       const graphResult = await app.invoke({ messages: args.messages });
-      const toolMessage = graphResult.messages
-        .toReversed()
-        .find((message) => {
-          if (!ToolMessage.isInstance(message)) return false;
-          return message.name === options.toolName;
-        }) as (ToolMessage & { artifact?: Artifact }) | undefined;
+      const toolMessage = graphResult.messages.toReversed().find((message) => {
+        if (!ToolMessage.isInstance(message)) return false;
+        return message.name === options.toolName;
+      }) as (ToolMessage & { artifact?: Artifact }) | undefined;
 
       const artifact = toolMessage?.artifact as Artifact | undefined;
       return options.onComplete(artifact);

@@ -11,8 +11,9 @@ export type AzureModel =
   | "gpt-4.1-mini"
   | "gpt-5"
   | "gpt-5-mini"
-  | "gpt-5-nano";
-export type OpenAIModel = "gpt-4.1" | "gpt-5" | "gpt-5-mini" | "gpt-5-nano";
+  | "gpt-5-nano"
+  | "gpt-5.1";
+export type OpenAIModel = "gpt-4.1" | "gpt-5" | "gpt-5-mini" | "gpt-5-nano" | "gpt-5.1";
 export type ModelString = `azure:${AzureModel}` | `openai:${OpenAIModel}`;
 
 export function getAIModel(
@@ -33,7 +34,7 @@ export function getAIModel(
   const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {
     azure: {
       ...(isGPT5
-        ? { reasoning: { effort: "minimal", summary: "detailed" } }
+        ? { reasoning: { effort: "none", summary: "detailed" } }
         : { temperature: 0 }),
       timeout: 60000,
       maxTokens: -1,
@@ -43,7 +44,7 @@ export function getAIModel(
     },
     openai: {
       ...(isGPT5
-        ? { reasoning: { effort: "minimal", summary: "detailed" } }
+        ? { reasoning: { effort: "none", summary: "detailed" } }
         : { temperature: 0 }),
       timeout: 60000,
       maxRetries: 2,

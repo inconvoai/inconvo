@@ -19,6 +19,7 @@ export const stubSchema = [
         type: "number",
         ast: null,
         unit: null,
+        notes: null,
       },
     ],
     outwardRelations: [

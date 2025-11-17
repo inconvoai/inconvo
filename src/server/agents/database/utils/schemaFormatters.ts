@@ -50,11 +50,12 @@ export function buildTableSchemaStringFromTableSchema(
   const computedColumns = tableSchema.computedColumns
     .map((column, index) => {
       const unitSuffix = column.unit ? ` [${column.unit}]` : "";
+      const notesSuffix = column.notes ? ` - Notes: ${column.notes}` : "";
       return `${index === 0 ? "\n" : ""}\t\t- ${column.name} (${
         column.type
       }${unitSuffix}) Alias for: ${stringifyComputedColumnAst(
         column.ast as SQLComputedColumnAst
-      )}`;
+      )}${notesSuffix}`;
     })
     .join("\n");
   const relations =

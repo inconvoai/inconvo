@@ -480,6 +480,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         description:
           "Executes Python 3 code in a sandboxed environment for calculations and data analysis.\n\n" +
           "IMPORTANT: You must call 'uploadDataToPythonSandbox' tool first to make data available.\n\n" +
+          "Only printed output is returned, so print any data you need to inspect.\n\n" +
           "Available libraries: pandas, numpy, json\n\n" +
           "Data files uploaded via 'uploadDataToPythonSandbox' are available as 'retriever_result_N.json'.\n\n" +
           "Example code to load and analyze data:\n" +

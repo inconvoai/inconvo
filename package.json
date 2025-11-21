@@ -33,6 +33,7 @@
     "@mantine/charts": "^8.3.8",
     "@mantine/code-highlight": "^8.3.8",
     "@mantine/core": "^8.3.8",
+    "@mantine/dropzone": "^8.3.8",
     "@mantine/form": "^8.3.8",
     "@mantine/hooks": "^8.3.8",
     "@mantine/modals": "^8.3.8",

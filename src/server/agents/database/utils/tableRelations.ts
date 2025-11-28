@@ -12,27 +12,30 @@ export function findRelationsToAColumn(
   const columnObject = table.columns.find((col) => col.name === columnName);
   assert(columnObject, `Column ${columnName} not found in table ${tableName}`);
 
-  if (columnObject.relation) {
-    const result: Record<string, string[]> = {};
-
-    for (const rel of columnObject.relation) {
-      const targetTableName = rel.relation.targetTable.name;
-      if (targetTableName) {
-        const targetColumns = schema.find(
-          (table) => table.name === targetTableName
-        )?.columns;
-
-        if (!targetColumns) {
-          throw new Error(`Table ${targetTableName} not found in schema`);
-        }
-
-        result[targetTableName] = targetColumns.map((col) => col.name);
-      }
-    }
-    return Object.keys(result).length > 0 ? result : null;
+  const relationEntries = Array.isArray(columnObject.relation)
+    ? columnObject.relation
+    : [];
+  if (relationEntries.length === 0) {
+    return null;
   }
+  const result: Record<string, string[]> = {};
 
-  return null;
+  for (const rel of relationEntries) {
+    const targetTableName = rel.relation?.targetTable?.name;
+    if (!targetTableName) {
+      continue;
+    }
+    const targetColumns = schema.find(
+      (table) => table.name === targetTableName
+    )?.columns;
+
+    if (!targetColumns) {
+      throw new Error(`Table ${targetTableName} not found in schema`);
+    }
+
+    result[targetTableName] = targetColumns.map((col) => col.name);
+  }
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 export interface GeneratedJoinOption {
@@ -157,7 +160,7 @@ function buildQueueEntry(
   }
   visitedTables.add(targetTableName);
 
-  const relationLabel = relation.relationName ?? relation.name ?? targetTableName;
+  const relationLabel = relation.name ?? targetTableName;
   const alias = parent ? `${parent.alias}.${relationLabel}` : `${sourceTable}.${relationLabel}`;
 
   const hop: JoinPathHop = {

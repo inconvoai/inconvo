@@ -39,7 +39,7 @@ export type WhereConditionArtifact =
     }
   | {
       status: "valid";
-      filter: QuestionConditions | null;
+      filter: QuestionConditions;
     };
 
 interface RequestParams {

@@ -46,7 +46,7 @@ import type { QuestionConditions } from "~/server/userDatabaseConnector/types";
 export function createQuestionConditionsDynamicSchema(
   tableSchema: Schema[number],
   fullSchema: Schema
-): z.ZodType<QuestionConditions | null> {
+): z.ZodType<QuestionConditions> {
   const columns = tableSchema.columns ?? [];
   const computedColumns = tableSchema.computedColumns ?? [];
   const outwardRelations = tableSchema.outwardRelations ?? [];
@@ -155,7 +155,7 @@ export function createQuestionConditionsDynamicSchema(
         scalarConditionSchemas as [
           z.ZodTypeAny,
           z.ZodTypeAny,
-          ...z.ZodTypeAny[]
+          ...z.ZodTypeAny[],
         ]
       )
     : z.never();
@@ -259,7 +259,7 @@ export function createQuestionConditionsDynamicSchema(
             relationConditionSchemas as [
               z.ZodTypeAny,
               z.ZodTypeAny,
-              ...z.ZodTypeAny[]
+              ...z.ZodTypeAny[],
             ]
           ) as z.ZodTypeAny)
     );
@@ -271,7 +271,7 @@ export function createQuestionConditionsDynamicSchema(
           filterObjectUnionParts as [
             z.ZodTypeAny,
             z.ZodTypeAny,
-            ...z.ZodTypeAny[]
+            ...z.ZodTypeAny[],
           ]
         ) as z.ZodTypeAny)
     : (z.never() as z.ZodTypeAny);
@@ -291,7 +291,7 @@ export function createQuestionConditionsDynamicSchema(
     z.object({ AND: z.array(node).min(1) }).strict(),
   ]);
 
-  return root as unknown as z.ZodType<QuestionConditions | null>;
+  return root as unknown as z.ZodType<QuestionConditions>;
 }
 
 /**

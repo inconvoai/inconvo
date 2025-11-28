@@ -243,7 +243,7 @@ export function validateCountCandidate(
 
   const joinsInput =
     "joins" in data
-      ? (data as { joins?: CountJoinInput[] | null }).joins ?? null
+      ? ((data as { joins?: CountJoinInput[] | null }).joins ?? null)
       : null;
 
   const validatedJoins = validateJoins(joinsInput, ctx, issues);
@@ -413,7 +413,7 @@ function validateJoins(
   joins: CountJoinInput[] | null,
   ctx: CountValidatorContext,
   issues: CountInvalidIssue[]
-): CountQuery["operationParameters"]["joins"] | undefined {
+): CountQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }

@@ -119,7 +119,12 @@ export function buildRelatedTablesSchemaString(
 
     const relatedTables = currentTableSchema.columns
       .flatMap((column) => {
-        return column.relation.map((rel) => rel.relation.targetTable.name);
+        const relations = Array.isArray(column.relation)
+          ? column.relation
+          : [];
+        return relations
+          .map((rel) => rel.relation?.targetTable?.name)
+          .filter((name): name is string => Boolean(name));
       })
       .filter(
         (relatedTable): relatedTable is string => relatedTable !== undefined

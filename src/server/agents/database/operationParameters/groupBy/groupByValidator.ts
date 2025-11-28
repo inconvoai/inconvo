@@ -212,8 +212,8 @@ export function validateGroupByCandidate(
       key.type === "column"
         ? key.column
         : key.type === "dateInterval"
-        ? `${key.column}|${key.interval}`
-        : `${key.column}|${key.component}`;
+          ? `${key.column}|${key.interval}`
+          : `${key.column}|${key.component}`;
     const aliasCandidate = (key.alias ?? defaultAlias).trim() || defaultAlias;
 
     if (aliasSet.has(aliasCandidate)) {
@@ -354,7 +354,7 @@ function validateJoins(
   joins: z.infer<typeof joinSchema>[] | null,
   ctx: GroupByValidatorContext,
   issues: GroupByInvalidResultIssue[]
-): GroupByQuery["operationParameters"]["joins"] | undefined {
+): GroupByQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }

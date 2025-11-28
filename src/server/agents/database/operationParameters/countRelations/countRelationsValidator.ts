@@ -113,7 +113,7 @@ export function buildCountRelationsZodSchema(
           relationLiteralSchemas as unknown as [
             z.ZodTypeAny,
             z.ZodTypeAny,
-            ...z.ZodTypeAny[]
+            ...z.ZodTypeAny[],
           ]
         )
       )
@@ -150,14 +150,10 @@ export function validateCountRelationsCandidate(
 
   const joinsInput =
     "joins" in data
-      ? (data as { joins?: CountRelationsJoinInput[] | null }).joins ?? null
+      ? ((data as { joins?: CountRelationsJoinInput[] | null }).joins ?? null)
       : null;
 
-  const validatedJoins = validateJoins(
-    joinsInput,
-    ctx,
-    issues
-  );
+  const validatedJoins = validateJoins(joinsInput, ctx, issues);
 
   // Type the relationsToCount properly to avoid unsafe access
   const relationsToCount = data.relationsToCount as Array<{
@@ -251,7 +247,7 @@ function validateJoins(
   joins: CountRelationsJoinInput[] | null | undefined,
   ctx: CountRelationsValidatorContext,
   issues: CountRelationsInvalidResultIssue[]
-): CountRelationsQuery["operationParameters"]["joins"] | undefined {
+): CountRelationsQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }
@@ -325,8 +321,6 @@ function joinPathKey(path: JoinPathHop[]) {
 
 function formatJoinPath(path: JoinPathHop[]) {
   return path
-    .map(
-      (hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`
-    )
+    .map((hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`)
     .join(" | ");
 }

@@ -318,7 +318,7 @@ function validateJoins(
   joins: AggregateJoinInput[] | null,
   ctx: AggregateValidatorContext,
   issues: AggregateInvalidIssue[]
-): AggregateQuery["operationParameters"]["joins"] | undefined {
+): AggregateQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }

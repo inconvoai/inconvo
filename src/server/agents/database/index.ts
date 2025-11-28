@@ -199,7 +199,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
             orderBy: { column: orderByColumn, direction: "asc" },
             limit: 1,
           },
-          computedColumns: [],
         };
         const tableConditions = buildConditionsForTable(
           table,
@@ -406,26 +405,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       canonicalizedQuestionConditions,
       canonicalizedDateCondition
     );
-
-    const relatedTableNames = new Set<string>([
-      state.tableName,
-      ...(state.tableSchema.outwardRelations ?? []).map(
-        (relation: Schema[number]["outwardRelations"][number]) =>
-          relation.targetTable.name
-      ),
-    ]);
-
-    const computedColumns = state.schema
-      .filter(
-        (table: Schema[number]) =>
-          relatedTableNames.has(table.name) &&
-          (table.computedColumns?.length ?? 0) > 0
-      )
-      .flatMap((table: Schema[number]) => table.computedColumns ?? []);
-
-    if (computedColumns.length > 0) {
-      queryWithConditions.computedColumns = computedColumns;
-    }
 
     if (state.jsonColumnSchema && state.jsonColumnSchema.length > 0) {
       queryWithConditions.jsonColumnSchema = state.jsonColumnSchema;

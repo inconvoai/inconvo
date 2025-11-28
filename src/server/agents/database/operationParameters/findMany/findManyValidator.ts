@@ -163,7 +163,7 @@ function validateJoins(
   joins: z.infer<typeof joinDescriptorSchema>[] | null | undefined,
   ctx: FindManyValidatorContext,
   issues: FindManyInvalidResultIssue[]
-): FindManyQuery["operationParameters"]["joins"] | undefined {
+): FindManyQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }

@@ -22,3 +22,26 @@ export function aiMessageContainsJsonLikeText(
   if (!jsonLike) return false;
   return true;
 }
+
+export function extractTextFromMessage(message: AIMessage): string[] {
+  if (!message) return [""];
+
+  const { content } = message;
+
+  if (typeof content === "string") {
+    return [content];
+  }
+
+  if (!Array.isArray(content)) {
+    return [""];
+  }
+
+  const textMessages = content
+    .filter((block) => block.type === "text")
+    .map((block) => {
+      const textBlock = block.text as string;
+      return textBlock;
+    });
+
+  return textMessages;
+}

@@ -35,6 +35,7 @@ import { inngest } from "~/server/inngest/client";
 import type { Conversation } from "@prisma/client";
 import { databaseRetrieverToolDescription } from "../database/utils/databaseRetrieverToolDescription";
 import { InconvoSandbox } from "../utils/sandbox";
+import { extractTextFromMessage } from "../utils/langchainMessageUtils";
 
 interface Chart {
   type: "bar" | "line";
@@ -148,29 +149,6 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
           (call) => call.name === "databaseRetriever"
         ))
   );
-}
-
-function extractTextFromMessage(message: AIMessage): string[] {
-  if (!message) return [""];
-
-  const { content } = message;
-
-  if (typeof content === "string") {
-    return [content];
-  }
-
-  if (!Array.isArray(content)) {
-    return [""];
-  }
-
-  const textMessages = content
-    .filter((block) => block.type === "text")
-    .map((block) => {
-      const textBlock = block.text as string;
-      return textBlock;
-    });
-
-  return textMessages;
 }
 
 export async function inconvoAgent(params: QuestionAgentParams) {

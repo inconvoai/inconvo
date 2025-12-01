@@ -327,9 +327,15 @@ export async function inconvoAgent(params: QuestionAgentParams) {
                   name: "databaseRetriever",
                   content: JSON.stringify(
                     {
-                      // verification: databaseRetrieverResponse.reason,
                       query: databaseRetrieverResponse.databaseResponse.query,
                       data: databaseRetrieverResponse.databaseResponse.response,
+                      ...(databaseRetrieverResponse.databaseResponse.warning
+                        ? {
+                            warning:
+                              databaseRetrieverResponse.databaseResponse
+                                .warning,
+                          }
+                        : {}),
                     },
                     null,
                     2

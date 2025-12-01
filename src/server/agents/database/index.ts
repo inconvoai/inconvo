@@ -98,12 +98,13 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     databaseResponse: Annotation<{
       query: string;
       response: unknown;
+      warning?: string;
     }>({
       reducer: (x, y) => y,
     }),
     columnAliasMap: Annotation<ColumnAliasMap>({
       reducer: (x, y) => y,
-      default: () => ({} as ColumnAliasMap),
+      default: () => ({}) as ColumnAliasMap,
     }),
     error: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
@@ -444,10 +445,21 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const formatDatabaseResponse = async (
     state: typeof DatabaseAgentState.State
   ) => {
+    const response = state.queryResponse?.data;
+    let warning: string | undefined;
+
+    if (Array.isArray(response) && response.length > 999) {
+      warning =
+        `WARNING: Result size hit the 1,000-row limit.\n` +
+        `Data may be truncated.\n` +
+        `Refine your query (filters, date ranges) or aggregate in SQL (e.g. GROUP BY) to reduce rows returned`;
+    }
+
     return {
       databaseResponse: {
         query: state.queryResponse?.query,
-        response: state.queryResponse?.data,
+        response: response,
+        ...(warning ? { warning } : {}),
       },
     };
   };

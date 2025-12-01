@@ -1,7 +1,4 @@
-import type {
-  ComputedColumn,
-  WhereAndArray,
-} from "~/server/userDatabaseConnector/types";
+import type { WhereAndArray } from "~/server/userDatabaseConnector/types";
 
 export type Operation =
   | "findMany"

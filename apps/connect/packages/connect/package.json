@@ -25,10 +25,6 @@
     "./express": {
       "require": "./dist/src/express/index.js",
       "import": "./dist/src/express/index.js"
-    },
-    "./next": {
-      "require": "./dist/src/next/index.js",
-      "import": "./dist/src/next/index.js"
     }
   },
   "files": [
@@ -48,7 +44,6 @@
     "esbuild": "^0.21.5",
     "fast-levenshtein": "^3.0.0",
     "mysql2": "^3.15.1",
-    "next": "^15.5.4",
     "pg": "^8.13.1",
     "pino": "^9.11.0",
     "pino-pretty": "^13.1.1",
@@ -68,7 +63,6 @@
   "tsup": {
     "entry": [
       "src/express/index.ts",
-      "src/next/index.ts",
       "src/server/index.ts",
       "drizzle.config.ts",
       "src/drizzleOutputParser.ts"

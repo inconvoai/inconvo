@@ -79,6 +79,9 @@ export function buildAggregateToolZodSchema(ctx: AggregateValidatorContext) {
     count: buildAggregateArraySchema(
       "Columns to count non-null rows for. Use fully-qualified names. Set to null when unused."
     ),
+    countDistinct: buildAggregateArraySchema(
+      "Columns to count distinct values for. Use fully-qualified names. Set to null when unused."
+    ),
     median: buildAggregateArraySchema(
       "Columns to compute median for (numeric only). Use fully-qualified names. Set to null when unused."
     ),
@@ -205,6 +208,13 @@ export function validateAggregateCandidate(
     "unsupported_count_column",
     (column) => `Column ${column} cannot be counted.`
   );
+  checkColumns(
+    data.countDistinct ?? null,
+    "countDistinct",
+    isCountable,
+    "unsupported_count_distinct_column",
+    (column) => `Column ${column} cannot be used for distinct count.`
+  );
 
   if (issues.length > 0) {
     return {
@@ -222,6 +232,7 @@ export function validateAggregateCandidate(
       min: normalizeList(data.min),
       max: normalizeList(data.max),
       count: normalizeList(data.count),
+      countDistinct: normalizeList(data.countDistinct),
       median: normalizeList(data.median),
     },
   };

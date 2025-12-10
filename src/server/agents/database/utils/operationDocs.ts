@@ -238,7 +238,7 @@ export const operationDocs = {
   },
   aggregate: {
     description:
-      "Returns aggregated values (min, max, average, sum, count, median) for specified columns in a table. Provide fully-qualified column names (`alias.column`). When aggregating across relations, include hop-based join descriptors in `joins`. Numeric aggregates require numeric columns (computed columns count as numeric). MIN/MAX also support temporal columns. Set unused aggregate arrays to null.",
+      "Returns aggregated values (min, max, average, sum, count, countDistinct, median) for specified columns in a table. Provide fully-qualified column names (`alias.column`). When aggregating across relations, include hop-based join descriptors in `joins`. Numeric aggregates require numeric columns (computed columns count as numeric). MIN/MAX also support temporal columns. countDistinct counts unique values. Set unused aggregate arrays to null.",
     examples: [
       {
         question:
@@ -252,6 +252,7 @@ export const operationDocs = {
             avg: ["user.salary"],
             sum: null,
             count: ["user.id"],
+            countDistinct: null,
             median: null,
           },
         },
@@ -266,7 +267,7 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      "Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.",
+      "Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, countDistinct, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. countDistinct counts unique values per group. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.",
     examples: [
       {
         question:
@@ -299,6 +300,7 @@ export const operationDocs = {
             min: null,
             max: null,
             count: null,
+            countDistinct: null,
             avg: null,
             orderBy: {
               type: "aggregate",
@@ -334,6 +336,7 @@ export const operationDocs = {
             min: null,
             max: null,
             count: ["orders.id"],
+            countDistinct: null,
             avg: null,
             orderBy: {
               type: "groupKey",
@@ -369,6 +372,7 @@ export const operationDocs = {
             min: null,
             max: null,
             count: ["orders.id"],
+            countDistinct: null,
             avg: null,
             orderBy: {
               type: "groupKey",

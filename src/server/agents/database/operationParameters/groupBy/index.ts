@@ -170,6 +170,7 @@ export async function defineGroupByOperationParameters(
               )
               .min(1),
             count: z.array(stringArrayToZodEnum(allColumns)).nullable(),
+            countDistinct: z.array(stringArrayToZodEnum(allColumns)).nullable(),
             sum: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
             min: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
             max: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
@@ -182,7 +183,7 @@ export async function defineGroupByOperationParameters(
               }),
               z.object({
                 type: z.literal("aggregate"),
-                function: z.enum(["count", "sum", "min", "max", "avg"]),
+                function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
                 column: stringArrayToZodEnum(allColumns),
                 direction: z.enum(["asc", "desc"]),
               }),

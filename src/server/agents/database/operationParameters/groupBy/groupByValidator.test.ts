@@ -68,6 +68,7 @@ describe("groupBy validator", () => {
       ],
       groupBy: [{ type: "column", column: "users.id" }],
       count: ["users.id"],
+      countDistinct: null,
       sum: ["orders.total"],
       min: null,
       max: null,
@@ -97,6 +98,7 @@ describe("groupBy validator", () => {
       joins: null,
       groupBy: [{ type: "column", column: "users.id" }],
       count: ["users.id"],
+      countDistinct: null,
       sum: null,
       min: null,
       max: null,
@@ -118,6 +120,7 @@ describe("groupBy validator", () => {
       joins: null,
       groupBy: [{ type: "column", column: "users.id" }],
       count: null,
+      countDistinct: null,
       sum: ["users.name"], // not numeric
       min: null,
       max: null,
@@ -139,6 +142,7 @@ describe("groupBy validator", () => {
       joins: null,
       groupBy: [{ type: "column", column: "users.createdAt" }],
       count: null,
+      countDistinct: null,
       sum: null,
       min: null,
       max: null,
@@ -166,6 +170,7 @@ describe("groupBy validator", () => {
         },
       ],
       count: null,
+      countDistinct: null,
       sum: null,
       min: null,
       max: null,
@@ -195,6 +200,7 @@ describe("groupBy validator", () => {
         },
       ],
       count: null,
+      countDistinct: null,
       sum: null,
       min: null,
       max: null,
@@ -226,6 +232,7 @@ describe("groupBy validator", () => {
         },
       ],
       count: null,
+      countDistinct: null,
       sum: null,
       min: null,
       max: null,
@@ -239,5 +246,30 @@ describe("groupBy validator", () => {
     };
     const result = validateGroupByCandidate(bad, ctx);
     expect(result.status).toBe("invalid");
+  });
+
+  it("validates countDistinct aggregation", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: null,
+      countDistinct: ["users.name"],
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "aggregate" as const,
+        function: "countDistinct" as const,
+        column: "users.name",
+        direction: "desc" as const,
+      },
+      limit: 10,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.countDistinct).toEqual(["users.name"]);
+    }
   });
 });

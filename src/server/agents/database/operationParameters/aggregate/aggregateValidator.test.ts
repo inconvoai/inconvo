@@ -46,6 +46,7 @@ describe("aggregate validator", () => {
       min: ["users.createdAt"],
       max: ["users.createdAt"],
       count: ["users.id"],
+      countDistinct: null,
       median: ["users.age"],
     };
 
@@ -77,6 +78,7 @@ describe("aggregate validator", () => {
       min: null,
       max: null,
       count: null,
+      countDistinct: null,
       median: null,
     };
 
@@ -96,6 +98,7 @@ describe("aggregate validator", () => {
       min: null,
       max: null,
       count: null,
+      countDistinct: null,
       median: null,
     };
 
@@ -116,6 +119,7 @@ describe("aggregate validator", () => {
       min: null,
       max: null,
       count: null,
+      countDistinct: null,
       median: null,
     };
 
@@ -136,6 +140,7 @@ describe("aggregate validator", () => {
       min: null,
       max: null,
       count: null,
+      countDistinct: null,
       median: null,
     };
 
@@ -145,6 +150,26 @@ describe("aggregate validator", () => {
       expect(
         result.issues.some((issue) => issue.code === "invalid_column")
       ).toBe(true);
+    }
+  });
+
+  it("validates countDistinct aggregation", () => {
+    const candidate = {
+      joins: null,
+      avg: null,
+      sum: null,
+      min: null,
+      max: null,
+      count: ["users.id"],
+      countDistinct: ["users.age", "users.createdAt"],
+      median: null,
+    };
+
+    const result = validateAggregateCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.countDistinct).toEqual(["users.age", "users.createdAt"]);
+      expect(result.result.count).toEqual(["users.id"]);
     }
   });
 });

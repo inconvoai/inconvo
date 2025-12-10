@@ -130,7 +130,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   const aggregateOrderSchema = z
     .object({
       type: z.literal("aggregate"),
-      function: z.enum(["count", "sum", "min", "max", "avg"]),
+      function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
       column: allColumnsEnumOrNever,
       direction: z.enum(["asc", "desc"]),
     })
@@ -140,6 +140,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     joins: z.array(joinSchema).nullable().optional(),
     groupBy: z.array(groupByKeySchema).min(1),
     count: buildAggregateArraySchema(allColumnsEnum),
+    countDistinct: buildAggregateArraySchema(allColumnsEnum),
     sum: buildAggregateArraySchema(numericalColumnsEnum),
     min: buildAggregateArraySchema(numericalColumnsEnum),
     max: buildAggregateArraySchema(numericalColumnsEnum),
@@ -261,6 +262,7 @@ export function validateGroupByCandidate(
   });
 
   ensureColumnTablesAllowed(data.count ?? undefined, "count");
+  ensureColumnTablesAllowed(data.countDistinct ?? undefined, "countDistinct");
   ensureColumnTablesAllowed(data.sum ?? undefined, "sum");
   ensureColumnTablesAllowed(data.min ?? undefined, "min");
   ensureColumnTablesAllowed(data.max ?? undefined, "max");
@@ -277,6 +279,7 @@ export function validateGroupByCandidate(
   } else {
     if (
       data.orderBy.function !== "count" &&
+      data.orderBy.function !== "countDistinct" &&
       !ctx.numericalColumns.includes(data.orderBy.column)
     ) {
       issues.push({
@@ -295,10 +298,11 @@ export function validateGroupByCandidate(
     }
 
     const aggregateColumnsByFunction: Record<
-      "count" | "sum" | "min" | "max" | "avg",
+      "count" | "countDistinct" | "sum" | "min" | "max" | "avg",
       string[] | null | undefined
     > = {
       count: data.count,
+      countDistinct: data.countDistinct,
       sum: data.sum,
       min: data.min,
       max: data.max,
@@ -327,6 +331,7 @@ export function validateGroupByCandidate(
     joins: validatedJoins ?? null,
     groupBy: resolvedGroupBy,
     count: cleanAgg(data.count),
+    countDistinct: cleanAgg(data.countDistinct),
     sum: cleanAgg(data.sum),
     min: cleanAgg(data.min),
     max: cleanAgg(data.max),

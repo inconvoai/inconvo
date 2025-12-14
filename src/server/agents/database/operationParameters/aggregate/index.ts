@@ -123,14 +123,21 @@ function buildColumnCatalog(
     catalog[alias][columnName] = metadata;
   };
 
-  const numericTypes = new Set(["number"]);
+  const numericTypes = new Set([
+    "number",
+    "integer",
+    "bigint",
+    "decimal",
+    "float",
+  ]);
   const temporalTypes = new Set(["DateTime", "Date"]);
 
   baseTableSchema.columns.forEach(
     (column: Schema[number]["columns"][number]) => {
+      const columnType = column.effectiveType ?? column.type;
       register(baseTableName, column.name, {
-        isNumeric: numericTypes.has(column.type),
-        isTemporal: temporalTypes.has(column.type),
+        isNumeric: numericTypes.has(columnType),
+        isTemporal: temporalTypes.has(columnType),
         isCountable: true,
       });
     }
@@ -155,9 +162,10 @@ function buildColumnCatalog(
     if (!tableSchema) return;
 
     tableSchema.columns.forEach((column: Schema[number]["columns"][number]) => {
+      const columnType = column.effectiveType ?? column.type;
       register(option.name, column.name, {
-        isNumeric: numericTypes.has(column.type),
-        isTemporal: temporalTypes.has(column.type),
+        isNumeric: numericTypes.has(columnType),
+        isTemporal: temporalTypes.has(columnType),
         isCountable: true,
       });
     });

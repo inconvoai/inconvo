@@ -43,7 +43,14 @@ export function buildTableSchemaStringFromTableSchema(
       const unitSuffix = column.unit ? ` [${column.unit}]` : "";
       const displayName = column.rename?.trim() ? column.rename : column.name;
       const notesSuffix = column.notes ? ` - Notes: ${column.notes}` : "";
-      return `\t\t- ${displayName} (${column.type}${unitSuffix})${notesSuffix}`;
+      const hasConversion =
+        Boolean(column.conversion?.selected) &&
+        column.conversion?.type &&
+        column.conversion.type !== column.type;
+      const typeLabel = hasConversion
+        ? `${column.effectiveType ?? column.type} (cast from ${column.type})`
+        : column.effectiveType ?? column.type;
+      return `\t\t- ${displayName} (${typeLabel}${unitSuffix})${notesSuffix}`;
     })
     .join("\n")
     .replace(/^/, `\tColumns:\n`);

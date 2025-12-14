@@ -36,6 +36,8 @@ export function mapJsonToSchema(
       notes: null,
       relation: [],
       type: type,
+      effectiveType: type,
+      conversion: null,
       unit: null,
     };
   });

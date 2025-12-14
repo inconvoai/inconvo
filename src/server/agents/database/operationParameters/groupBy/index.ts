@@ -54,7 +54,13 @@ export async function defineGroupByOperationParameters(
 
   const columnCatalog = new Map<string, ColumnMetadata>();
   const temporalTypes = new Set(["DateTime", "Date"]);
-  const numericTypes = new Set(["number"]);
+  const numericTypes = new Set([
+    "number",
+    "integer",
+    "bigint",
+    "decimal",
+    "float",
+  ]);
 
   uniqueTableNames.forEach((tableName) => {
     const tableSchema = params.schema.find(
@@ -63,9 +69,10 @@ export async function defineGroupByOperationParameters(
     if (!tableSchema) return;
     tableSchema.columns.forEach((column: Schema[number]["columns"][number]) => {
       const key = `${tableName}.${column.name}`;
+      const columnType = column.effectiveType ?? column.type;
       columnCatalog.set(key, {
-        isTemporal: temporalTypes.has(column.type),
-        isNumeric: numericTypes.has(column.type),
+        isTemporal: temporalTypes.has(columnType),
+        isNumeric: numericTypes.has(columnType),
       });
     });
     tableSchema.computedColumns.forEach(
@@ -183,7 +190,14 @@ export async function defineGroupByOperationParameters(
               }),
               z.object({
                 type: z.literal("aggregate"),
-                function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
+                function: z.enum([
+                  "count",
+                  "countDistinct",
+                  "sum",
+                  "min",
+                  "max",
+                  "avg",
+                ]),
                 column: stringArrayToZodEnum(allColumns),
                 direction: z.enum(["asc", "desc"]),
               }),

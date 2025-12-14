@@ -69,13 +69,23 @@ export function operationParametersAgent(params: RequestParams) {
     );
     const dateColumnNames = tableColumns
       .filter(
-        ({ type }: Schema[number]["columns"][number]) => type === "DateTime"
+        ({ type, effectiveType }: Schema[number]["columns"][number]) =>
+          (effectiveType ?? type) === "DateTime"
       )
       .map(({ name }: Schema[number]["columns"][number]) => name);
+    const numericTypes = new Set([
+      "number",
+      "integer",
+      "bigint",
+      "decimal",
+      "float",
+    ]);
     const numericalColumnNames = [
       ...tableColumns
-        .filter(({ type }: Schema[number]["columns"][number]) =>
-          ["number"].includes(type)
+        .filter(({ type, effectiveType }: Schema[number]["columns"][number]) =>
+          effectiveType
+            ? numericTypes.has(effectiveType)
+            : numericTypes.has(type)
         )
         .map(({ name }: Schema[number]["columns"][number]) => name),
       ...tableComputedColumns.map(
@@ -88,9 +98,7 @@ export function operationParametersAgent(params: RequestParams) {
       .filter(
         ({ isList }: Schema[number]["outwardRelations"][number]) => isList
       )
-      .map(
-        ({ name }: Schema[number]["outwardRelations"][number]) => name
-      );
+      .map(({ name }: Schema[number]["outwardRelations"][number]) => name);
 
     return {
       next: params.operation,

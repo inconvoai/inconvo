@@ -51,20 +51,28 @@ export function createQuestionConditionsDynamicSchema(
   const computedColumns = tableSchema.computedColumns ?? [];
   const outwardRelations = tableSchema.outwardRelations ?? [];
 
+  const numericTypes = new Set([
+    "number",
+    "integer",
+    "bigint",
+    "decimal",
+    "float",
+  ]);
+
   // Collect scalar columns by type.
   const stringColumns = columns
-    .filter((c) => c.type === "string")
+    .filter((c) => (c.effectiveType ?? c.type) === "string")
     .map((c) => c.name);
   const numberColumns = columns
-    .filter((c) => c.type === "number")
+    .filter((c) => numericTypes.has(c.effectiveType ?? c.type))
     .map((c) => c.name)
     // historical logic: numeric operators also allowed on computed columns
     .concat(computedColumns.map((c) => c.name));
   const booleanColumns = columns
-    .filter((c) => c.type === "boolean")
+    .filter((c) => (c.effectiveType ?? c.type) === "boolean")
     .map((c) => c.name);
   const dateColumns = columns
-    .filter((c) => c.type === "DateTime")
+    .filter((c) => (c.effectiveType ?? c.type) === "DateTime")
     .map((c) => c.name);
 
   /** Utility: ensure ISO date */
@@ -169,15 +177,19 @@ export function createQuestionConditionsDynamicSchema(
     }
     const tCols = target.columns ?? [];
     const tComputed = target.computedColumns ?? [];
-    const tString = tCols.filter((c) => c.type === "string").map((c) => c.name);
+    const tString = tCols
+      .filter((c) => (c.effectiveType ?? c.type) === "string")
+      .map((c) => c.name);
     const tNumber = tCols
-      .filter((c) => c.type === "number")
+      .filter((c) => numericTypes.has(c.effectiveType ?? c.type))
       .map((c) => c.name)
       .concat(tComputed.map((c) => c.name));
     const tBoolean = tCols
-      .filter((c) => c.type === "boolean")
+      .filter((c) => (c.effectiveType ?? c.type) === "boolean")
       .map((c) => c.name);
-    const tDate = tCols.filter((c) => c.type === "DateTime").map((c) => c.name);
+    const tDate = tCols
+      .filter((c) => (c.effectiveType ?? c.type) === "DateTime")
+      .map((c) => c.name);
 
     const innerSchemas: z.ZodTypeAny[] = [];
     tString.forEach((c) => innerSchemas.push(buildStringColumnCondition(c)));

@@ -7,6 +7,7 @@ export type Operation =
   | "count"
   | "countRelations"
   | "aggregate"
+  | "aggregateGroups"
   | "groupBy";
 
 export interface DBQuery {

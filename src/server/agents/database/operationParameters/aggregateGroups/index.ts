@@ -3,11 +3,11 @@ import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { generateJoinGraph } from "../../utils/tableRelations";
 import type { Schema } from "~/server/db/schema";
-import type { GroupByQuery } from "~/server/userDatabaseConnector/types";
+import type { AggregateGroupsQuery } from "~/server/userDatabaseConnector/types";
 import {
-  validateGroupByCandidate,
-  type GroupByValidationResult,
-} from "./groupByValidator";
+  validateAggregateGroupsCandidate,
+  type AggregateGroupsValidationResult,
+} from "./aggregateGroupsValidator";
 import {
   joinDescriptorSchema,
   joinPathHopSchema,
@@ -20,16 +20,16 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 
-export interface DefineGroupByOperationParametersParams {
+export interface DefineAggregateGroupsOperationParametersParams {
   schema: Schema;
   tableName: string;
   question: string;
   tableSchema: Schema[number];
-  operation: "groupBy";
+  operation: "aggregateGroups";
 }
 
-export async function defineGroupByOperationParameters(
-  params: DefineGroupByOperationParametersParams
+export async function defineAggregateGroupsOperationParameters(
+  params: DefineAggregateGroupsOperationParametersParams
 ) {
   const baseTable = params.schema.find(
     (t: Schema[number]) => t.name === params.tableName
@@ -54,13 +54,7 @@ export async function defineGroupByOperationParameters(
 
   const columnCatalog = new Map<string, ColumnMetadata>();
   const temporalTypes = new Set(["DateTime", "Date"]);
-  const numericTypes = new Set([
-    "number",
-    "integer",
-    "bigint",
-    "decimal",
-    "float",
-  ]);
+  const numericTypes = new Set(["number"]);
 
   uniqueTableNames.forEach((tableName) => {
     const tableSchema = params.schema.find(
@@ -69,10 +63,9 @@ export async function defineGroupByOperationParameters(
     if (!tableSchema) return;
     tableSchema.columns.forEach((column: Schema[number]["columns"][number]) => {
       const key = `${tableName}.${column.name}`;
-      const columnType = column.effectiveType ?? column.type;
       columnCatalog.set(key, {
-        isTemporal: temporalTypes.has(columnType),
-        isNumeric: numericTypes.has(columnType),
+        isTemporal: temporalTypes.has(column.type),
+        isNumeric: numericTypes.has(column.type),
       });
     });
     tableSchema.computedColumns.forEach(
@@ -117,11 +110,11 @@ export async function defineGroupByOperationParameters(
     })
     .join("\n");
 
-  const applyGroupByOperationParametersTool = tool(
+  const applyAggregateGroupsOperationParametersTool = tool(
     async (input: {
       candidateOperationParameters: Record<string, unknown>;
     }) => {
-      const result = validateGroupByCandidate(
+      const result = validateAggregateGroupsCandidate(
         input.candidateOperationParameters,
         {
           baseTableName: params.tableName,
@@ -135,9 +128,9 @@ export async function defineGroupByOperationParameters(
       return [result, result];
     },
     {
-      name: "applyGroupByOperationParametersTool",
+      name: "applyAggregateGroupsOperationParametersTool",
       description:
-        "Validate and apply the groupBy operation parameters (single final call).",
+        "Validate and apply the aggregateGroups operation parameters (single final call).",
       schema: z.object({
         candidateOperationParameters: z
           .object({
@@ -176,32 +169,6 @@ export async function defineGroupByOperationParameters(
                 ])
               )
               .min(1),
-            count: z.array(stringArrayToZodEnum(allColumns)).nullable(),
-            countDistinct: z.array(stringArrayToZodEnum(allColumns)).nullable(),
-            sum: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
-            min: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
-            max: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
-            avg: z.array(stringArrayToZodEnum(numericalColumns)).nullable(),
-            orderBy: z.union([
-              z.object({
-                type: z.literal("groupKey"),
-                key: z.string(),
-                direction: z.enum(["asc", "desc"]),
-              }),
-              z.object({
-                type: z.literal("aggregate"),
-                function: z.enum([
-                  "count",
-                  "countDistinct",
-                  "sum",
-                  "min",
-                  "max",
-                  "avg",
-                ]),
-                column: stringArrayToZodEnum(allColumns),
-                direction: z.enum(["asc", "desc"]),
-              }),
-            ]),
             having: z
               .array(
                 z.union([
@@ -247,12 +214,78 @@ export async function defineGroupByOperationParameters(
               )
               .nullable()
               .optional(),
-            limit: z.number().int().positive().max(1000),
+            aggregates: z.object({
+              groupCount: z.boolean().optional(),
+              count: z
+                .array(stringArrayToZodEnum(allColumns))
+                .nullable()
+                .optional(),
+              countDistinct: z
+                .array(stringArrayToZodEnum(allColumns))
+                .nullable()
+                .optional(),
+              sum: z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .nullable()
+                .optional(),
+              min: z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .nullable()
+                .optional(),
+              max: z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .nullable()
+                .optional(),
+              avg: z
+                .array(stringArrayToZodEnum(numericalColumns))
+                .nullable()
+                .optional(),
+            }),
+            reducers: z
+              .object({
+                count: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+                countDistinct: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+                sum: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+                min: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+                max: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+                avg: z
+                  .array(
+                    z.enum(["sum", "min", "max", "avg"])
+                  )
+                  .nullable()
+                  .optional(),
+              })
+              .optional(),
           })
           .describe(
             joinOptionDescriptions
-              ? `Candidate groupBy params object. Available joins:\n${joinOptionDescriptions}`
-              : "Candidate groupBy params object; if valid it will be added to the query"
+              ? `Candidate aggregateGroups params object. Available joins:\n${joinOptionDescriptions}`
+              : "Candidate aggregateGroups params object; if valid it will be added to the query"
           ),
       }),
       responseFormat: "content_and_artifact",
@@ -266,22 +299,22 @@ export async function defineGroupByOperationParameters(
   );
 
   const jsonDetectedMessage =
-    "JSON-like content was detected in your last response, but you did not call applyGroupByOperationParametersTool. \n" +
-    "You MUST now call applyGroupByOperationParametersTool exactly once with a candidate operationParameters object. \n" +
+    "JSON-like content was detected in your last response, but you did not call applyAggregateGroupsOperationParametersTool. \n" +
+    "You MUST now call applyAggregateGroupsOperationParametersTool exactly once with a candidate operationParameters object. \n" +
     "Call the tool with { candidateOperationParameters: <object-or-null> }.";
 
   const agent = createOperationParametersAgent<
-    GroupByQuery["operationParameters"] | null,
-    GroupByValidationResult
+    AggregateGroupsQuery["operationParameters"] | null,
+    AggregateGroupsValidationResult
   >({
-    tool: applyGroupByOperationParametersTool,
-    toolName: "applyGroupByOperationParametersTool",
+    tool: applyAggregateGroupsOperationParametersTool,
+    toolName: "applyAggregateGroupsOperationParametersTool",
     jsonDetectedMessage,
     onComplete: (artifact) => {
       if (artifact?.status !== "valid" || artifact.result === undefined) {
         return null;
       }
-      return artifact.result satisfies GroupByQuery["operationParameters"];
+      return artifact.result satisfies AggregateGroupsQuery["operationParameters"];
     },
   });
 

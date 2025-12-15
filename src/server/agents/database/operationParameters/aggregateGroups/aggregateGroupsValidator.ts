@@ -3,41 +3,43 @@ import {
   joinDescriptorSchema,
   joinPathHopSchema,
   joinTypeSchema,
+  type AggregateGroupsQuery,
   type GroupByKey,
-  type GroupByQuery,
   type JoinPathHop,
 } from "~/server/userDatabaseConnector/types";
 import { stringArrayToZodEnum } from "~/server/agents/utils/zodHelpers";
 
-export interface GroupByJoinOption {
+export interface AggregateGroupsJoinOption {
   name: string;
   table: string;
   path: JoinPathHop[];
 }
 
-export interface GroupByValidatorContext {
+export interface AggregateGroupsValidatorContext {
   baseTableName: string;
-  joinOptions: GroupByJoinOption[];
+  joinOptions: AggregateGroupsJoinOption[];
   allColumns: string[];
   groupableColumns: string[];
   intervalColumns: string[];
   numericalColumns: string[];
 }
 
-export interface GroupByInvalidResultIssue {
+export interface AggregateGroupsInvalidResultIssue {
   path: string;
   message: string;
   code: string;
 }
 
-export interface GroupByInvalidResult {
+export interface AggregateGroupsInvalidResult {
   status: "invalid";
-  issues: GroupByInvalidResultIssue[];
+  issues: AggregateGroupsInvalidResultIssue[];
 }
 
-export type GroupByValidationResult =
-  | { status: "valid"; result: GroupByQuery["operationParameters"] }
-  | GroupByInvalidResult;
+export type AggregateGroupsValidationResult =
+  | { status: "valid"; result: AggregateGroupsQuery["operationParameters"] }
+  | AggregateGroupsInvalidResult;
+
+const reducerEnum = z.enum(["sum", "min", "max", "avg"]);
 
 const joinSchema = joinDescriptorSchema
   .extend({
@@ -46,7 +48,9 @@ const joinSchema = joinDescriptorSchema
   })
   .strip();
 
-export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
+export function buildAggregateGroupsZodSchema(
+  ctx: AggregateGroupsValidatorContext
+) {
   const buildEnum = (values: string[]) =>
     values.length ? stringArrayToZodEnum(values) : null;
 
@@ -57,7 +61,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
 
   const buildAggregateArraySchema = (
     enumSchema: z.ZodEnum<[string, ...string[]]> | null
-  ) => (enumSchema ? z.array(enumSchema).min(1).nullable() : z.null());
+  ) => (enumSchema ? z.array(enumSchema).nullable() : z.null());
 
   const havingOperatorSchema = z.enum([
     "equals",
@@ -130,23 +134,6 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
 
   const allColumnsEnumOrNever = allColumnsEnum ?? z.never();
 
-  const groupKeyOrderSchema = z
-    .object({
-      type: z.literal("groupKey"),
-      key: z.string(),
-      direction: z.enum(["asc", "desc"]),
-    })
-    .strict();
-
-  const aggregateOrderSchema = z
-    .object({
-      type: z.literal("aggregate"),
-      function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
-      column: allColumnsEnumOrNever,
-      direction: z.enum(["asc", "desc"]),
-    })
-    .strict();
-
   const havingAggregateSchema = z
     .object({
       type: z.literal("aggregate"),
@@ -171,29 +158,45 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
     .nullable()
     .optional();
 
+  const reducersSchema = z
+    .object({
+      count: z.array(reducerEnum).min(1).nullable().optional(),
+      countDistinct: z.array(reducerEnum).min(1).nullable().optional(),
+      sum: z.array(reducerEnum).min(1).nullable().optional(),
+      min: z.array(reducerEnum).min(1).nullable().optional(),
+      max: z.array(reducerEnum).min(1).nullable().optional(),
+      avg: z.array(reducerEnum).min(1).nullable().optional(),
+    })
+    .strict()
+    .optional();
+
   return z.object({
     joins: z.array(joinSchema).nullable().optional(),
     groupBy: z.array(groupByKeySchema).min(1),
-    count: buildAggregateArraySchema(allColumnsEnum),
-    countDistinct: buildAggregateArraySchema(allColumnsEnum),
-    sum: buildAggregateArraySchema(numericalColumnsEnum),
-    min: buildAggregateArraySchema(numericalColumnsEnum),
-    max: buildAggregateArraySchema(numericalColumnsEnum),
-    avg: buildAggregateArraySchema(numericalColumnsEnum),
-    orderBy: z.union([groupKeyOrderSchema, aggregateOrderSchema]),
-    limit: z.number().int().positive().max(1000),
     having: havingSchema,
+    aggregates: z
+      .object({
+        groupCount: z.boolean().optional(),
+        count: buildAggregateArraySchema(allColumnsEnum).optional(),
+        countDistinct: buildAggregateArraySchema(allColumnsEnum).optional(),
+        sum: buildAggregateArraySchema(numericalColumnsEnum).optional(),
+        min: buildAggregateArraySchema(numericalColumnsEnum).optional(),
+        max: buildAggregateArraySchema(numericalColumnsEnum).optional(),
+        avg: buildAggregateArraySchema(numericalColumnsEnum).optional(),
+      })
+      .strict(),
+    reducers: reducersSchema,
   });
 }
 
-export function validateGroupByCandidate(
+export function validateAggregateGroupsCandidate(
   candidate: unknown,
-  ctx: GroupByValidatorContext
-): GroupByValidationResult {
-  const schema = buildGroupByZodSchema(ctx);
+  ctx: AggregateGroupsValidatorContext
+): AggregateGroupsValidationResult {
+  const schema = buildAggregateGroupsZodSchema(ctx);
   const parsed = schema.safeParse(candidate);
   if (!parsed.success) {
-    const issues: GroupByInvalidResultIssue[] = parsed.error.issues.map(
+    const issues: AggregateGroupsInvalidResultIssue[] = parsed.error.issues.map(
       (issue) => ({
         path: issue.path.join(".") || "<root>",
         message: issue.message,
@@ -204,10 +207,9 @@ export function validateGroupByCandidate(
   }
 
   const data = parsed.data;
+  const issues: AggregateGroupsInvalidResultIssue[] = [];
 
-  const issues: GroupByInvalidResultIssue[] = [];
   const validatedJoins = validateJoins(data.joins ?? null, ctx, issues);
-
   if (issues.length) {
     return { status: "invalid", issues };
   }
@@ -221,7 +223,6 @@ export function validateGroupByCandidate(
   });
 
   const selectedJoinTables = new Set(aliasToTable.keys());
-
   const tablePart = (fq: string) => fq.split(".")[0] ?? "";
 
   const ensureColumnTablesAllowed = (
@@ -297,64 +298,15 @@ export function validateGroupByCandidate(
     });
   });
 
-  ensureColumnTablesAllowed(data.count ?? undefined, "count");
-  ensureColumnTablesAllowed(data.countDistinct ?? undefined, "countDistinct");
-  ensureColumnTablesAllowed(data.sum ?? undefined, "sum");
-  ensureColumnTablesAllowed(data.min ?? undefined, "min");
-  ensureColumnTablesAllowed(data.max ?? undefined, "max");
-  ensureColumnTablesAllowed(data.avg ?? undefined, "avg");
-
-  if (data.orderBy.type === "groupKey") {
-    if (!aliasSet.has(data.orderBy.key)) {
-      issues.push({
-        path: "orderBy.key",
-        message: `OrderBy key ${data.orderBy.key} must match a groupBy alias`,
-        code: "orderBy_key_missing",
-      });
-    }
-  } else {
-    if (
-      data.orderBy.function !== "count" &&
-      data.orderBy.function !== "countDistinct" &&
-      !ctx.numericalColumns.includes(data.orderBy.column)
-    ) {
-      issues.push({
-        path: "orderBy.column",
-        message: `Column ${data.orderBy.column} is not numerical for function ${data.orderBy.function}`,
-        code: "orderBy_not_numeric",
-      });
-    }
-
-    if (!selectedJoinTables.has(tablePart(data.orderBy.column))) {
-      issues.push({
-        path: "orderBy.column",
-        message: `OrderBy column ${data.orderBy.column} references table not selected in joins`,
-        code: "orderBy_table_missing",
-      });
-    }
-
-    const aggregateColumnsByFunction: Record<
-      "count" | "countDistinct" | "sum" | "min" | "max" | "avg",
-      string[] | null | undefined
-    > = {
-      count: data.count,
-      countDistinct: data.countDistinct,
-      sum: data.sum,
-      min: data.min,
-      max: data.max,
-      avg: data.avg,
-    };
-
-    const targetColumns = aggregateColumnsByFunction[data.orderBy.function];
-
-    if (!targetColumns?.includes(data.orderBy.column)) {
-      issues.push({
-        path: "orderBy.column",
-        message: `Column ${data.orderBy.column} must be included in the ${data.orderBy.function} aggregate columns`,
-        code: "orderBy_column_not_aggregated",
-      });
-    }
-  }
+  ensureColumnTablesAllowed(data.aggregates.count ?? undefined, "aggregates.count");
+  ensureColumnTablesAllowed(
+    data.aggregates.countDistinct ?? undefined,
+    "aggregates.countDistinct"
+  );
+  ensureColumnTablesAllowed(data.aggregates.sum ?? undefined, "aggregates.sum");
+  ensureColumnTablesAllowed(data.aggregates.min ?? undefined, "aggregates.min");
+  ensureColumnTablesAllowed(data.aggregates.max ?? undefined, "aggregates.max");
+  ensureColumnTablesAllowed(data.aggregates.avg ?? undefined, "aggregates.avg");
 
   if (data.having) {
     data.having.forEach((condition, index) => {
@@ -369,7 +321,10 @@ export function validateGroupByCandidate(
         return;
       }
 
-      ensureColumnTablesAllowed([condition.column], `having[${index}].column`);
+      ensureColumnTablesAllowed(
+        [condition.column],
+        `having[${index}].column`
+      );
 
       if (
         condition.function !== "count" &&
@@ -385,39 +340,125 @@ export function validateGroupByCandidate(
     });
   }
 
+  const hasAnyMetric =
+    (data.aggregates.count?.length ?? 0) > 0 ||
+    (data.aggregates.countDistinct?.length ?? 0) > 0 ||
+    (data.aggregates.sum?.length ?? 0) > 0 ||
+    (data.aggregates.min?.length ?? 0) > 0 ||
+    (data.aggregates.max?.length ?? 0) > 0 ||
+    (data.aggregates.avg?.length ?? 0) > 0;
+
+  if (!data.aggregates.groupCount && !hasAnyMetric) {
+    issues.push({
+      path: "aggregates",
+      message:
+        "Provide at least one aggregate metric or set groupCount: true.",
+      code: "aggregate_required",
+    });
+  }
+
+  if (data.reducers) {
+    const reducerFamilies: Array<{
+      key:
+        | "count"
+        | "countDistinct"
+        | "sum"
+        | "min"
+        | "max"
+        | "avg";
+      metrics?: string[] | null;
+    }> = [
+      { key: "count", metrics: data.aggregates.count },
+      { key: "countDistinct", metrics: data.aggregates.countDistinct },
+      { key: "sum", metrics: data.aggregates.sum },
+      { key: "min", metrics: data.aggregates.min },
+      { key: "max", metrics: data.aggregates.max },
+      { key: "avg", metrics: data.aggregates.avg },
+    ];
+    reducerFamilies.forEach(({ key, metrics }) => {
+      const reducersForKey = data.reducers?.[key];
+      if (reducersForKey && (!metrics || metrics.length === 0)) {
+        issues.push({
+          path: `reducers.${key}`,
+          message: `Reducers provided for ${key} but no matching aggregate metrics supplied.`,
+          code: "reducers_without_metrics",
+        });
+      }
+    });
+  }
+
   if (issues.length) {
     return { status: "invalid", issues };
   }
 
   const cleanAgg = (agg: string[] | null | undefined) =>
-    agg && agg.length > 0 ? agg : null;
+    agg && agg.length > 0 ? agg : undefined;
   const cleanHaving = (having: typeof data.having) =>
     having && having.length > 0 ? having : null;
 
-  const result: GroupByQuery["operationParameters"] = {
+  const cleanedAggregates: AggregateGroupsQuery["operationParameters"]["aggregates"] =
+    {
+      groupCount: data.aggregates.groupCount,
+      ...(cleanAgg(data.aggregates.count)
+        ? { count: cleanAgg(data.aggregates.count) }
+        : {}),
+      ...(cleanAgg(data.aggregates.countDistinct)
+        ? { countDistinct: cleanAgg(data.aggregates.countDistinct) }
+        : {}),
+      ...(cleanAgg(data.aggregates.sum)
+        ? { sum: cleanAgg(data.aggregates.sum) }
+        : {}),
+      ...(cleanAgg(data.aggregates.min)
+        ? { min: cleanAgg(data.aggregates.min) }
+        : {}),
+      ...(cleanAgg(data.aggregates.max)
+        ? { max: cleanAgg(data.aggregates.max) }
+        : {}),
+      ...(cleanAgg(data.aggregates.avg)
+        ? { avg: cleanAgg(data.aggregates.avg) }
+        : {}),
+    };
+
+  const reducers: AggregateGroupsQuery["operationParameters"]["reducers"] = {};
+  const families: Array<{
+    key:
+      | "count"
+      | "countDistinct"
+      | "sum"
+      | "min"
+      | "max"
+      | "avg";
+    metrics: string[] | null | undefined;
+    defaults?: Array<"sum" | "min" | "max" | "avg">;
+  }> = [
+    { key: "count", metrics: cleanedAggregates.count, defaults: ["sum"] },
+    {
+      key: "countDistinct",
+      metrics: cleanedAggregates.countDistinct,
+      defaults: ["sum"],
+    },
+    { key: "sum", metrics: cleanedAggregates.sum, defaults: ["sum"] },
+    { key: "min", metrics: cleanedAggregates.min },
+    { key: "max", metrics: cleanedAggregates.max },
+    { key: "avg", metrics: cleanedAggregates.avg },
+  ];
+
+  families.forEach(({ key, metrics, defaults }) => {
+    const provided = data.reducers?.[key] ?? undefined;
+    if (metrics && metrics.length > 0) {
+      const value = provided ?? defaults;
+      if (value && value.length > 0) {
+        (reducers as Record<string, string[]>)[key] = value;
+      }
+    }
+  });
+
+  const result: AggregateGroupsQuery["operationParameters"] = {
     joins: validatedJoins ?? null,
     groupBy: resolvedGroupBy,
-    count: cleanAgg(data.count),
-    countDistinct: cleanAgg(data.countDistinct),
-    sum: cleanAgg(data.sum),
-    min: cleanAgg(data.min),
-    max: cleanAgg(data.max),
-    avg: cleanAgg(data.avg),
-    orderBy:
-      data.orderBy.type === "groupKey"
-        ? {
-            type: "groupKey",
-            key: data.orderBy.key,
-            direction: data.orderBy.direction,
-          }
-        : {
-            type: "aggregate",
-            function: data.orderBy.function,
-            column: data.orderBy.column,
-            direction: data.orderBy.direction,
-          },
     having: cleanHaving(data.having),
-    limit: data.limit,
+    aggregates: cleanedAggregates,
+    reducers: Object.keys(reducers).length ? reducers : undefined,
   };
 
   return { status: "valid", result };
@@ -425,9 +466,9 @@ export function validateGroupByCandidate(
 
 function validateJoins(
   joins: z.infer<typeof joinSchema>[] | null,
-  ctx: GroupByValidatorContext,
-  issues: GroupByInvalidResultIssue[]
-): GroupByQuery["operationParameters"]["joins"] {
+  ctx: AggregateGroupsValidatorContext,
+  issues: AggregateGroupsInvalidResultIssue[]
+): AggregateGroupsQuery["operationParameters"]["joins"] {
   if (!joins || joins.length === 0) {
     return undefined;
   }
@@ -476,7 +517,7 @@ function validateJoins(
         path: option.path,
         joinType: join.joinType,
       } satisfies NonNullable<
-        GroupByQuery["operationParameters"]["joins"]
+        AggregateGroupsQuery["operationParameters"]["joins"]
       >[number];
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);

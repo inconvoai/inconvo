@@ -4,6 +4,7 @@ import type { Schema } from "~/server/db/schema";
 import type { Operation } from "../types";
 import type {
   AggregateQuery,
+  AggregateGroupsQuery,
   CountQuery,
   CountRelationsQuery,
   FindDistinctQuery,
@@ -16,6 +17,7 @@ import { defineCountRelationsOperationParameters } from "./countRelations";
 import { defineCountOperationParameters } from "./count";
 import { defineAggregateOperationParameters } from "./aggregate";
 import { defineFindDistinctOperationParameters } from "./findDistinct";
+import { defineAggregateGroupsOperationParameters } from "./aggregateGroups";
 
 interface RequestParams {
   operation: Exclude<Operation, "findDistinctByEditDistance">;
@@ -180,6 +182,27 @@ export function operationParametersAgent(params: RequestParams) {
     };
   };
 
+  const aggregateGroups = async (
+    _state: typeof OperationParametersState.State
+  ) => {
+    const operationParameters =
+      await defineAggregateGroupsOperationParameters({
+        schema: params.schema,
+        tableSchema: params.tableSchema,
+        tableName: params.tableName,
+        question: params.question,
+        operation: "aggregateGroups",
+      });
+    assert(
+      operationParameters,
+      "Failed to define aggregateGroups operation parameters"
+    );
+    return {
+      operationParameters:
+        operationParameters satisfies AggregateGroupsQuery["operationParameters"],
+    };
+  };
+
   const count = async (_state: typeof OperationParametersState.State) => {
     const operationParameters = await defineCountOperationParameters({
       schema: params.schema,
@@ -220,6 +243,7 @@ export function operationParametersAgent(params: RequestParams) {
     .addNode("count", count)
     .addNode("countRelations", countRelations)
     .addNode("aggregate", aggregate)
+    .addNode("aggregateGroups", aggregateGroups)
     .addNode("groupBy", groupBy);
 
   workflow

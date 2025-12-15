@@ -272,4 +272,150 @@ describe("groupBy validator", () => {
       expect(result.result.countDistinct).toEqual(["users.name"]);
     }
   });
+
+  it("accepts HAVING clauses on aggregates and group keys", () => {
+    const candidate = {
+      joins: [
+        {
+          table: "orders",
+          name: "users.orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+          ],
+        },
+      ],
+      groupBy: [{ type: "column", column: "users.id", alias: "userId" }],
+      count: null,
+      countDistinct: null,
+      sum: ["orders.total"],
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "userId",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "aggregate" as const,
+          function: "count" as const,
+          column: "orders.id",
+          operator: "gte" as const,
+          value: 2,
+        },
+        {
+          type: "aggregate" as const,
+          function: "sum" as const,
+          column: "orders.total",
+          operator: "gt" as const,
+          value: 100,
+        },
+        {
+          type: "groupKey" as const,
+          key: "userId",
+          operator: "not" as const,
+          value: null,
+        },
+      ],
+      limit: 5,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.having?.length).toBe(3);
+    }
+  });
+
+  it("rejects HAVING groupKey entries that do not match aliases", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: null,
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "users.id",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "missing",
+          operator: "equals" as const,
+          value: "x",
+        },
+      ],
+      limit: 3,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+  });
+
+  it("rejects HAVING aggregates on unselected join tables", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: null,
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "users.id",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "aggregate" as const,
+          function: "count" as const,
+          column: "orders.id",
+          operator: "gt" as const,
+          value: 1,
+        },
+      ],
+      limit: 5,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+  });
+
+  it("rejects HAVING numeric functions on non-numeric columns", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: null,
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "users.id",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "aggregate" as const,
+          function: "sum" as const,
+          column: "users.name",
+          operator: "gt" as const,
+          value: 1,
+        },
+      ],
+      limit: 5,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+  });
 });

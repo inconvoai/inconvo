@@ -267,7 +267,7 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      "Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, countDistinct, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. countDistinct counts unique values per group. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.",
+      "Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: \"column\", column: \"table.column\" }`), date intervals (`{ type: \"dateInterval\", column: \"table.dateColumn\", interval: \"month\" }`), or recurring date components (`{ type: \"dateComponent\", column: \"table.dateColumn\", component: \"dayOfWeek\" }`). Aggregates (count, countDistinct, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. countDistinct counts unique values per group. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `\"aggregate\"`) or by one of the group keys (type `\"groupKey\"`). Optionally add `having` as an AND-only array of predicates on group keys or aggregates (operators: equals, not, in, notIn, lt, lte, gt, gte; null handling mirrors WHERE). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.",
     examples: [
       {
         question:
@@ -308,6 +308,15 @@ export const operationDocs = {
               column: "user.cars",
               direction: "desc",
             },
+            having: [
+              {
+                type: "aggregate",
+                function: "sum",
+                column: "user.cars",
+                operator: "gt",
+                value: 5,
+              },
+            ],
             limit: 3,
           },
         },
@@ -391,6 +400,62 @@ export const operationDocs = {
           { dayOfWeek: "Saturday", _count: { "orders.id": 34 } },
           { dayOfWeek: "Sunday", _count: { "orders.id": 27 } },
         ],
+      },
+    ],
+  },
+  aggregateGroups: {
+    description:
+      "Runs a grouped query but returns a single summary row with optional reducers across groups. Use when you need counts or aggregate totals over groups without returning each group row. Provide `groupBy` keys (columns/date buckets), optional HAVING filters, and aggregates. HAVING on group keys must use `type: \"groupKey\"` and `key` matching a groupBy alias (not `type: \"key\"`). Aggregate HAVING entries must use `type: \"aggregate\"` with `function` + `column`. `groupCount` counts how many groups pass HAVING. Aggregates accept arrays of fully-qualified columns (count, countDistinct, sum, min, max, avg) and unused aggregates can be omitted entirely (no need to send null/empty arrays). Reducers fold per-group metrics across all groups; defaults: sum for count/countDistinct/sum, none for min/max/avg. No orderBy/limit.",
+    examples: [
+      {
+        question: "How many users placed more than two orders?",
+        query: {
+          table: "orders",
+          operation: "aggregateGroups",
+          operationParameters: {
+            joins: null,
+            groupBy: [{ type: "column", column: "orders.user_id" }],
+            having: [
+              {
+                type: "aggregate",
+                function: "count",
+                column: "orders.id",
+                operator: "gt",
+                value: 2,
+              },
+            ],
+            aggregates: { groupCount: true },
+          },
+        },
+        response: {
+          groupCount: 3,
+        },
+      },
+      {
+        question:
+          "Total orders from users with >2 orders and max orders by any one user in that cohort",
+        query: {
+          table: "orders",
+          operation: "aggregateGroups",
+          operationParameters: {
+            groupBy: [{ type: "column", column: "orders.user_id" }],
+            having: [
+              {
+                type: "aggregate",
+                function: "count",
+                column: "orders.id",
+                operator: "gt",
+                value: 2,
+              },
+            ],
+            aggregates: { groupCount: true, count: ["orders.id"] },
+            reducers: { count: ["sum", "max"] },
+          },
+        },
+        response: {
+          groupCount: 3,
+          _count: { "orders.id": { sum: 12, max: 6 } },
+        },
       },
     ],
   },

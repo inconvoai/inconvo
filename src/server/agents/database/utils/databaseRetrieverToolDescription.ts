@@ -41,6 +41,7 @@ ${whereConditionDocsSummary}
 - Choose the appropriate operation based on what data you need
 - Use where conditions to filter results when needed
 - For time-based grouping, use dateInterval keys for timelines ({ type: "dateInterval", column: "table.dateColumn", interval: "month" }) or dateComponent keys for recurring cycles ({ type: "dateComponent", column: "table.dateColumn", component: "dayOfWeek" })
+- In HAVING clauses, use { type: "groupKey", key: <groupBy alias>, ... } for group-key filters (not { type: "key" }); use { type: "aggregate", function: <count|sum...>, column: <table.column>, ... } for aggregate filters. For aggregateGroups, you can omit unused aggregate families entirely (no need to send nulls/empties).
 - Provide aggregate lists (count, sum, min, max, avg) as arrays of fully-qualified column names, or null when not needed
 - When joining tables, add a joins array where each hop pairs fully-qualified source/target columns (for example: "path": [{ "source": ["users.id"], "target": ["orders.user_id"] }])
 - Column names in joined queries must use 'table.column' format

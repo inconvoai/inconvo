@@ -1,6 +1,7 @@
 import type { Schema } from "~/server/db/schema";
 import type {
   AggregateQuery,
+  AggregateGroupsQuery,
   CountQuery,
   CountRelationsQuery,
   DateCondition,
@@ -164,13 +165,14 @@ function canonicalizeQuestionConditionNode(
           return;
         }
         if (typeof relationClause === "object") {
-          canonicalizedRelationValue[relationKey] = canonicalizeQuestionConditionNode(
-            relationClause,
-            relation.targetTable.name,
-            schema,
-            lookup,
-            aliasTracker
-          );
+          canonicalizedRelationValue[relationKey] =
+            canonicalizeQuestionConditionNode(
+              relationClause,
+              relation.targetTable.name,
+              schema,
+              lookup,
+              aliasTracker
+            );
           return;
         }
         canonicalizedRelationValue[relationKey] = relationClause;
@@ -312,12 +314,22 @@ export function canonicalizeQueryColumnReferences(
       );
       const canonicalizedCount = Array.isArray(params.count)
         ? params.count.map((column) =>
-            canonicalizeMetricColumn(column, baseTableName, lookup, aliasTracker)
+            canonicalizeMetricColumn(
+              column,
+              baseTableName,
+              lookup,
+              aliasTracker
+            )
           )
         : null;
       const canonicalizedCountDistinct = Array.isArray(params.countDistinct)
         ? params.countDistinct.map((column) =>
-            canonicalizeMetricColumn(column, baseTableName, lookup, aliasTracker)
+            canonicalizeMetricColumn(
+              column,
+              baseTableName,
+              lookup,
+              aliasTracker
+            )
           )
         : null;
       return {
@@ -411,15 +423,15 @@ export function canonicalizeQueryColumnReferences(
         },
       };
     }
-    case "groupBy": {
+    case "aggregateGroups": {
       const params =
-        query.operationParameters as GroupByQuery["operationParameters"];
-      const canonicalizeAgg = (aggregate: string[] | null): string[] | null => {
-        if (!aggregate) return null;
-        return aggregate.map((column) =>
-          canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
-        );
-      };
+        query.operationParameters as AggregateGroupsQuery["operationParameters"];
+      const canonicalizedJoins = canonicalizeJoinArray(
+        params.joins,
+        lookup,
+        aliasTracker
+      );
+      const aliasMapping = new Map<string, string>();
 
       const canonicalizedGroupBy = params.groupBy.map((groupKey) => {
         if (groupKey.type === "column") {
@@ -429,10 +441,11 @@ export function canonicalizeQueryColumnReferences(
             aliasTracker
           );
           const defaultAlias = groupKey.column;
+          const aliasInput = groupKey.alias ?? defaultAlias;
           const alias =
-            (groupKey.alias ?? defaultAlias) === defaultAlias
-              ? canonicalizedColumn
-              : groupKey.alias ?? canonicalizedColumn;
+            aliasInput === defaultAlias ? canonicalizedColumn : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
           return {
             ...groupKey,
             column: canonicalizedColumn,
@@ -447,11 +460,14 @@ export function canonicalizeQueryColumnReferences(
             aliasTracker
           );
           const defaultAlias = `${groupKey.column}|${groupKey.interval}`;
+          const aliasInput = groupKey.alias ?? defaultAlias;
           const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.interval}`;
           const alias =
-            (groupKey.alias ?? defaultAlias) === defaultAlias
+            aliasInput === defaultAlias
               ? canonicalizedDefaultAlias
-              : groupKey.alias ?? canonicalizedDefaultAlias;
+              : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
           return {
             ...groupKey,
             column: canonicalizedColumn,
@@ -466,11 +482,143 @@ export function canonicalizeQueryColumnReferences(
             aliasTracker
           );
           const defaultAlias = `${groupKey.column}|${groupKey.component}`;
+          const aliasInput = groupKey.alias ?? defaultAlias;
           const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.component}`;
           const alias =
-            (groupKey.alias ?? defaultAlias) === defaultAlias
+            aliasInput === defaultAlias
               ? canonicalizedDefaultAlias
-              : groupKey.alias ?? canonicalizedDefaultAlias;
+              : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
+          return {
+            ...groupKey,
+            column: canonicalizedColumn,
+            alias,
+          };
+        }
+
+        return groupKey;
+      });
+
+      const canonicalizeAgg = (
+        aggregate: string[] | null | undefined
+      ): string[] | null => {
+        if (!aggregate) return null;
+        return aggregate.map((column) =>
+          canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+        );
+      };
+
+      const canonicalizeHaving = (
+        having: AggregateGroupsQuery["operationParameters"]["having"]
+      ): AggregateGroupsQuery["operationParameters"]["having"] => {
+        if (!having) return having;
+        return having.map((condition) => {
+          if (condition.type === "aggregate") {
+            return {
+              ...condition,
+              column: canonicalizeFullyQualifiedColumn(
+                condition.column,
+                lookup,
+                aliasTracker
+              ),
+            };
+          }
+          return {
+            ...condition,
+            key: aliasMapping.get(condition.key) ?? condition.key,
+          };
+        });
+      };
+
+      return {
+        ...query,
+        operationParameters: {
+          ...params,
+          joins: canonicalizedJoins,
+          groupBy: canonicalizedGroupBy,
+          aggregates: {
+            ...params.aggregates,
+            count: canonicalizeAgg(params.aggregates.count),
+            countDistinct: canonicalizeAgg(params.aggregates.countDistinct),
+            sum: canonicalizeAgg(params.aggregates.sum),
+            min: canonicalizeAgg(params.aggregates.min),
+            max: canonicalizeAgg(params.aggregates.max),
+            avg: canonicalizeAgg(params.aggregates.avg),
+          },
+          having: canonicalizeHaving(params.having),
+        },
+      };
+    }
+    case "groupBy": {
+      const params =
+        query.operationParameters as GroupByQuery["operationParameters"];
+      const canonicalizeAgg = (aggregate: string[] | null): string[] | null => {
+        if (!aggregate) return null;
+        return aggregate.map((column) =>
+          canonicalizeFullyQualifiedColumn(column, lookup, aliasTracker)
+        );
+      };
+
+      const aliasMapping = new Map<string, string>();
+
+      const canonicalizedGroupBy = params.groupBy.map((groupKey) => {
+        if (groupKey.type === "column") {
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = groupKey.column;
+          const aliasInput = groupKey.alias ?? defaultAlias;
+          const alias =
+            aliasInput === defaultAlias ? canonicalizedColumn : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
+          return {
+            ...groupKey,
+            column: canonicalizedColumn,
+            alias,
+          };
+        }
+
+        if (groupKey.type === "dateInterval") {
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = `${groupKey.column}|${groupKey.interval}`;
+          const aliasInput = groupKey.alias ?? defaultAlias;
+          const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.interval}`;
+          const alias =
+            aliasInput === defaultAlias
+              ? canonicalizedDefaultAlias
+              : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
+          return {
+            ...groupKey,
+            column: canonicalizedColumn,
+            alias,
+          };
+        }
+
+        if (groupKey.type === "dateComponent") {
+          const canonicalizedColumn = canonicalizeFullyQualifiedColumn(
+            groupKey.column,
+            lookup,
+            aliasTracker
+          );
+          const defaultAlias = `${groupKey.column}|${groupKey.component}`;
+          const aliasInput = groupKey.alias ?? defaultAlias;
+          const canonicalizedDefaultAlias = `${canonicalizedColumn}|${groupKey.component}`;
+          const alias =
+            aliasInput === defaultAlias
+              ? canonicalizedDefaultAlias
+              : aliasInput;
+          aliasMapping.set(aliasInput, alias);
+          aliasMapping.set(alias, alias);
           return {
             ...groupKey,
             column: canonicalizedColumn,
@@ -483,7 +631,10 @@ export function canonicalizeQueryColumnReferences(
 
       const canonicalizedOrderBy =
         params.orderBy.type === "groupKey"
-          ? params.orderBy
+          ? {
+              ...params.orderBy,
+              key: aliasMapping.get(params.orderBy.key) ?? params.orderBy.key,
+            }
           : {
               ...params.orderBy,
               column: canonicalizeFullyQualifiedColumn(
@@ -493,17 +644,41 @@ export function canonicalizeQueryColumnReferences(
               ),
             };
 
+      const canonicalizeHaving = (
+        having: GroupByQuery["operationParameters"]["having"]
+      ): GroupByQuery["operationParameters"]["having"] => {
+        if (!having) return having;
+        return having.map((condition) => {
+          if (condition.type === "aggregate") {
+            return {
+              ...condition,
+              column: canonicalizeFullyQualifiedColumn(
+                condition.column,
+                lookup,
+                aliasTracker
+              ),
+            };
+          }
+          return {
+            ...condition,
+            key: aliasMapping.get(condition.key) ?? condition.key,
+          };
+        });
+      };
+
       return {
         ...query,
         operationParameters: {
           ...params,
           groupBy: canonicalizedGroupBy,
           count: canonicalizeAgg(params.count),
+          countDistinct: canonicalizeAgg(params.countDistinct),
           sum: canonicalizeAgg(params.sum),
           min: canonicalizeAgg(params.min),
           max: canonicalizeAgg(params.max),
           avg: canonicalizeAgg(params.avg),
           orderBy: canonicalizedOrderBy,
+          having: canonicalizeHaving(params.having),
         },
       };
     }
@@ -572,10 +747,7 @@ function canonicalizeJoinArray<T extends CanonicalizableJoin>(
   }));
 }
 
-function resolveLookupTableName(
-  lookup: ColumnLookup,
-  alias: string
-) {
+function resolveLookupTableName(lookup: ColumnLookup, alias: string) {
   if (lookup.has(alias)) {
     return alias;
   }
@@ -668,12 +840,7 @@ function canonicalizeColumnForJoinPath(
   for (const alias of candidateAliases) {
     const tableName = joinAliasMap.get(alias);
     if (tableName) {
-      return canonicalizeColumnName(
-        lookup,
-        tableName,
-        column,
-        aliasTracker
-      );
+      return canonicalizeColumnName(lookup, tableName, column, aliasTracker);
     }
   }
 

@@ -286,7 +286,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   ) => {
     const model = getAIModel("azure:gpt-5.1");
     const operationSelectorPrompt = await getPrompt(
-      "select_operation:c7269ac1"
+      "select_operation:e74c537d"
     );
 
     const columns = state.tableSchema.columns;

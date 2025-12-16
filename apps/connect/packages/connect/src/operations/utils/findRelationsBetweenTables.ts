@@ -1,52 +1,52 @@
-import { Column } from "drizzle-orm";
-import { getRelationsForTable } from "./drizzleSchemaHelpers";
+import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
 
-export function findRelationsBetweenTables(
+export async function findRelationsBetweenTables(
   sourceTableName: string,
   targetTableName: string,
-  relationName: string,
-  drizzleTables: Record<string, any>
-): [string, string, boolean] {
-  const sourceTableRelations = getRelationsForTable(
-    sourceTableName,
-    drizzleTables
-  );
-  const targetTableRelations = getRelationsForTable(
-    targetTableName,
-    drizzleTables
+  relationName: string
+): Promise<[string, string, boolean]> {
+  const schema = await getAugmentedSchema();
+  const sourceTable = schema.tables.find((t: any) => t.name === sourceTableName);
+  const targetTable = schema.tables.find((t: any) => t.name === targetTableName);
+
+  if (!sourceTable) {
+    throw new Error(`Source table ${sourceTableName} not found in schema`);
+  }
+  if (!targetTable) {
+    throw new Error(`Target table ${targetTableName} not found in schema`);
+  }
+
+  // Check if sourceTable references targetTable (one-to-many from source perspective)
+  const sourceRelation = sourceTable.relations?.find(
+    (r: any) => r.name === relationName
   );
 
-  // 1) Check if tableA references tableB
-  for (const [key, value] of Object.entries(sourceTableRelations)) {
-    if (value.fieldName === relationName) {
-      if (!value.config) {
-        break;
-      }
+  if (sourceRelation) {
+    if (sourceRelation.sourceColumns?.length && sourceRelation.targetColumns?.length) {
       return [
-        value?.config?.fields?.map((field: Column) => field.name)[0] ??
-          undefined,
-        value?.config?.references?.map((field: Column) => field.name)[0] ??
-          undefined,
-        false,
+        sourceRelation.sourceColumns[0],
+        sourceRelation.targetColumns[0],
+        false // No grouping needed for direct reference
       ];
     }
   }
 
-  // Check if tableB references tableA
-  for (const [key, value] of Object.entries(targetTableRelations)) {
-    if (
-      value.fieldName === relationName ||
-      value.referencedTableName === sourceTableName
-    ) {
+  // Check if targetTable references sourceTable (many-to-one from source perspective)
+  const targetRelation = targetTable.relations?.find(
+    (r: any) => r.targetTable === sourceTableName
+  );
+
+  if (targetRelation) {
+    if (targetRelation.sourceColumns?.length && targetRelation.targetColumns?.length) {
       return [
-        value?.config?.references?.map((field: Column) => field.name)[0],
-        value?.config?.fields?.map((field: Column) => field.name)[0],
-        true,
+        targetRelation.targetColumns[0],
+        targetRelation.sourceColumns[0],
+        true // Group by is needed for reverse relation (one-to-many)
       ];
     }
   }
 
   throw new Error(
-    `Could not findRelationsBetweenTables ${sourceTableName}, ${targetTableName}`
+    `Could not find relation between ${sourceTableName} and ${targetTableName}`
   );
 }

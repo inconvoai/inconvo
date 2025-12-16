@@ -1,43 +1,49 @@
-import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { getColumnFromTable } from "../utils/getColumnFromTable";
+import { Kysely } from "kysely";
+import { Query } from "~/types/querySchema";
+import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
+import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
+import { getColumnFromTable } from "~/operations/utils/computedColumns";
+import { applyLimit } from "~/operations/utils/queryHelpers";
+import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
 import assert from "assert";
 
-export async function findDistinct(db: any, query: Query) {
-  assert(query.operation === "findDistinct", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, computedColumns } = query;
+export async function findDistinct(db: Kysely<any>, query: Query) {
+  assert(query.operation === "findDistinct", "Invalid operation");
+  const { table, whereAndArray, operationParameters } = query;
 
-  const drizzleSchema = await loadDrizzleSchema();
+  const schema = await getAugmentedSchema();
+  const dbForQuery = getSchemaBoundDb(db, schema);
 
   const distinctColumn = getColumnFromTable({
     columnName: operationParameters.column,
     tableName: table,
-    drizzleSchema,
-    computedColumns,
+    schema,
   });
 
-  const dbQuery = db
+  let dbQuery = dbForQuery
+    .selectFrom(table)
+    .select(distinctColumn.as(operationParameters.column))
+    .distinct();
 
-    .selectDistinct({
-      [operationParameters.column]: distinctColumn,
-    })
-    .from(drizzleSchema[table])
-    .where((columns: Record<string, unknown>) =>
-      parsePrismaWhere({
-        drizzleSchema,
-        tableName: table,
-        where: whereAndArray,
-        columns,
-        computedColumns: computedColumns,
-      })
-    )
-    .limit(500);
-
-  const response = await dbQuery;
-  if (response.length > 499) {
-    throw new Error("Find Distinct limit hit at 500");
+  // Add where conditions
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
+  if (whereCondition) {
+    dbQuery = dbQuery.where(whereCondition);
   }
 
-  return { query: dbQuery.toSQL(), data: response };
+  // Apply limit - hardcoded to 500
+  const limit = 500;
+  dbQuery = applyLimit(dbQuery, limit);
+
+  const response = await dbQuery.execute();
+  if (response.length >= limit) {
+    throw new Error(`Find Distinct limit hit at ${limit}`);
+  }
+
+  const compiled = dbQuery.compile();
+
+  return {
+    query: { sql: compiled.sql, params: compiled.parameters },
+    data: response,
+  };
 }

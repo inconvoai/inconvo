@@ -1,0 +1,82 @@
+{
+  "updatedAt": "2025-12-16T00:00:00.000Z",
+  "computedColumns": [
+    {
+      "name": "revenue",
+      "table": "orders",
+      "ast": {
+        "type": "operation",
+        "operands": [
+          {
+            "type": "brackets",
+            "expression": {
+              "type": "operation",
+              "operands": [
+                {
+                  "type": "operation",
+                  "operands": [
+                    {
+                      "name": "subtotal",
+                      "type": "column"
+                    },
+                    {
+                      "name": "discount",
+                      "type": "column"
+                    }
+                  ],
+                  "operator": "-"
+                },
+                {
+                  "name": "tax",
+                  "type": "column"
+                }
+              ],
+              "operator": "+"
+            }
+          },
+          {
+            "name": "quantity",
+            "type": "column"
+          }
+        ],
+        "operator": "*"
+      },
+      "type": "number",
+      "unit": null,
+      "notes": null,
+      "selected": true
+    },
+    {
+      "name": "total",
+      "table": "orders",
+      "ast": {
+        "type": "operation",
+        "operands": [
+          {
+            "type": "operation",
+            "operands": [
+              {
+                "name": "subtotal",
+                "type": "column"
+              },
+              {
+                "name": "discount",
+                "type": "column"
+              }
+            ],
+            "operator": "-"
+          },
+          {
+            "name": "tax",
+            "type": "column"
+          }
+        ],
+        "operator": "+"
+      },
+      "type": "number",
+      "unit": "USD",
+      "notes": null,
+      "selected": true
+    }
+  ]
+}

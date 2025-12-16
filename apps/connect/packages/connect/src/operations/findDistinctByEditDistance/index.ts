@@ -1,7 +1,10 @@
-import { type Query } from "~/types/querySchema";
-import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { getColumnFromTable } from "../utils/getColumnFromTable";
+import { Kysely } from "kysely";
+import { Query } from "~/types/querySchema";
+import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
+import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
+import { getColumnFromTable } from "~/operations/utils/computedColumns";
+import { applyLimit } from "~/operations/utils/queryHelpers";
+import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
 import * as levenshtein from "fast-levenshtein";
 import assert from "assert";
 
@@ -20,40 +23,40 @@ function filterStringByEditDistance(
     .map((item) => item.str);
 }
 
-export async function findDistinctByEditDistance(db: any, query: Query) {
-  assert(
-    query.operation === "findDistinctByEditDistance",
-    "Invalid inconvo operation"
-  );
-  const { table, whereAndArray, operationParameters, computedColumns } = query;
+export async function findDistinctByEditDistance(
+  db: Kysely<any>,
+  query: Query
+) {
+  assert(query.operation === "findDistinctByEditDistance", "Invalid operation");
+  const { table, whereAndArray, operationParameters } = query;
 
-  const drizzleSchema = await loadDrizzleSchema();
+  const schema = await getAugmentedSchema();
+  const dbForQuery = getSchemaBoundDb(db, schema);
 
   const distinctColumn = getColumnFromTable({
     columnName: operationParameters.column,
     tableName: table,
-    drizzleSchema,
-    computedColumns,
+    schema,
   });
 
-  const dbQuery = db
+  let dbQuery = dbForQuery
+    .selectFrom(table)
+    .select(distinctColumn.as(operationParameters.column))
+    .distinct();
 
-    .selectDistinct({
-      [operationParameters.column]: distinctColumn,
-    })
-    .from(drizzleSchema[table])
-    .where((columns: Record<string, unknown>) =>
-      parsePrismaWhere({
-        drizzleSchema,
-        tableName: table,
-        where: whereAndArray,
-        columns,
-        computedColumns: computedColumns,
-      })
-    )
-    .limit(5000);
+  dbQuery = applyLimit(dbQuery, 5000);
 
-  const response = await dbQuery;
+  // Add where conditions
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema
+  );
+  if (whereCondition) {
+    dbQuery = dbQuery.where(whereCondition);
+  }
+
+  const response = await dbQuery.execute();
   if (response.length > 4999) {
     throw new Error("Find Distinct limit hit at 5000");
   }
@@ -61,11 +64,16 @@ export async function findDistinctByEditDistance(db: any, query: Query) {
   const maxResults = 490;
   const reduced = filterStringByEditDistance(
     response
-      .map((value: Record<string, string>) => value[operationParameters.column])
-      .filter((value: string) => value !== null && value !== undefined),
+      .map((value: Record<string, unknown>) => value[operationParameters.column])
+      .filter((value: unknown): value is string => value !== null && value !== undefined),
     operationParameters.compareString,
     maxResults
   );
 
-  return { query: dbQuery.toSQL(), data: reduced };
+  const compiled = dbQuery.compile();
+
+  return {
+    query: { sql: compiled.sql, params: compiled.parameters },
+    data: reduced
+  };
 }

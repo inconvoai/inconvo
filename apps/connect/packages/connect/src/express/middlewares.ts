@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { generateHmac, generateMessage } from "~/util/hmac";
+import { logger } from "~/util/logger";
 import { registerNonce } from "~/util/replayProtection";
 
 export function authenticated(req: Request, res: Response, next: NextFunction) {
@@ -9,7 +10,11 @@ export function authenticated(req: Request, res: Response, next: NextFunction) {
   const random = req.headers["inconvo-random"] as string | undefined;
 
   if (!signature || !timestamp || !random) {
-    console.error("Invalid Request");
+    logger.error({
+      hasSignature: !!signature,
+      hasTimestamp: !!timestamp,
+      hasRandom: !!random
+    }, "Auth - Invalid Request - Missing required headers");
     res.status(401).json({ message: "Invalid Request" });
     return;
   }
@@ -27,13 +32,17 @@ export function authenticated(req: Request, res: Response, next: NextFunction) {
   const currentTimestamp = Math.floor(Date.now() / 1000);
 
   if (!Number.isFinite(requestTimestamp)) {
-    console.error("Unauthorized - invalid timestamp");
+    logger.error(
+      { timestamp },
+      "Auth - Unauthorized - Invalid timestamp value"
+    );
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
 
   if (Math.abs(requestTimestamp - currentTimestamp) > 300) {
-    console.error("Unauthorized - timestamp is too old or too new");
+    const timeDiff = requestTimestamp - currentTimestamp;
+    logger.error({ timeDiff, maxDiff: 300 }, "Auth - Unauthorized - timestamp out of range");
     res
       .status(401)
       .json({ message: "Unauthorized - timestamp is too old or too new" });
@@ -44,7 +53,10 @@ export function authenticated(req: Request, res: Response, next: NextFunction) {
   const hexPattern = /^[0-9a-f]+$/i;
 
   if (signature.length !== expectedLength || !hexPattern.test(signature)) {
-    console.error("Unauthorized - invalid signature format");
+    logger.error(
+      { signatureLength: signature.length, expectedLength },
+      "Auth - Unauthorized - Invalid signature format"
+    );
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
@@ -53,7 +65,7 @@ export function authenticated(req: Request, res: Response, next: NextFunction) {
   const receivedBuffer = Buffer.from(signature, "hex");
 
   if (!crypto.timingSafeEqual(generatedBuffer, receivedBuffer)) {
-    console.error("Unauthorized");
+    logger.error("Auth - Unauthorized - Invalid signature");
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
@@ -63,7 +75,10 @@ export function authenticated(req: Request, res: Response, next: NextFunction) {
   });
 
   if (!nonceAccepted) {
-    console.error("Unauthorized - replay detected");
+    logger.error(
+      { nonce: random },
+      "Auth - Unauthorized - Replay detected"
+    );
     res.status(401).json({ message: "Unauthorized - replay detected" });
     return;
   }

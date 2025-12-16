@@ -29,7 +29,48 @@ export type SQLComputedColumnAst =
   | SQLOperation
   | SQLBrackets;
 
-const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> = z.lazy(() =>
+export type SQLCastExpressionAst =
+  | SQLCastColumnReference
+  | SQLCastValue
+  | SQLCastOperation
+  | SQLCastCoalesce
+  | SQLCastBrackets;
+
+export type LogicalCastType =
+  | "number"
+  | "integer"
+  | "bigint"
+  | "decimal"
+  | "float";
+
+export type SQLCastColumnReference = {
+  type: "column";
+  name: string;
+};
+
+export type SQLCastValue = {
+  type: "value";
+  value: string | number | boolean | null;
+};
+
+export type SQLCastOperation = {
+  type: "cast";
+  as: LogicalCastType;
+  expression: SQLCastExpressionAst;
+};
+
+export type SQLCastCoalesce = {
+  type: "coalesce";
+  expression: SQLCastExpressionAst;
+  fallback: SQLCastExpressionAst;
+};
+
+export type SQLCastBrackets = {
+  type: "brackets";
+  expression: SQLCastExpressionAst;
+};
+
+export const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> = z.lazy(() =>
   z.union([
     SQLColumnReferenceSchema,
     SQLValueSchema,
@@ -66,6 +107,46 @@ const SQLBracketsSchema: z.ZodType<SQLBrackets> = z.object({
   type: z.literal("brackets"),
   expression: SQLComputedColumnAstSchema,
 });
+
+const SQLCastColumnReferenceSchema: z.ZodType<SQLCastColumnReference> = z.object(
+  {
+    type: z.literal("column"),
+    name: z.string(),
+  }
+);
+
+const SQLCastValueSchema: z.ZodType<SQLCastValue> = z.object({
+  type: z.literal("value"),
+  value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+});
+
+const SQLCastOperationSchema: z.ZodType<SQLCastOperation> = z.object({
+  type: z.literal("cast"),
+  as: z.enum(["number", "integer", "bigint", "decimal", "float"]),
+  expression: z.lazy(() => SQLCastExpressionAstSchema),
+});
+
+const SQLCastCoalesceSchema: z.ZodType<SQLCastCoalesce> = z.object({
+  type: z.literal("coalesce"),
+  expression: z.lazy(() => SQLCastExpressionAstSchema),
+  fallback: z.lazy(() => SQLCastExpressionAstSchema),
+});
+
+const SQLCastBracketsSchema: z.ZodType<SQLCastBrackets> = z.object({
+  type: z.literal("brackets"),
+  expression: z.lazy(() => SQLCastExpressionAstSchema),
+});
+
+export const SQLCastExpressionAstSchema: z.ZodType<SQLCastExpressionAst> = z.lazy(
+  () =>
+    z.union([
+      SQLCastColumnReferenceSchema,
+      SQLCastValueSchema,
+      SQLCastOperationSchema,
+      SQLCastCoalesceSchema,
+      SQLCastBracketsSchema,
+    ])
+);
 
 const computedColumnSchema = z.object({
   name: z.string(),
@@ -197,7 +278,6 @@ const JsonColumnSchemaSchema = z.array(
 
 const baseSchema = {
   table: z.string(),
-  computedColumns: z.array(computedColumnSchema).optional(),
   whereAndArray: whereAndArraySchema,
   jsonColumnSchema: JsonColumnSchemaSchema.optional(),
 };
@@ -240,13 +320,20 @@ export const joinDescriptorSchema = z
   })
   .strict();
 
+const selectMapSchema = z
+  .record(z.string(), z.array(z.string()).min(1))
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Select map must include at least one table."
+  );
+
 const findManySchema = z
   .object({
     ...baseSchema,
     operation: z.literal("findMany"),
     operationParameters: z
       .object({
-        select: z.record(z.string(), z.array(z.string())),
+        select: selectMapSchema,
         joins: z.array(joinDescriptorSchema).nullable().optional(),
         orderBy: z
           .object({
@@ -376,6 +463,7 @@ const aggregateSchema = z
         avg: z.array(z.string()).nullable(),
         sum: z.array(z.string()).nullable(),
         count: z.array(z.string()).nullable(),
+        countDistinct: z.array(z.string()).nullable(),
         median: z.array(z.string()).nullable(),
       })
       .strict(),
@@ -419,7 +507,7 @@ const groupByOrderBySchema = z.union([
   z
     .object({
       type: z.literal("aggregate"),
-      function: z.enum(["count", "sum", "min", "max", "avg"]),
+      function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
       column: z.string(),
       direction: z.enum(["asc", "desc"]),
     })
@@ -434,6 +522,83 @@ const groupByOrderBySchema = z.union([
 ]);
 export type GroupByOrderBy = z.infer<typeof groupByOrderBySchema>;
 
+const groupByHavingOperatorSchema = z.enum([
+  "equals",
+  "not",
+  "in",
+  "notIn",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+]);
+
+const groupByHavingAggregateSchema = z
+  .object({
+    type: z.literal("aggregate"),
+    function: z.enum(["count", "countDistinct", "sum", "min", "max", "avg"]),
+    column: z.string(),
+    operator: groupByHavingOperatorSchema,
+    value: z.any(),
+  })
+  .strict();
+
+const groupByHavingGroupKeySchema = z
+  .object({
+    type: z.literal("groupKey"),
+    key: z.string(),
+    operator: groupByHavingOperatorSchema,
+    value: z.any(),
+  })
+  .strict();
+
+const groupByHavingSchema = z
+  .array(z.union([groupByHavingAggregateSchema, groupByHavingGroupKeySchema]))
+  .nullable()
+  .optional();
+export type GroupByHaving = z.infer<typeof groupByHavingSchema>;
+
+const aggregateGroupReducersSchema = z
+  .array(z.enum(["sum", "min", "max", "avg"]))
+  .nonempty()
+  .optional();
+
+const aggregateGroupReducersObject = z
+  .object({
+    count: aggregateGroupReducersSchema,
+    countDistinct: aggregateGroupReducersSchema,
+    sum: aggregateGroupReducersSchema,
+    min: aggregateGroupReducersSchema,
+    max: aggregateGroupReducersSchema,
+    avg: aggregateGroupReducersSchema,
+  })
+  .partial()
+  .strict();
+
+const aggregateGroupsSchema = z.object({
+  ...baseSchema,
+  operation: z.literal("aggregateGroups"),
+  operationParameters: z
+    .object({
+      joins: z.array(joinDescriptorSchema).nullable().optional(),
+      groupBy: z.array(groupByKeySchema).min(1),
+      having: groupByHavingSchema,
+      aggregates: z
+        .object({
+          groupCount: z.boolean().optional(),
+          count: z.array(z.string()).nullable().optional(),
+          countDistinct: z.array(z.string()).nullable().optional(),
+          sum: z.array(z.string()).nullable().optional(),
+          min: z.array(z.string()).nullable().optional(),
+          max: z.array(z.string()).nullable().optional(),
+          avg: z.array(z.string()).nullable().optional(),
+        })
+        .strict(),
+      reducers: aggregateGroupReducersObject.optional(),
+    })
+    .strict(),
+}).strict();
+
 const groupBySchema = z
   .object({
     ...baseSchema,
@@ -443,12 +608,14 @@ const groupBySchema = z
         joins: z.array(joinDescriptorSchema).nullable().optional(),
         groupBy: z.array(groupByKeySchema).min(1),
         count: z.array(z.string()).nullable(),
+        countDistinct: z.array(z.string()).nullable(),
         sum: z.array(z.string()).nullable(),
         min: z.array(z.string()).nullable(),
         max: z.array(z.string()).nullable(),
         avg: z.array(z.string()).nullable(),
         orderBy: groupByOrderBySchema,
         limit: z.number(),
+        having: groupByHavingSchema,
       })
       .strict(),
   })
@@ -461,6 +628,7 @@ export const QuerySchema = z.discriminatedUnion("operation", [
   countSchema,
   countRelationsSchema,
   aggregateSchema,
+  aggregateGroupsSchema,
   groupBySchema,
 ]);
 

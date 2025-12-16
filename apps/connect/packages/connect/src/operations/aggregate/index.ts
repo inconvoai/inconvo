@@ -1,147 +1,145 @@
-import { type Query } from "~/types/querySchema";
-import { avg, min, sql, sum, max, count, SQL } from "drizzle-orm";
-import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
-import { getColumnFromTable } from "../utils/getColumnFromTable";
-import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
+import { Kysely, sql } from "kysely";
+import { Query } from "~/types/querySchema";
+import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
+import { getColumnFromTable } from "~/operations/utils/computedColumns";
+import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
+import { buildJsonObject } from "~/operations/utils/jsonBuilderHelpers";
+import { env } from "~/env";
 import assert from "assert";
 import {
-  buildJoinCondition,
-  normaliseJoinHop,
+  applyJoinHop,
+  resolveJoinDescriptor,
 } from "../utils/joinDescriptorHelpers";
+import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
+import type { ColumnConversion } from "~/util/columnConversions";
 
-export async function aggregate(db: any, query: Query) {
-  assert(query.operation === "aggregate", "Invalid inconvo operation");
-  const {
-    table: tableName,
-    whereAndArray,
-    operationParameters,
-    computedColumns,
-  } = query;
+export async function aggregate(db: Kysely<any>, query: Query) {
+  assert(query.operation === "aggregate", "Invalid operation");
+  const { table, whereAndArray, operationParameters } = query;
 
-  const drizzleSchema = await loadDrizzleSchema();
-const aliasToTable = buildAliasToTable(tableName, operationParameters.joins);
+  const schema = await getAugmentedSchema();
+  const aliasToTable = buildAliasToTable(table, operationParameters.joins);
 
   const createAggregateFields = (
     columns: string[] | undefined,
-    aggregateFn: (column: SQL<any>) => SQL<any>
-  ): [string, SQL<any>][] | undefined => {
+    aggregateFn: (column: any) => any
+  ): [string, any][] | undefined => {
     return columns?.map((columnName) => {
       const column = resolveColumnReference({
         columnName,
-        baseTable: tableName,
-        drizzleSchema,
-        computedColumns,
+        baseTable: table,
+        schema,
         aliasToTable,
       });
       return [columnName, aggregateFn(column)];
     });
   };
 
-  const selectFields: Record<string, any> = {};
+  const selectFields: any[] = [];
 
   const avgFields = createAggregateFields(
     operationParameters.avg ?? undefined,
-    (column) => avg(column)
+    (column) => sql`AVG(${column})`
   );
   const sumFields = createAggregateFields(
     operationParameters.sum ?? undefined,
-    (column) => sum(column)
+    (column) => sql`SUM(${column})`
   );
   const minFields = createAggregateFields(
     operationParameters.min ?? undefined,
-    (column) => min(column)
+    (column) => sql`MIN(${column})`
   );
   const maxFields = createAggregateFields(
     operationParameters.max ?? undefined,
-    (column) => max(column)
+    (column) => sql`MAX(${column})`
   );
   const countFields = createAggregateFields(
     operationParameters.count ?? undefined,
-    (column) => count(column)
+    (column) => sql`COUNT(${column})`
+  );
+  const countDistinctFields = createAggregateFields(
+    operationParameters.countDistinct ?? undefined,
+    (column) => sql`COUNT(DISTINCT ${column})`
   );
   const medianFields = createAggregateFields(
     operationParameters.median ?? undefined,
-    (column) =>
-      sql<number>`cast(percentile_cont(0.5) within group (order by ${column}) as Numeric)`.mapWith(
-        Number
-      )
+    (column) => buildMedianExpression(column)
   );
 
   if (avgFields) {
-    selectFields["_avg"] = buildJsonObjectSelect(avgFields);
+    selectFields.push(buildJsonObject(avgFields).as("_avg"));
   }
   if (sumFields) {
-    selectFields["_sum"] = buildJsonObjectSelect(sumFields);
+    selectFields.push(buildJsonObject(sumFields).as("_sum"));
   }
   if (minFields) {
-    selectFields["_min"] = buildJsonObjectSelect(minFields);
+    selectFields.push(buildJsonObject(minFields).as("_min"));
   }
   if (maxFields) {
-    selectFields["_max"] = buildJsonObjectSelect(maxFields);
+    selectFields.push(buildJsonObject(maxFields).as("_max"));
   }
   if (countFields) {
-    selectFields["_count"] = buildJsonObjectSelect(countFields);
+    selectFields.push(buildJsonObject(countFields).as("_count"));
+  }
+  if (countDistinctFields) {
+    selectFields.push(buildJsonObject(countDistinctFields).as("_countDistinct"));
   }
   if (medianFields) {
-    selectFields["_median"] = buildJsonObjectSelect(medianFields);
+    selectFields.push(buildJsonObject(medianFields).as("_median"));
   }
 
-  let dbQuery = db
-    .select(selectFields)
-    .from(drizzleSchema[tableName])
-    .where((columns: Record<string, SQL>) =>
-      parsePrismaWhere({
-        drizzleSchema,
-        columns,
-        tableName,
-        where: whereAndArray,
-        computedColumns,
+  let dbQuery = db.selectFrom(table);
+
+  const resolvedJoins =
+    (operationParameters.joins ?? []).map((join) =>
+      resolveJoinDescriptor({
+        alias: join.name ?? join.table,
+        tableName: join.table,
+        joinType: join.joinType,
+        path: join.path,
       })
-    );
+    ) ?? [];
 
-  const joins = operationParameters.joins ?? [];
-  for (const join of joins) {
-    const joinType = join.joinType ?? "left";
-    for (const hop of join.path) {
-      const metadata = normaliseJoinHop(hop);
-      const targetTableName = metadata.target[0]?.tableName;
-      if (!targetTableName) {
-        throw new Error("Join descriptor hop is missing target table metadata.");
-      }
-      const joinCondition = buildJoinCondition(
-        metadata,
-        drizzleSchema,
-        computedColumns
-      );
+  for (const joinDescriptor of resolvedJoins) {
+    for (const hop of joinDescriptor.hops) {
+      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop);
+    }
+  }
 
-      switch (joinType) {
-        case "inner":
-          dbQuery = dbQuery.innerJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
-        case "right":
-          dbQuery = dbQuery.rightJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
-        case "left":
-        default:
-          dbQuery = dbQuery.leftJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
+  if (selectFields.length > 0) {
+    dbQuery = dbQuery.select(selectFields);
+  }
+
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema
+  );
+  if (whereCondition) {
+    dbQuery = dbQuery.where(whereCondition);
+  }
+
+  const compiled = dbQuery.compile();
+  const result = await dbQuery.execute();
+  const firstRow = result[0] as Record<string, unknown> | undefined;
+
+  const parsedRow = firstRow
+    ? (parseJsonStrings(firstRow) as Record<string, unknown>)
+    : undefined;
+
+  if (parsedRow) {
+    for (const key of ["_avg", "_sum", "_min", "_max", "_count", "_countDistinct", "_median"]) {
+      const value = parsedRow[key];
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        parsedRow[key] = flattenObjectKeys(value as Record<string, unknown>);
       }
     }
   }
 
-  const sql = dbQuery.toSQL();
-  const response = await dbQuery;
-  return { query: sql, data: response[0] };
+  return {
+    query: { sql: compiled.sql, params: compiled.parameters },
+    data: parsedRow,
+  };
 }
 
 type AggregateQueryType = Extract<Query, { operation: "aggregate" }>;
@@ -180,14 +178,12 @@ function splitColumnReference(columnName: string) {
 function resolveColumnReference({
   columnName,
   baseTable,
-  drizzleSchema,
-  computedColumns,
+  schema,
   aliasToTable,
 }: {
   columnName: string;
   baseTable: string;
-  drizzleSchema: Record<string, any>;
-  computedColumns: Query["computedColumns"];
+  schema: import("~/types/types").SchemaResponse;
   aliasToTable: Map<string, string>;
 }) {
   const { alias, column } = splitColumnReference(columnName);
@@ -196,12 +192,17 @@ function resolveColumnReference({
     throw new Error(`Join alias ${alias} not found for column ${columnName}`);
   }
 
-  const shouldUseComputed = targetTable === baseTable;
-
   return getColumnFromTable({
     columnName: column,
     tableName: targetTable,
-    drizzleSchema,
-    computedColumns: shouldUseComputed ? computedColumns : undefined,
+    schema,
   });
+}
+
+function buildMedianExpression(column: any) {
+  if (env.DATABASE_DIALECT === "bigquery") {
+    return sql`APPROX_QUANTILES(${column}, 2)[OFFSET(1)]`;
+  }
+
+  return sql`cast(percentile_cont(0.5) within group (order by ${column}) as Numeric)`;
 }

@@ -1,14 +1,12 @@
-import { SQL } from "drizzle-orm";
-import { getColumnFromTable } from "./getColumnFromTable";
+import { getColumnFromTable } from "./computedColumns";
 import assert from "assert";
-import { ComputedColumn } from "~/types/querySchema";
+import type { SchemaResponse } from "~/types/types";
 
 export function createAggregationFields<T>(
   columns: string[] | null | undefined,
-  aggregationFn: (column: SQL<any>) => SQL<T>,
-  drizzleSchema: any,
-  computedColumns?: ComputedColumn[]
-): [string, SQL<T>][] | undefined {
+  aggregationFn: (column: any) => any,
+  schema: SchemaResponse
+): [string, any][] | undefined {
   if (!columns || columns.length === 0) return undefined;
   return columns.map((columnIdentifier) => {
     assert(
@@ -22,8 +20,7 @@ export function createAggregationFields<T>(
         getColumnFromTable({
           columnName,
           tableName,
-          drizzleSchema,
-          computedColumns,
+          schema,
         })
       ),
     ];

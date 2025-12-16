@@ -1,6 +1,5 @@
-import { SQL, and, eq } from "drizzle-orm";
-import { getColumnFromTable } from "./getColumnFromTable";
-import type { ComputedColumn, JoinPathHop } from "~/types/querySchema";
+import { JoinBuilder } from "kysely";
+import type { JoinPathHop } from "~/types/querySchema";
 
 export type QualifiedColumn = {
   tableName: string;
@@ -38,39 +37,50 @@ export function normaliseJoinHop(hop: JoinPathHop): JoinHopMetadata {
   };
 }
 
-export function buildJoinCondition(
-  hop: JoinHopMetadata,
-  drizzleSchema: Record<string, any>,
-  computedColumns: ComputedColumn[] | undefined
+function applyJoinConditions(
+  joinBuilder: JoinBuilder<any, any>,
+  sourceRefs: string[],
+  targetRefs: string[]
 ) {
-  let joinCondition: SQL<unknown> | undefined;
+  let builder = joinBuilder.onRef(sourceRefs[0], "=", targetRefs[0]);
+  for (let index = 1; index < sourceRefs.length; index++) {
+    builder = builder.onRef(sourceRefs[index], "=", targetRefs[index]);
+  }
+  return builder;
+}
 
-  hop.source.forEach((sourceColumn, index) => {
-    const targetColumn = hop.target[index];
-
-    const left = getColumnFromTable({
-      columnName: sourceColumn.columnName,
-      tableName: sourceColumn.tableName,
-      drizzleSchema,
-      computedColumns,
-    });
-
-    const right = getColumnFromTable({
-      columnName: targetColumn.columnName,
-      tableName: targetColumn.tableName,
-      drizzleSchema,
-      computedColumns,
-    });
-
-    const condition = eq(left, right);
-    joinCondition = joinCondition ? and(joinCondition, condition) : condition;
-  });
-
-  if (!joinCondition) {
-    throw new Error("Join hop produced no equality expressions.");
+export function applyJoinHop(
+  query: any,
+  joinType: "inner" | "left" | "right",
+  hop: JoinHopMetadata
+) {
+  const targetTableName = hop.target[0]?.tableName;
+  if (!targetTableName) {
+    throw new Error("Join hop is missing target table metadata.");
   }
 
-  return joinCondition;
+  const sourceRefs = hop.source.map(
+    (column) => `${column.tableName}.${column.columnName}`
+  );
+  const targetRefs = hop.target.map(
+    (column) => `${column.tableName}.${column.columnName}`
+  );
+
+  switch (joinType) {
+    case "inner":
+      return query.innerJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+        applyJoinConditions(jb, sourceRefs, targetRefs)
+      );
+    case "right":
+      return query.rightJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+        applyJoinConditions(jb, sourceRefs, targetRefs)
+      );
+    case "left":
+    default:
+      return query.leftJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+        applyJoinConditions(jb, sourceRefs, targetRefs)
+      );
+  }
 }
 
 export type ResolvedJoinDescriptor = {

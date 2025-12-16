@@ -1,12 +1,17 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} **/
 module.exports = {
+  testMatch: ["**/test/**/*.test.ts"],
+  testEnvironment: "node",
+  transform: {
+    "^.+\\.(ts|tsx)$": [
+      "ts-jest",
+      {
+        tsconfig: "./tsconfig.json",
+      },
+    ],
+  },
   moduleNameMapper: {
     "^~/(.*)$": "<rootDir>/src/$1",
   },
-  testEnvironment: "node",
-  transform: {
-    "^.+.tsx?$": ["ts-jest", {}],
-  },
-  globalSetup: "<rootDir>/jest.global-setup.ts",
-  setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+  testTimeout: 30000,
+  setupFilesAfterEnv: ["<rootDir>/test/jest.setup.ts"],
 };

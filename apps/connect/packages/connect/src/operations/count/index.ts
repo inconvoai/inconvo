@@ -1,159 +1,206 @@
-import { type Query } from "~/types/querySchema";
-import {
-  count as dCount,
-  countDistinct as dDistinctCount,
-  SQL,
-} from "drizzle-orm";
-import { parsePrismaWhere } from "~/operations/utils/prismaToDrizzleWhereConditions";
-import { loadDrizzleSchema } from "~/util/loadDrizzleSchema";
+import { Kysely, sql } from "kysely";
+import { Query } from "~/types/querySchema";
+import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
+import { getColumnFromTable } from "~/operations/utils/computedColumns";
+import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
+import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
+import { env } from "~/env";
 import assert from "assert";
-import { getColumnFromTable } from "../utils/getColumnFromTable";
-import { buildJsonObjectSelect } from "../utils/jsonBuilderHelpers";
 import {
-  buildJoinCondition,
-  normaliseJoinHop,
+  applyJoinHop,
+  resolveJoinDescriptor,
 } from "../utils/joinDescriptorHelpers";
 
-export async function count(db: any, query: Query) {
-  assert(query.operation === "count", "Invalid inconvo operation");
-  const { table, whereAndArray, operationParameters, computedColumns } = query;
+export async function count(db: Kysely<any>, query: Query) {
+  assert(query.operation === "count", "Invalid operation");
+  const { table, whereAndArray, operationParameters } = query;
+  const {
+    count: countColumns,
+    countDistinct,
+    joins,
+  } = operationParameters;
 
-  const drizzleSchema = await loadDrizzleSchema();
+  const schema = await getAugmentedSchema();
+  const dbForQuery = getSchemaBoundDb(db, schema);
+
+  let dbQuery = dbForQuery.selectFrom(table);
+
+  const resolvedJoins =
+    (joins ?? []).map((join) =>
+      resolveJoinDescriptor({
+        alias: join.name ?? join.table,
+        tableName: join.table,
+        joinType: join.joinType,
+        path: join.path,
+      })
+    ) ?? [];
 
   const aliasToTable = new Map<string, string>();
   aliasToTable.set(table, table);
+  resolvedJoins.forEach((joinDescriptor) => {
+    aliasToTable.set(joinDescriptor.alias, joinDescriptor.tableName);
+    aliasToTable.set(joinDescriptor.tableName, joinDescriptor.tableName);
+  });
 
-  const joins = operationParameters.joins ?? [];
-  for (const join of joins) {
-    const alias = join.name ?? join.table;
-    aliasToTable.set(alias, join.table);
-    aliasToTable.set(join.table, join.table);
+  for (const joinDescriptor of resolvedJoins) {
+    for (const hop of joinDescriptor.hops) {
+      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop);
+    }
   }
 
-  const resolveColumn = (columnName: string) => {
-    if (columnName === "_all") {
-      return dCount();
+  const resolveColumnRef = (columnName: string) => {
+    const { alias, column } = splitColumnReference(columnName);
+    const targetAlias = alias;
+    if (!targetAlias) {
+      throw new Error(
+        `Column ${columnName} must be qualified as tableOrAlias.column`
+      );
     }
-
-    const { alias: targetAlias, column } = splitColumnReference(columnName);
     const targetTable = aliasToTable.get(targetAlias);
     if (!targetTable) {
       throw new Error(`Join alias ${targetAlias} not found for column ${columnName}`);
     }
-
-    const shouldUseComputed = targetTable === table;
-    return dCount(
-      getColumnFromTable({
-        columnName: column,
-        tableName: targetTable,
-        drizzleSchema,
-        computedColumns: shouldUseComputed ? computedColumns : undefined,
-      })
-    );
+    return getColumnFromTable({
+      columnName: column,
+      tableName: targetTable,
+      schema,
+    });
   };
 
-  const resolveDistinctColumn = (columnName: string) => {
-    const { alias: targetAlias, column } = splitColumnReference(columnName);
-    const targetTable = aliasToTable.get(targetAlias);
-    if (!targetTable) {
-      throw new Error(`Join alias ${targetAlias} not found for column ${columnName}`);
-    }
-
-    const shouldUseComputed = targetTable === table;
-    return dDistinctCount(
-      getColumnFromTable({
-        columnName: column,
-        tableName: targetTable,
-        drizzleSchema,
-        computedColumns: shouldUseComputed ? computedColumns : undefined,
-      })
-    );
-  };
-
-  const countColumns: [string, SQL<unknown>][] = (operationParameters.count ??
-    []
-  ).map((columnName) => [columnName, resolveColumn(columnName)]);
-
-  const distinctColumns: [string, SQL<unknown>][] = (
-    operationParameters.countDistinct ?? []
-  ).map((columnName) => [
-    columnName,
-    resolveDistinctColumn(columnName),
-  ]);
-
-  const selection: Record<string, SQL<unknown>> = {};
-  if (countColumns.length > 0) {
-    selection["_count"] = buildJsonObjectSelect(countColumns);
-  }
-  if (distinctColumns.length > 0) {
-    selection["_countDistinct"] = buildJsonObjectSelect(distinctColumns);
-  }
+  const normalizedCountColumns = countColumns ?? [];
+  const normalizedDistinctColumns = countDistinct ?? [];
 
   assert(
-    Object.keys(selection).length > 0,
+    normalizedCountColumns.length > 0 || normalizedDistinctColumns.length > 0,
     "Count operation requires at least one metric"
   );
 
-  let dbQuery = db
-    .select(selection)
-    .from(drizzleSchema[table])
-    .where((columns: Record<string, unknown>) =>
-      parsePrismaWhere({
-        drizzleSchema,
-        tableName: table,
-        where: whereAndArray,
-        columns,
-        computedColumns: computedColumns,
-      })
-    );
-
-  for (const join of joins) {
-    const joinType = join.joinType ?? "left";
-    for (const hop of join.path) {
-      const metadata = normaliseJoinHop(hop);
-      const targetTableName = metadata.target[0]?.tableName;
-      if (!targetTableName) {
-        throw new Error("Join descriptor hop is missing target table metadata.");
+  if (env.DATABASE_DIALECT === "mssql") {
+    const selections: any[] = [];
+    for (const columnName of normalizedCountColumns) {
+      if (columnName === "_all") {
+        selections.push(sql`COUNT(*)`.as(columnName));
+      } else {
+        const columnRef = resolveColumnRef(columnName);
+        selections.push(sql`COUNT(${columnRef})`.as(columnName));
       }
-      const joinCondition = buildJoinCondition(
-        metadata,
-        drizzleSchema,
-        computedColumns
+    }
+    for (const columnName of normalizedDistinctColumns) {
+      const columnRef = resolveColumnRef(columnName);
+      selections.push(
+        sql`COUNT(DISTINCT ${columnRef})`.as(`distinct_${columnName}`)
       );
-
-      switch (joinType) {
-        case "inner":
-          dbQuery = dbQuery.innerJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
-        case "right":
-          dbQuery = dbQuery.rightJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
-        case "left":
-        default:
-          dbQuery = dbQuery.leftJoin(
-            drizzleSchema[targetTableName],
-            joinCondition
-          );
-          break;
+    }
+    if (selections.length > 0) {
+      dbQuery = dbQuery.select(selections);
+    }
+  } else {
+    const countPairs: any[] = [];
+    for (const columnName of normalizedCountColumns) {
+      if (columnName === "_all") {
+        countPairs.push(sql`'${sql.raw(columnName)}'`);
+        countPairs.push(sql`COUNT(*)`);
+      } else {
+        const columnRef = resolveColumnRef(columnName);
+        countPairs.push(sql`'${sql.raw(columnName)}'`);
+        countPairs.push(sql`COUNT(${columnRef})`);
       }
+    }
+
+    const distinctPairs: any[] = [];
+    for (const columnName of normalizedDistinctColumns) {
+      const columnRef = resolveColumnRef(columnName);
+      distinctPairs.push(sql`'${sql.raw(columnName)}'`);
+      distinctPairs.push(sql`COUNT(DISTINCT ${columnRef})`);
+    }
+
+    const selectExpressions: any[] = [];
+    if (countPairs.length > 0) {
+      if (env.DATABASE_DIALECT === "postgresql") {
+        selectExpressions.push(
+          sql`json_build_object(${sql.join(countPairs, sql`, `)})`.as("_count")
+        );
+      } else {
+        selectExpressions.push(
+          sql`JSON_OBJECT(${sql.join(countPairs, sql`, `)})`.as("_count")
+        );
+      }
+    }
+    if (distinctPairs.length > 0) {
+      if (env.DATABASE_DIALECT === "postgresql") {
+        selectExpressions.push(
+          sql`json_build_object(${sql.join(distinctPairs, sql`, `)})`.as(
+            "_countDistinct"
+          )
+        );
+      } else {
+        selectExpressions.push(
+          sql`JSON_OBJECT(${sql.join(distinctPairs, sql`, `)})`.as(
+            "_countDistinct"
+          )
+        );
+      }
+    }
+    if (selectExpressions.length > 0) {
+      dbQuery = dbQuery.select(selectExpressions);
     }
   }
 
-  const response = await dbQuery;
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema
+  );
+  if (whereCondition) {
+    dbQuery = dbQuery.where(whereCondition);
+  }
 
-  const baseResult = (response[0] ?? {}) as Record<string, unknown>;
-  const data =
-    countColumns.length === 0 && baseResult._count === undefined
-      ? { ...baseResult, _count: {} }
-      : baseResult;
+  const result = await dbQuery.execute();
+  const compiled = dbQuery.compile();
 
-  return { query: dbQuery.toSQL(), data };
+  let data: any;
+  if (env.DATABASE_DIALECT === "mssql") {
+    const counts: Record<string, number> = {};
+    const distinctCounts: Record<string, number> = {};
+    const firstRow = result[0] as Record<string, number> | undefined;
+    if (firstRow) {
+      for (const [key, value] of Object.entries(firstRow)) {
+        if (key.startsWith("distinct_")) {
+          distinctCounts[key.replace("distinct_", "")] = value;
+        } else {
+          counts[key] = value;
+        }
+      }
+    }
+    data = {
+      _count: counts,
+      _countDistinct:
+        Object.keys(distinctCounts).length > 0 ? distinctCounts : undefined,
+    };
+  } else {
+    const row = result[0] as Record<string, unknown> | undefined;
+    if (row) {
+      const parsedCount =
+        typeof row._count === "string"
+          ? JSON.parse(row._count)
+          : (row._count as Record<string, number> | undefined);
+      const parsedDistinct =
+        typeof row._countDistinct === "string"
+          ? JSON.parse(row._countDistinct)
+          : (row._countDistinct as Record<string, number> | undefined);
+      data = {
+        _count: parsedCount ?? {},
+        _countDistinct: parsedDistinct ?? undefined,
+      };
+    } else {
+      data = { _count: {}, _countDistinct: undefined };
+    }
+  }
+
+  return {
+    query: { sql: compiled.sql, params: compiled.parameters },
+    data,
+  };
 }
 
 function splitColumnReference(columnName: string) {

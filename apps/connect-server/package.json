@@ -1,0 +1,20 @@
+{
+  "name": "inconvo-connect-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "dev": "nodemon",
+    "dev:watch": "node --watch app.js",
+    "start": "node app.js",
+    "start:prod": "node app.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@ten-dev/inconvo": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2"
+  }
+}

@@ -1,14 +1,16 @@
 {
-  "name": "@cloudflare/sandbox-minimal-example",
+  "name": "sandbox",
   "version": "1.0.0",
   "type": "module",
   "private": true,
-  "description": "A minimal example of using the Sandbox SDK",
+  "description": "Inconvo Sandbox - Cloudflare Worker",
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "lint": "eslint --color .",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
@@ -17,10 +19,11 @@
   },
   "devDependencies": {
     "@cloudflare/sandbox": "^0.6.3",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
     "@types/node": "^24.10.2",
+    "eslint": "^9.39.1",
     "typescript": "^5.9.3",
     "wrangler": "^4.53.0"
-  },
-  "author": "",
-  "license": "MIT"
+  }
 }

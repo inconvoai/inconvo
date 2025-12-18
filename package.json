@@ -6,7 +6,8 @@
     "dev": "turbo run dev --filter=web --filter=connect-server --filter=sandbox",
     "lint": "turbo run lint --ui=stream",
     "check-types": "turbo run check-types",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "cf-typegen": "turbo run cf-typegen"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

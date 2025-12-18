@@ -148,7 +148,7 @@ export const SQLCastExpressionAstSchema: z.ZodType<SQLCastExpressionAst> = z.laz
     ])
 );
 
-const computedColumnSchema = z.object({
+const _computedColumnSchema = z.object({
   name: z.string(),
   table: z.object({
     name: z.string(),
@@ -156,7 +156,7 @@ const computedColumnSchema = z.object({
   ast: SQLComputedColumnAstSchema,
 });
 
-export type ComputedColumn = z.infer<typeof computedColumnSchema>;
+export type ComputedColumn = z.infer<typeof _computedColumnSchema>;
 
 export const dateConditionSchema = z
   .object({

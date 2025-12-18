@@ -1,4 +1,4 @@
-import { sql, type Sql } from "kysely";
+import { sql } from "kysely";
 import { env } from "~/env";
 
 export type SupportedDateComponent =

@@ -149,7 +149,7 @@ export async function getDb(): Promise<Kysely<any>> {
     if (credentialsJson) {
       try {
         parsedCredentials = JSON.parse(credentialsJson);
-      } catch (error) {
+      } catch {
         throw new Error("Invalid INCONVO_BIGQUERY_CREDENTIALS_JSON value");
       }
     }

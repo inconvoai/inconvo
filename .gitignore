@@ -47,6 +47,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cloudflare
+.wrangler
+.dev.vars
+.dev.vars*
+!.dev.vars.example
+
 # typescript
 *.tsbuildinfo
 

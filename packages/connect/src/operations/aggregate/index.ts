@@ -11,7 +11,6 @@ import {
   resolveJoinDescriptor,
 } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
-import type { ColumnConversion } from "~/util/columnConversions";
 
 export async function aggregate(db: Kysely<any>, query: Query) {
   assert(query.operation === "aggregate", "Invalid operation");
@@ -177,7 +176,7 @@ function splitColumnReference(columnName: string) {
 
 function resolveColumnReference({
   columnName,
-  baseTable,
+  baseTable: _baseTable,
   schema,
   aliasToTable,
 }: {

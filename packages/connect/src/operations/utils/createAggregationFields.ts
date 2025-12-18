@@ -2,7 +2,7 @@ import { getColumnFromTable } from "./computedColumns";
 import assert from "assert";
 import type { SchemaResponse } from "~/types/types";
 
-export function createAggregationFields<T>(
+export function createAggregationFields(
   columns: string[] | null | undefined,
   aggregationFn: (column: any) => any,
   schema: SchemaResponse

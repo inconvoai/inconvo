@@ -758,7 +758,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
   );
 
   // Fetch STRUCT field paths for BigQuery
-  let structFieldsByTable = new Map<string, StructFieldMetadata[]>();
+  const structFieldsByTable = new Map<string, StructFieldMetadata[]>();
   if (env.DATABASE_DIALECT === "bigquery") {
     const structStart = Date.now();
     try {

@@ -268,7 +268,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
           })}`;
           const jsonExpr = buildJsonObjectSelect(jsonFields);
 
-          let cteQuery = db
+          const cteQuery = db
             .selectFrom(tableSource)
             .select([
               columnExpr.as(currentTableKey),

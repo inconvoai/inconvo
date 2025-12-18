@@ -8,6 +8,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "eslint --color .",
+    "check-types": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:mssql": "jest test/mssql",
     "test:mssql:watch": "jest test/mssql --watch",
@@ -55,10 +57,12 @@
     "zod": "^4.0.17"
   },
   "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
     "@types/express": "^4.17.21",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^30.0.0",
     "@types/pg": "^8.11.10",
+    "eslint": "^9.39.1",
     "jest": "^30.0.5",
     "node-fetch": "^3.3.2",
     "ts-jest": "^29.4.1",

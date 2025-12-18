@@ -4,7 +4,7 @@ import { getColumnFromTable } from "./computedColumns";
 import { env } from "~/env";
 import type { SchemaResponse } from "~/types/types";
 
-type FilterObject = Record<string, any>;
+type _FilterObject = Record<string, unknown>;
 
 // Helper function to combine SQL expressions with AND/OR operators
 // Avoids the RawBuilder await issue by using a loop instead of reduce

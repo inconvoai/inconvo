@@ -17,6 +17,9 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
+    },
+    "cf-typegen": {
+      "cache": false
     }
   }
 }

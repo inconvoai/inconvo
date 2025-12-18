@@ -41,7 +41,7 @@ function safeJsonStringify(value: unknown): string {
   });
 }
 
-export async function inconvo() {
+export async function inconvo(): Promise<Router> {
   const router = Router();
 
   router.get("/healthz", async (_req: Request, res: Response) => {

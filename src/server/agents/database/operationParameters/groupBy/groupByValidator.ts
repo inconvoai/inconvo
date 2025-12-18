@@ -56,7 +56,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   const intervalColumnsEnum = buildEnum(ctx.intervalColumns);
 
   const buildAggregateArraySchema = (
-    enumSchema: z.ZodEnum<[string, ...string[]]> | null
+    enumSchema: z.ZodType<string> | null
   ) => (enumSchema ? z.array(enumSchema).min(1).nullable() : z.null());
 
   const havingOperatorSchema = z.enum([
@@ -75,7 +75,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   type ComponentGroupKey = Extract<GroupByKey, { type: "dateComponent" }>;
 
   const buildColumnGroupKeySchema = (
-    columnEnum: z.ZodEnum<[string, ...string[]]>
+    columnEnum: z.ZodType<string>
   ): z.ZodType<ColumnGroupKey> =>
     z
       .object({
@@ -86,7 +86,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
       .strict();
 
   const buildIntervalGroupKeySchema = (
-    columnEnum: z.ZodEnum<[string, ...string[]]>
+    columnEnum: z.ZodType<string>
   ): z.ZodType<IntervalGroupKey> =>
     z
       .object({
@@ -98,7 +98,7 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
       .strict();
 
   const buildComponentGroupKeySchema = (
-    columnEnum: z.ZodEnum<[string, ...string[]]>
+    columnEnum: z.ZodType<string>
   ): z.ZodType<ComponentGroupKey> =>
     z
       .object({

@@ -42,9 +42,7 @@ export function buildFindManyZodSchema(ctx: FindManyValidatorContext) {
       (
         acc: Record<
           string,
-          z.ZodOptional<
-            z.ZodNullable<z.ZodArray<z.ZodEnum<[string, ...string[]]>>>
-          >
+          z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodType<string>>>>
         >,
         [alias, columns]
       ) => {
@@ -57,9 +55,7 @@ export function buildFindManyZodSchema(ctx: FindManyValidatorContext) {
       },
       {} as Record<
         string,
-        z.ZodOptional<
-          z.ZodNullable<z.ZodArray<z.ZodEnum<[string, ...string[]]>>>
-        >
+        z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodType<string>>>>
       >
     )
   );

@@ -32,7 +32,7 @@ import { getAIModel } from "../utils/getAIModel";
 import { inconvoResponseSchema } from "~/server/userDatabaseConnector/types";
 import { tryCatchSync } from "~/server/api/utils/tryCatch";
 import { inngest } from "~/server/inngest/client";
-import type { Conversation } from "@prisma/client";
+import type { Conversation } from "@prisma/generated";
 import { databaseRetrieverToolDescription } from "../database/utils/databaseRetrieverToolDescription";
 import { InconvoSandbox } from "../utils/sandbox";
 import { extractTextFromMessage } from "../utils/langchainMessageUtils";
@@ -555,7 +555,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       )
       .map((data: unknown) => inconvoResponseSchema.safeParse(data))
       .filter(
-        (result): result is z.SafeParseSuccess<InconvoResponse> =>
+        (result): result is z.ZodSafeParseSuccess<InconvoResponse> =>
           result.success
       )
       .map((result) => result.data);

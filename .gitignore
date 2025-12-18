@@ -1,35 +1,37 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-/.pnp
-.pnp.js
+node_modules
 
 # testing
-/coverage
+coverage
 
 # database
-/prisma/db.sqlite
-/prisma/db.sqlite-journal
 db.sqlite
+*.sqlite-journal
 
 # generated prisma client
-/prisma/generated
+**/prisma/generated
 
-/tempFiles
+# temp files
+tempFiles
 
 # next.js
-/.next/
-/out/
+.next
+out
 next-env.d.ts
 
+# turbo
+.turbo
+
 # production
-/build
+build
+dist
 
 # misc
 .DS_Store
 *.pem
-!certs/aws-rds-ca-bundle.pem
+!**/certs/aws-rds-ca-bundle.pem
 
 # debug
 npm-debug.log*

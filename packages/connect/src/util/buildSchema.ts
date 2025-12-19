@@ -8,10 +8,7 @@ import { getDb } from "~/dbConnection";
 import { env } from "~/env";
 import { sql } from "kysely";
 import { logger } from "~/util/logger";
-import {
-  BigQueryIntrospector,
-  StructFieldMetadata,
-} from "~/dialects/bigquery";
+import { BigQueryIntrospector, StructFieldMetadata } from "~/dialects/bigquery";
 
 interface NormalizedForeignKeyRow {
   sourceTable: string;
@@ -52,7 +49,7 @@ function normalizeForeignKeyRow(row: any): NormalizedForeignKeyRow {
 
 function mapKyselyTypeToSimpleType(
   dataType: string,
-  columnType?: string
+  columnType?: string,
 ): string {
   const type = (dataType || columnType || "").toLowerCase();
 
@@ -155,7 +152,7 @@ interface ForeignKeyInfo {
 
 async function extractForeignKeys(
   targetSchema?: string | null,
-  allowedTables?: Set<string>
+  allowedTables?: Set<string>,
 ): Promise<Map<string, SchemaRelation[]>> {
   const relationsMap = new Map<string, SchemaRelation[]>();
   const db = await getDb();
@@ -230,8 +227,8 @@ async function extractForeignKeys(
             new Set(
               fallbackRows
                 .map((row) => row.constraint_name)
-                .filter((name): name is string => Boolean(name))
-            )
+                .filter((name): name is string => Boolean(name)),
+            ),
           );
 
           const constraintMeta = new Map<
@@ -246,7 +243,7 @@ async function extractForeignKeys(
           if (constraintNames.length > 0) {
             const nameList = sql.join(
               constraintNames.map((name) => sql`${name}`),
-              sql`, `
+              sql`, `,
             );
 
             const metaQuery = sql`
@@ -385,19 +382,19 @@ async function extractForeignKeys(
             projectIdPresent: !!projectId,
             datasetPresent: !!datasetName,
           },
-          "Schema Introspection - BigQuery missing project or dataset for FK extraction"
+          "Schema Introspection - BigQuery missing project or dataset for FK extraction",
         );
         rows = [];
       } else {
         const buildInfoSchemaTable = (tableName: string) =>
           sql.raw(
-            `\`${projectId}.${datasetName}.INFORMATION_SCHEMA.${tableName}\``
+            `\`${projectId}.${datasetName}.INFORMATION_SCHEMA.${tableName}\``,
           );
 
         const tableConstraintsTable = buildInfoSchemaTable("TABLE_CONSTRAINTS");
         const keyColumnUsageTable = buildInfoSchemaTable("KEY_COLUMN_USAGE");
         const constraintColumnUsageTable = buildInfoSchemaTable(
-          "CONSTRAINT_COLUMN_USAGE"
+          "CONSTRAINT_COLUMN_USAGE",
         );
 
         const schemaFilter =
@@ -484,7 +481,7 @@ async function extractForeignKeys(
               path: `${projectId}.${datasetName}.INFORMATION_SCHEMA`,
               error,
             },
-            "Schema Introspection - BigQuery information schema query failed"
+            "Schema Introspection - BigQuery information schema query failed",
           );
           rows = [];
         }
@@ -519,7 +516,7 @@ async function extractForeignKeys(
     // Convert groups to ForeignKeyInfo
     for (const group of constraintGroups.values()) {
       const sortedGroup = [...group].sort(
-        (a, b) => orderValue(a) - orderValue(b)
+        (a, b) => orderValue(a) - orderValue(b),
       );
 
       const sourceColumns = sortedGroup
@@ -554,7 +551,7 @@ async function extractForeignKeys(
         {
           databaseSchema: targetSchema ?? null,
         },
-        "Schema Introspection - used fallback foreign key query"
+        "Schema Introspection - used fallback foreign key query",
       );
     }
 
@@ -564,7 +561,7 @@ async function extractForeignKeys(
           skippedForeignKeys,
           databaseSchema: targetSchema ?? null,
         },
-        "Schema Introspection - skipped foreign keys due to incomplete metadata"
+        "Schema Introspection - skipped foreign keys due to incomplete metadata",
       );
     }
 
@@ -678,7 +675,7 @@ async function extractForeignKeys(
   } catch (error) {
     logger.warn(
       { error },
-      "Schema Introspection - Could not extract foreign key relationships"
+      "Schema Introspection - Could not extract foreign key relationships",
     );
   }
 
@@ -703,7 +700,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
       dialect: env.DATABASE_DIALECT,
       targetSchema: targetSchema ?? null,
     },
-    `Schema introspection starting for ${env.DATABASE_DIALECT} (${schemaLabel})`
+    `Schema introspection starting for ${env.DATABASE_DIALECT} (${schemaLabel})`,
   );
 
   const tablesFetchStart = Date.now();
@@ -716,7 +713,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
       tables: allTables.length,
       databaseSchema: targetSchema ?? null,
     },
-    `Schema introspection - fetched ${allTables.length} tables in ${tablesFetchDuration}ms`
+    `Schema introspection - fetched ${allTables.length} tables in ${tablesFetchDuration}ms`,
   );
 
   const filteredTables = targetSchema
@@ -733,7 +730,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
     },
     targetSchema
       ? `Schema introspection - filtered to ${filteredTables.length} tables in schema "${targetSchema}"`
-      : `Schema introspection - no schema filter applied (${filteredTables.length} tables kept)`
+      : `Schema introspection - no schema filter applied (${filteredTables.length} tables kept)`,
   );
 
   const allowedTables = new Set(filteredTables.map((table) => table.name));
@@ -754,7 +751,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
       relations: totalRelations,
       duration: relationsDuration,
     },
-    `Schema introspection - extracted ${totalRelations} foreign keys across ${relationsMap.size} tables in ${relationsDuration}ms`
+    `Schema introspection - extracted ${totalRelations} foreign keys across ${relationsMap.size} tables in ${relationsDuration}ms`,
   );
 
   // Fetch STRUCT field paths for BigQuery
@@ -775,7 +772,10 @@ export async function buildSchema(): Promise<SchemaResponse> {
           try {
             credentials = JSON.parse(env.INCONVO_BIGQUERY_CREDENTIALS_JSON);
           } catch (e) {
-            logger.warn({ error: e }, "Failed to parse INCONVO_BIGQUERY_CREDENTIALS_JSON");
+            logger.warn(
+              { error: e },
+              "Failed to parse INCONVO_BIGQUERY_CREDENTIALS_JSON",
+            );
           }
         }
 
@@ -805,18 +805,18 @@ export async function buildSchema(): Promise<SchemaResponse> {
             tablesWithStructs: structFieldsByTable.size,
             duration: structDuration,
           },
-          `Schema introspection - extracted ${totalStructFields} STRUCT fields across ${structFieldsByTable.size} tables in ${structDuration}ms`
+          `Schema introspection - extracted ${totalStructFields} STRUCT fields across ${structFieldsByTable.size} tables in ${structDuration}ms`,
         );
       } else {
         logger.warn(
           { projectId: !!projectId, dataset: !!dataset },
-          "Schema introspection - BigQuery project/dataset not configured for STRUCT field extraction"
+          "Schema introspection - BigQuery project/dataset not configured for STRUCT field extraction",
         );
       }
     } catch (error) {
       logger.warn(
         { error },
-        "Schema introspection - Could not extract STRUCT field paths"
+        "Schema introspection - Could not extract STRUCT field paths",
       );
     }
   }
@@ -888,7 +888,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
       relations: totalRelations,
       databaseSchema: targetSchema ?? null,
     },
-    `Schema introspection complete – ${schemaTables.length} tables, ${totalColumns} columns, ${totalRelations} relations (${schemaLabel}) in ${duration}ms`
+    `Schema introspection complete – ${schemaTables.length} tables, ${totalColumns} columns, ${totalRelations} relations (${schemaLabel}) in ${duration}ms`,
   );
 
   return {

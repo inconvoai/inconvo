@@ -78,11 +78,11 @@ const failurePatterns: FailurePattern[] = [
         error,
         "28P01", // Postgres invalid_password
         "ER_ACCESS_DENIED_ERROR",
-        "ELOGIN"
+        "ELOGIN",
       ) ||
       messageIncludes(
         error,
-        /password authentication failed|access denied for user|login failed/i
+        /password authentication failed|access denied for user|login failed/i,
       ),
     hint: (context) =>
       `${context} could not authenticate with the database. Confirm the username, password, and any rotation of credentials.`,
@@ -91,7 +91,7 @@ const failurePatterns: FailurePattern[] = [
     matches: (error) =>
       messageIncludes(
         error,
-        /self[- ]signed certificate|certificate verify failed|ssl handshake/i
+        /self[- ]signed certificate|certificate verify failed|ssl handshake/i,
       ),
     hint: (context) =>
       `${context} hit an SSL/TLS validation error. Double-check the certificate chain or trust settings for your database.`,
@@ -133,7 +133,7 @@ function unwrapError(error: unknown): ErrorLike {
 function resolveFailureHint(
   error: unknown,
   context: string,
-  fallback: string
+  fallback: string,
 ): string {
   const normalizedError = unwrapError(error);
 
@@ -152,6 +152,6 @@ export function logSchemaPreloadFailureHint(error: unknown): void {
 
 export function logDatabaseHealthCheckHint(error: unknown): void {
   logger.info(
-    resolveFailureHint(error, "Database health check", healthCheckDefaultHint)
+    resolveFailureHint(error, "Database health check", healthCheckDefaultHint),
   );
 }

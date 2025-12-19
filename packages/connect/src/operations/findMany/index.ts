@@ -32,7 +32,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
         alias: join.name ?? join.table,
         tableName: join.table,
         path: join.path,
-      })
+      }),
     )
     .sort((a, b) => aliasDepth(b.alias) - aliasDepth(a.alias));
 
@@ -47,7 +47,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
   const aliasColumnMap = new Map<string, string>();
 
   const joinDescriptorMap = new Map(
-    resolvedJoins.map((join) => [join.alias, join])
+    resolvedJoins.map((join) => [join.alias, join]),
   );
 
   // Parse columns per table
@@ -59,7 +59,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
 
   for (const tableName of tablesToAlias) {
     const jsonSchemaForTable = jsonColumnSchema?.find(
-      (jsonCol) => jsonCol.tableName === tableName
+      (jsonCol) => jsonCol.tableName === tableName,
     );
     const jsonCols =
       jsonSchemaForTable?.jsonSchema.map((col) => col.name) || [];
@@ -73,7 +73,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
 
     for (const col of jsonCols) {
       const colType = jsonSchemaForTable?.jsonSchema.find(
-        (jCol) => jCol.name === col
+        (jCol) => jCol.name === col,
       )?.type;
 
       let extraction;
@@ -82,34 +82,34 @@ export async function findMany(db: Kysely<any>, query: Query) {
           colType === "String"
             ? sql`(${sql.ref(`${jsonColumnName!}`)}->>${sql.lit(col)})::text`
             : sql`(${sql.ref(`${jsonColumnName!}`)}->>${sql.lit(
-                col
+                col,
               )})::numeric`;
       } else if (env.DATABASE_DIALECT === "mysql") {
         extraction =
           colType === "String"
             ? sql`CAST(JSON_EXTRACT(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )}) AS CHAR)`
             : sql`CAST(JSON_EXTRACT(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )}) AS DECIMAL)`;
       } else if (env.DATABASE_DIALECT === "mssql") {
         extraction =
           colType === "String"
             ? sql`JSON_VALUE(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )})`
             : sql`CAST(JSON_VALUE(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )}) AS DECIMAL)`;
       } else if (env.DATABASE_DIALECT === "bigquery") {
         extraction =
           colType === "String"
             ? sql`JSON_VALUE(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )})`
             : sql`SAFE_CAST(JSON_VALUE(${sql.ref(jsonColumnName!)}, ${sql.lit(
-                "$." + col
+                "$." + col,
               )}) AS NUMERIC)`;
       } else {
         extraction = sql`NULL`;
@@ -139,8 +139,8 @@ export async function findMany(db: Kysely<any>, query: Query) {
       !self.some(
         (other) =>
           other.length > arr.length &&
-          other.slice(0, arr.length).every((v, i) => v === arr[i])
-      )
+          other.slice(0, arr.length).every((v, i) => v === arr[i]),
+      ),
   );
 
   const nestedJsonCtes: any[][] = [];
@@ -185,7 +185,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
               sourceTableName,
               targetTableName,
               hopMetadata.source.map((col) => col.columnName),
-              hopMetadata.target.map((col) => col.columnName)
+              hopMetadata.target.map((col) => col.columnName),
             ) ?? false;
         }
 
@@ -197,22 +197,21 @@ export async function findMany(db: Kysely<any>, query: Query) {
         ) {
           const pathToTableName = tablePath.slice(
             0,
-            tablePath.indexOf(tableRelationName) + 1
+            tablePath.indexOf(tableRelationName) + 1,
           );
           targetTableName = await getRelatedTableNameFromPath(pathToTableName);
 
           const pathToRelatedTable = tablePath.slice(
             0,
-            tablePath.indexOf(tableRelationName)
+            tablePath.indexOf(tableRelationName),
           );
-          sourceTableName = await getRelatedTableNameFromPath(
-            pathToRelatedTable
-          );
+          sourceTableName =
+            await getRelatedTableNameFromPath(pathToRelatedTable);
 
           const fallback = getRelationKeysFromSchema(
             schemaTables,
             sourceTableName,
-            targetTableName
+            targetTableName,
           );
 
           relatedTableKey = fallback.sourceColumn ?? relatedTableKey;
@@ -224,7 +223,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
               sourceTableName,
               targetTableName,
               relatedTableKey ? [relatedTableKey] : [],
-              currentTableKey ? [currentTableKey] : []
+              currentTableKey ? [currentTableKey] : [],
             ) ??
             false;
         }
@@ -236,7 +235,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
           !relatedTableKey
         ) {
           throw new Error(
-            `Unable to resolve join metadata for alias ${aliasKey} (segment ${tableRelationName}).`
+            `Unable to resolve join metadata for alias ${aliasKey} (segment ${tableRelationName}).`,
           );
         }
 
@@ -314,8 +313,8 @@ export async function findMany(db: Kysely<any>, query: Query) {
               join.onRef(
                 `${tableSource}.${previousTableLinks[1]}`,
                 "=",
-                `${previousCteName}.${previousTableLinks[0]}`
-              )
+                `${previousCteName}.${previousTableLinks[0]}`,
+              ),
             );
 
           cteQuery = cteQuery
@@ -385,7 +384,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
     const tableAlias = tablePath.join(".");
     const safeAlias = sanitizeAlias(tableAlias, aliasColumnMap);
     rootSelections.push(
-      sql`${sql.ref(`${tableCte.name}.json_data`)}`.as(safeAlias)
+      sql`${sql.ref(`${tableCte.name}.json_data`)}`.as(safeAlias),
     );
   });
 
@@ -400,37 +399,37 @@ export async function findMany(db: Kysely<any>, query: Query) {
             extraction =
               field.type === "String"
                 ? sql`(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}->>${sql.lit(field.name)})::text`
                 : sql`(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}->>${sql.lit(field.name)})::numeric`;
           } else if (env.DATABASE_DIALECT === "mysql") {
             extraction =
               field.type === "String"
                 ? sql`CAST(JSON_EXTRACT(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}, ${sql.lit("$." + field.name)}) AS CHAR)`
                 : sql`CAST(JSON_EXTRACT(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}, ${sql.lit("$." + field.name)}) AS DECIMAL)`;
           } else if (env.DATABASE_DIALECT === "mssql") {
             extraction =
               field.type === "String"
                 ? sql`JSON_VALUE(${sql.ref(tableSource)}.${sql.ref(
-                    jsonColumnName
+                    jsonColumnName,
                   )}, ${sql.lit("$." + field.name)})`
                 : sql`CAST(JSON_VALUE(${sql.ref(tableSource)}.${sql.ref(
-                    jsonColumnName
+                    jsonColumnName,
                   )}, ${sql.lit("$." + field.name)}) AS DECIMAL)`;
           } else if (env.DATABASE_DIALECT === "bigquery") {
             extraction =
               field.type === "String"
                 ? sql`JSON_VALUE(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}, ${sql.lit("$." + field.name)})`
                 : sql`SAFE_CAST(JSON_VALUE(${sql.ref(
-                    `${tableSource}.${jsonColumnName}`
+                    `${tableSource}.${jsonColumnName}`,
                   )}, ${sql.lit("$." + field.name)}) AS NUMERIC)`;
           } else {
             extraction = sql`NULL`;
@@ -459,8 +458,8 @@ export async function findMany(db: Kysely<any>, query: Query) {
         join.onRef(
           `${tableSource}.${finalLink[1]}`,
           "=",
-          `${tableCte.name}.${finalLink[0]}`
-        )
+          `${tableCte.name}.${finalLink[0]}`,
+        ),
       );
     });
   }
@@ -473,11 +472,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
   }
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
   if (whereCondition) {
     selectQuery = selectQuery.where(whereCondition);
   }
@@ -518,7 +513,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
 
   const nestedAliases = dedupedTablePaths.map((path) => path.join("."));
   const normalized = remappedRows.map((row: any) =>
-    normalizeNestedAliases(row, nestedAliases)
+    normalizeNestedAliases(row, nestedAliases),
   );
 
   if (env.DATABASE_DIALECT === "mssql") {
@@ -545,7 +540,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
  */
 function sanitizeAlias(
   alias: string,
-  aliasColumnMap: Map<string, string>
+  aliasColumnMap: Map<string, string>,
 ): string {
   let sanitized = alias
     .replace(/[^a-zA-Z0-9_]/g, "__")
@@ -578,7 +573,7 @@ function relationIsList(
   sourceTableName: string | undefined,
   targetTableName: string | undefined,
   sourceColumns: string[],
-  targetColumns: string[]
+  targetColumns: string[],
 ) {
   if (!sourceTableName || !targetTableName) return false;
   const table = tables.find((t) => t.name === sourceTableName);
@@ -598,7 +593,7 @@ function relationIsList(
 function getRelationKeysFromSchema(
   tables: SchemaTable[],
   sourceTableName: string | undefined,
-  targetTableName: string | undefined
+  targetTableName: string | undefined,
 ) {
   if (!sourceTableName || !targetTableName) {
     return {
@@ -609,7 +604,7 @@ function getRelationKeysFromSchema(
   }
   const table = tables.find((t) => t.name === sourceTableName);
   const relation = table?.relations?.find(
-    (rel) => rel.targetTable === targetTableName
+    (rel) => rel.targetTable === targetTableName,
   );
   return {
     sourceColumn: relation?.sourceColumns?.[0],

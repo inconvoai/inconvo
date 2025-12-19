@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery aggregate Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let aggregate: typeof import("~/operations/aggregate")["aggregate"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -60,20 +60,20 @@ describe("BigQuery aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      6
+      6,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      6
+      6,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
   });
 
@@ -120,20 +120,20 @@ describe("BigQuery aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      6
+      6,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      6
+      6,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
     expect(aggregateResult._median?.["orders.subtotal"]).not.toBeNull();
   });
@@ -164,20 +164,20 @@ describe("BigQuery aggregate Operation", () => {
       .select([
         sql<number>`COUNT(id)`.as("count_id"),
         sql<number>`COUNT(DISTINCT product_id)`.as("distinct_product_id"),
-        sql<number>`COUNT(DISTINCT organisation_id)`.as("distinct_organisation_id"),
+        sql<number>`COUNT(DISTINCT organisation_id)`.as(
+          "distinct_organisation_id",
+        ),
       ])
       .execute();
 
     const expected = expectedRows[0] ?? {};
 
-    expect(aggregateResult._count["orders.id"]).toBe(
-      Number(expected.count_id)
-    );
+    expect(aggregateResult._count["orders.id"]).toBe(Number(expected.count_id));
     expect(aggregateResult._countDistinct["orders.product_id"]).toBe(
-      Number(expected.distinct_product_id)
+      Number(expected.distinct_product_id),
     );
     expect(aggregateResult._countDistinct["orders.organisation_id"]).toBe(
-      Number(expected.distinct_organisation_id)
+      Number(expected.distinct_organisation_id),
     );
   });
 
@@ -246,7 +246,7 @@ describe("BigQuery aggregate Operation", () => {
       .where("orders.organisation_id", "=", 1)
       .where("orders.created_at", ">=", startDate)
       .where(({ eb }) =>
-        eb(sql`LOWER(products.title)`, "like", sql`LOWER(${`%macbook%`})`)
+        eb(sql`LOWER(products.title)`, "like", sql`LOWER(${`%macbook%`})`),
       )
       .select(({ fn }) => [
         fn.sum<number>("orders.quantity").as("sum_orders_quantity"),
@@ -257,7 +257,7 @@ describe("BigQuery aggregate Operation", () => {
 
     expect(aggregateResult?._sum?.["orders.quantity"]).toBeCloseTo(
       expectedSum,
-      6
+      6,
     );
   });
 });

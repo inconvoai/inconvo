@@ -45,7 +45,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     if (key.type === "column") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by (not table.column)"
+        "Invalid column format for group by (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -56,11 +56,14 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       const alias = key.alias ?? `${tableName}.${columnName}`;
       const dialectAlias = getDialectAlias(alias);
       groupByColumns.push(column);
-      groupKeyExpressions.set(alias, { select: sql`${column}`.as(dialectAlias), order: column });
+      groupKeyExpressions.set(alias, {
+        select: sql`${column}`.as(dialectAlias),
+        order: column,
+      });
     } else if (key.type === "dateInterval") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by interval (not table.column)"
+        "Invalid column format for group by interval (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -72,7 +75,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
-        key.interval
+        key.interval,
       );
       groupByColumns.push(intervalExpression);
       groupKeyExpressions.set(alias, {
@@ -82,7 +85,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     } else if (key.type === "dateComponent") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by component (not table.column)"
+        "Invalid column format for group by component (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -94,11 +97,14 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
-        key.component
+        key.component,
       );
       groupByColumns.push(select);
       groupByColumns.push(order);
-      groupKeyExpressions.set(alias, { select: select.as(dialectAlias), order });
+      groupKeyExpressions.set(alias, {
+        select: select.as(dialectAlias),
+        order,
+      });
     }
   }
 
@@ -106,32 +112,32 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     count: createAggregationFields(
       operationParameters.aggregates.count ?? undefined,
       (column) => sql`COUNT(${column})`,
-      schema
+      schema,
     ),
     countDistinct: createAggregationFields(
       operationParameters.aggregates.countDistinct ?? undefined,
       (column) => sql`COUNT(DISTINCT ${column})`,
-      schema
+      schema,
     ),
     min: createAggregationFields(
       operationParameters.aggregates.min ?? undefined,
       (column) => sql`MIN(${column})`,
-      schema
+      schema,
     ),
     max: createAggregationFields(
       operationParameters.aggregates.max ?? undefined,
       (column) => sql`MAX(${column})`,
-      schema
+      schema,
     ),
     sum: createAggregationFields(
       operationParameters.aggregates.sum ?? undefined,
       (column) => sql`SUM(${column})`,
-      schema
+      schema,
     ),
     avg: createAggregationFields(
       operationParameters.aggregates.avg ?? undefined,
       (column) => sql`AVG(${column})`,
-      schema
+      schema,
     ),
   };
 
@@ -198,27 +204,27 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         const expression = groupKeyExpressions.get(condition.key);
         assert(
           expression,
-          `HAVING groupKey ${condition.key} must reference a defined groupBy alias`
+          `HAVING groupKey ${condition.key} must reference a defined groupBy alias`,
         );
         havingExpressions.push(
           applyHavingComparison(
             expression.order,
             condition.operator,
-            condition.value
-          )
+            condition.value,
+          ),
         );
       } else {
         const aggregateExpr = buildAggregateExpression(
           condition.function,
           condition.column,
-          schema
+          schema,
         );
         havingExpressions.push(
           applyHavingComparison(
             aggregateExpr,
             condition.operator,
-            condition.value
-          )
+            condition.value,
+          ),
         );
       }
     }
@@ -252,12 +258,15 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
   const applyReducer = (
     columnAlias: string,
     reducer: Reducer,
-    family: keyof typeof baseAggregations
+    family: keyof typeof baseAggregations,
   ) => {
     const ref = sql.ref(columnAlias);
     switch (reducer) {
       case "sum":
-        if (env.DATABASE_DIALECT === "mssql" && (family === "count" || family === "countDistinct")) {
+        if (
+          env.DATABASE_DIALECT === "mssql" &&
+          (family === "count" || family === "countDistinct")
+        ) {
           return sql`SUM(CAST(${ref} AS BIGINT))`;
         }
         return sql`SUM(${ref})`;
@@ -282,7 +291,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
 
   const buildReducerObjects = (
     family: keyof typeof baseAggregations,
-    familyFields: [string, any][] | undefined
+    familyFields: [string, any][] | undefined,
   ) => {
     if (!familyFields) return undefined;
     const familyReducers = reducers[family];
@@ -294,7 +303,11 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       if (!perGroupAlias) continue;
       const reducerFields: [string, any][] = familyReducers.map((reducer) => [
         reducer,
-        applyReducer(perGroupAlias, reducer, family as keyof typeof baseAggregations),
+        applyReducer(
+          perGroupAlias,
+          reducer,
+          family as keyof typeof baseAggregations,
+        ),
       ]);
       const jsonKey = getJsonKeyForReducer(column);
       columnObjects.push([jsonKey, buildJsonObject(reducerFields)]);
@@ -309,7 +322,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
   }
   const countDistinctReduced = buildReducerObjects(
     "countDistinct",
-    baseAggregations.countDistinct
+    baseAggregations.countDistinct,
   );
   if (countDistinctReduced) {
     selectFields.push(countDistinctReduced.as("_countDistinct"));
@@ -373,12 +386,22 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       return value;
     };
 
-    for (const key of ["_avg", "_sum", "_min", "_max", "_count", "_countDistinct"]) {
+    for (const key of [
+      "_avg",
+      "_sum",
+      "_min",
+      "_max",
+      "_count",
+      "_countDistinct",
+    ]) {
       const value = parsed[key];
       parsed[key] = parseJsonField(value);
     }
 
-    if (typeof parsed.groupCount === "string" && /^\d+$/.test(parsed.groupCount)) {
+    if (
+      typeof parsed.groupCount === "string" &&
+      /^\d+$/.test(parsed.groupCount)
+    ) {
       parsed.groupCount = Number(parsed.groupCount);
     }
     aliasRenameMap.forEach((original, sanitized) => {

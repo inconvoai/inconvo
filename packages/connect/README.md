@@ -5,6 +5,7 @@ A database abstraction package that supports MSSQL, PostgreSQL, and MySQL withou
 ## Implementation Status
 
 ### ✅ Completed Features
+
 - Database connections for PostgreSQL, MySQL, and MSSQL
 - Schema introspection with foreign key extraction
 - Where condition builder supporting complex nested conditions
@@ -21,12 +22,14 @@ A database abstraction package that supports MSSQL, PostgreSQL, and MySQL withou
 - Next.js route handlers
 
 ### ⚠️ Partial Implementation
+
 - Complex relation handling in findMany (simplified version)
 - MSSQL connection configuration (needs proper tedious setup)
 - JSON column support (basic implementation)
 - CTE-based relation queries (not fully implemented)
 
 ### 🔧 Known Issues
+
 - TypeScript build errors with dynamic selections (runtime works)
 - Some relation operators (some/none/every) not fully implemented
 - Edit distance for databases without native support uses JS fallback
@@ -60,7 +63,7 @@ INCONVO_SECRET_KEY=optional_secret_key
 ### Basic Setup
 
 ```typescript
-import { getDb, buildSchema } from '@ten-dev/inconvo';
+import { getDb, buildSchema } from "@ten-dev/inconvo";
 
 // Get database connection
 const db = await getDb();
@@ -73,71 +76,76 @@ console.log(schema.tables);
 ### Query Operations
 
 ```typescript
-import { executeQuery, executeAggregate } from '@ten-dev/inconvo';
+import { executeQuery, executeAggregate } from "@ten-dev/inconvo";
 
 // Simple query
 const users = await executeQuery({
-  table: 'users',
-  select: ['id', 'name', 'email'],
+  table: "users",
+  select: ["id", "name", "email"],
   where: { active: true },
-  orderBy: [{ column: 'created_at', order: 'desc' }],
-  limit: 10
+  orderBy: [{ column: "created_at", order: "desc" }],
+  limit: 10,
 });
 
 // Aggregation
 const userCount = await executeAggregate({
-  table: 'users',
-  operation: 'count',
-  where: { active: true }
+  table: "users",
+  operation: "count",
+  where: { active: true },
 });
 
 // With joins
 const ordersWithUsers = await executeQuery({
-  table: 'orders',
-  select: ['orders.id', 'orders.total', 'users.name'],
-  joins: [{
-    table: 'users',
-    on: { left: 'orders.user_id', right: 'users.id' },
-    type: 'inner'
-  }]
+  table: "orders",
+  select: ["orders.id", "orders.total", "users.name"],
+  joins: [
+    {
+      table: "users",
+      on: { left: "orders.user_id", right: "users.id" },
+      type: "inner",
+    },
+  ],
 });
 ```
 
 ### Mutations
 
 ```typescript
-import { executeInsert, executeUpdate, executeDelete } from '@ten-dev/inconvo';
+import { executeInsert, executeUpdate, executeDelete } from "@ten-dev/inconvo";
 
 // Insert
 const newUser = await executeInsert({
-  table: 'users',
+  table: "users",
   data: {
-    name: 'John Doe',
-    email: 'john@example.com'
+    name: "John Doe",
+    email: "john@example.com",
   },
-  returning: ['id']
+  returning: ["id"],
 });
 
 // Update
 const updated = await executeUpdate({
-  table: 'users',
+  table: "users",
   data: { active: false },
   where: { id: 1 },
-  returning: ['id', 'active']
+  returning: ["id", "active"],
 });
 
 // Delete
 const deleted = await executeDelete({
-  table: 'users',
-  where: { id: 1 }
+  table: "users",
+  where: { id: 1 },
 });
 ```
 
 ### Express Integration
 
 ```typescript
-import express from 'express';
-import { inconvoMiddleware, createInconvoRouter } from '@ten-dev/inconvo/express';
+import express from "express";
+import {
+  inconvoMiddleware,
+  createInconvoRouter,
+} from "@ten-dev/inconvo/express";
 
 const app = express();
 
@@ -145,13 +153,13 @@ const app = express();
 app.use(inconvoMiddleware);
 
 // Or use the router
-app.use('/api/db', createInconvoRouter());
+app.use("/api/db", createInconvoRouter());
 
 // Access in routes
-app.get('/users', async (req, res) => {
+app.get("/users", async (req, res) => {
   const users = await req.inconvo.query({
-    table: 'users',
-    select: ['id', 'name']
+    table: "users",
+    select: ["id", "name"],
   });
   res.json(users);
 });
@@ -161,10 +169,10 @@ app.get('/users', async (req, res) => {
 
 ```typescript
 // app/api/db/route.ts
-export { GET, POST } from '@ten-dev/inconvo/next';
+export { GET, POST } from "@ten-dev/inconvo/next";
 
 // Or custom implementation
-import { createInconvoRoute } from '@ten-dev/inconvo/next';
+import { createInconvoRoute } from "@ten-dev/inconvo/next";
 
 const handlers = createInconvoRoute();
 export const GET = handlers.GET;
@@ -174,21 +182,25 @@ export const POST = handlers.POST;
 ## Database Connection Strings
 
 ### PostgreSQL
+
 ```
 postgresql://user:password@localhost:5432/database
 ```
 
 ### Amazon Redshift
+
 ```
 postgresql://user:password@cluster-name.region.redshift.amazonaws.com:5439/database?sslmode=require
 ```
 
 ### MySQL
+
 ```
 mysql://user:password@localhost:3306/database
 ```
 
 ### MSSQL
+
 ```
 mssql://user:password@localhost:1433/database?encrypt=true&trustServerCertificate=true
 ```

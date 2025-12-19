@@ -25,7 +25,7 @@ const createLogger = (): LogConfig => (event: LogEvent) => {
     const duration = Math.round(event.queryDurationMillis);
     logger.debug(
       { sql: event.query.sql, duration },
-      `Query executed in ${duration}ms`
+      `Query executed in ${duration}ms`,
     );
     if (event.query.parameters && event.query.parameters.length > 0) {
       logger.debug({ params: event.query.parameters }, "Query parameters");
@@ -37,7 +37,7 @@ const createLogger = (): LogConfig => (event: LogEvent) => {
         sql: event.query?.sql,
         params: event.query?.parameters,
       },
-      "Query error"
+      "Query error",
     );
   }
 };
@@ -163,7 +163,7 @@ export async function getDb(): Promise<Kysely<any>> {
 
     if (!dataset) {
       throw new Error(
-        "INCONVO_BIGQUERY_DATASET or INCONVO_DATABASE_SCHEMA is required for BigQuery"
+        "INCONVO_BIGQUERY_DATASET or INCONVO_DATABASE_SCHEMA is required for BigQuery",
       );
     }
 
@@ -183,7 +183,7 @@ export async function getDb(): Promise<Kysely<any>> {
     });
   } else {
     throw new Error(
-      "Unsupported database dialect. Must be postgresql, redshift, mysql, mssql, or bigquery"
+      "Unsupported database dialect. Must be postgresql, redshift, mysql, mssql, or bigquery",
     );
   }
 

@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("MSSQL findMany hasMany joins", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let findMany: typeof import("~/operations/findMany")["findMany"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let findMany: (typeof import("~/operations/findMany"))["findMany"];
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -82,7 +82,9 @@ describe("MSSQL findMany hasMany joins", () => {
         expect(order).toHaveProperty("subtotal");
         expect(order).toHaveProperty("created_at");
         const productsRaw = order.products ?? [];
-        const products = Array.isArray(productsRaw) ? productsRaw : [productsRaw];
+        const products = Array.isArray(productsRaw)
+          ? productsRaw
+          : [productsRaw];
         products.forEach((product: any) => {
           expect(product).toHaveProperty("title");
         });

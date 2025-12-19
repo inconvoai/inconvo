@@ -8,7 +8,7 @@ export type SupportedDateComponent =
 
 export function buildDateComponentExpressions(
   column: any,
-  component: SupportedDateComponent
+  component: SupportedDateComponent,
 ) {
   if (env.DATABASE_DIALECT === "postgresql") {
     switch (component) {
@@ -99,6 +99,6 @@ export function buildDateComponentExpressions(
   }
 
   throw new Error(
-    "Unsupported database provider. URL must start with  'postgresql', 'mysql', 'mssql', or 'bigquery'"
+    "Unsupported database provider. URL must start with  'postgresql', 'mysql', 'mssql', or 'bigquery'",
   );
 }

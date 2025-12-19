@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery countRelations Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let countRelations: typeof import("~/operations/countRelations")["countRelations"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -15,7 +15,8 @@ describe("BigQuery countRelations Operation", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
-    countRelations = (await import("~/operations/countRelations")).countRelations;
+    countRelations = (await import("~/operations/countRelations"))
+      .countRelations;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });
@@ -142,12 +143,12 @@ describe("BigQuery countRelations Operation", () => {
       expectedRows.map((row: any) => [
         row.id,
         Number(row.orders_distinctCount ?? 0),
-      ])
+      ]),
     );
 
     resultRows.forEach((row: any) => {
       expect(Number(row.orders_distinctCount ?? 0)).toBe(
-        expectedMap.get(row.id) ?? 0
+        expectedMap.get(row.id) ?? 0,
       );
     });
   }, 10000);

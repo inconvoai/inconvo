@@ -11,7 +11,7 @@ import assert from "assert";
 function filterStringByEditDistance(
   strings: string[],
   targetString: string,
-  maxResults: number
+  maxResults: number,
 ) {
   const stringWithEditDistanceToTarget = strings.map((str) => ({
     str,
@@ -25,7 +25,7 @@ function filterStringByEditDistance(
 
 export async function findDistinctByEditDistance(
   db: Kysely<any>,
-  query: Query
+  query: Query,
 ) {
   assert(query.operation === "findDistinctByEditDistance", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
@@ -47,11 +47,7 @@ export async function findDistinctByEditDistance(
   dbQuery = applyLimit(dbQuery, 5000);
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -64,16 +60,21 @@ export async function findDistinctByEditDistance(
   const maxResults = 490;
   const reduced = filterStringByEditDistance(
     response
-      .map((value: Record<string, unknown>) => value[operationParameters.column])
-      .filter((value: unknown): value is string => value !== null && value !== undefined),
+      .map(
+        (value: Record<string, unknown>) => value[operationParameters.column],
+      )
+      .filter(
+        (value: unknown): value is string =>
+          value !== null && value !== undefined,
+      ),
     operationParameters.compareString,
-    maxResults
+    maxResults,
   );
 
   const compiled = dbQuery.compile();
 
   return {
     query: { sql: compiled.sql, params: compiled.parameters },
-    data: reduced
+    data: reduced,
   };
 }

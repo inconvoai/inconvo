@@ -15,7 +15,7 @@ export async function ensureAugmentationsDir(dir: string) {
 
 export async function writeAugmentationFile(
   filePath: string,
-  payload: unknown
+  payload: unknown,
 ) {
   await ensureAugmentationsDir(path.dirname(filePath));
   await fs.writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");

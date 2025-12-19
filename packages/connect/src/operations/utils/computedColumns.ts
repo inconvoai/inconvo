@@ -23,7 +23,7 @@ export function getColumnFromTable({
 
   // Check if it's a computed column
   const computedColumn = table.computedColumns?.find(
-    (cc) => cc.name === columnName
+    (cc) => cc.name === columnName,
   );
 
   if (computedColumn) {
@@ -31,19 +31,16 @@ export function getColumnFromTable({
       computedColumn.ast,
       tableName,
       schema,
-      false
+      false,
     );
   }
 
   const columnConversion = table.columnConversions?.find(
-    (conversion) => conversion.column === columnName
+    (conversion) => conversion.column === columnName,
   );
 
   if (columnConversion) {
-    return generateColumnConversionAsSQL(
-      columnConversion.ast,
-      tableName
-    );
+    return generateColumnConversionAsSQL(columnConversion.ast, tableName);
   }
 
   return buildColumnReference(tableName, columnName);
@@ -51,7 +48,7 @@ export function getColumnFromTable({
 
 function buildColumnReference(
   tableName: string,
-  columnName: string
+  columnName: string,
 ): RawBuilder<unknown> {
   // BigQuery STRUCT field handling: columns with # separator represent nested STRUCT fields
   // Column name format: "structColumn#fieldPath" or "structColumn#nested#field"
@@ -74,7 +71,7 @@ function buildColumnReference(
 
 function generateColumnConversionAsSQL(
   ast: SQLCastExpressionAst,
-  tableName: string
+  tableName: string,
 ): RawBuilder<unknown> {
   switch (ast.type) {
     case "column":
@@ -91,7 +88,7 @@ function generateColumnConversionAsSQL(
     case "coalesce": {
       const expression = generateColumnConversionAsSQL(
         ast.expression,
-        tableName
+        tableName,
       );
       const fallback = generateColumnConversionAsSQL(ast.fallback, tableName);
       return sql`COALESCE(${expression}, ${fallback})`;
@@ -102,7 +99,7 @@ function generateColumnConversionAsSQL(
     }
     default:
       throw new Error(
-        `Unexpected state: unknown column conversion AST node. This should never happen unless there is a bug in the type definitions or runtime data. AST: ${JSON.stringify(ast)}`
+        `Unexpected state: unknown column conversion AST node. This should never happen unless there is a bug in the type definitions or runtime data. AST: ${JSON.stringify(ast)}`,
       );
   }
 }
@@ -111,25 +108,25 @@ function generateComputedColumnAsSQL(
   ast: SQLComputedColumnAst,
   tableName: string,
   schema: SchemaResponse,
-  numericRequired: boolean
+  numericRequired: boolean,
 ): RawBuilder<unknown> {
   switch (ast.type) {
     case "column":
       // If a conversion exists, use it; otherwise enforce numeric when required
       const table = schema.tables.find((t) => t.name === tableName);
       const conversion = table?.columnConversions?.find(
-        (c) => c.column === ast.name
+        (c) => c.column === ast.name,
       );
       if (conversion) {
         return generateColumnConversionAsSQL(conversion.ast, tableName);
       }
       if (numericRequired) {
         const columnType = table?.columns.find(
-          (col) => col.name === ast.name
+          (col) => col.name === ast.name,
         )?.type;
         if (columnType && columnType.toLowerCase() !== "number") {
           throw new Error(
-            `Computed column requires numeric input but '${ast.name}' is type '${columnType}' without a conversion`
+            `Computed column requires numeric input but '${ast.name}' is type '${columnType}' without a conversion`,
           );
         }
       }
@@ -140,7 +137,7 @@ function generateComputedColumnAsSQL(
 
     case "operation": {
       const operands = ast.operands.map((operand) =>
-        generateComputedColumnAsSQL(operand, tableName, schema, true)
+        generateComputedColumnAsSQL(operand, tableName, schema, true),
       );
 
       switch (ast.operator) {
@@ -164,7 +161,7 @@ function generateComputedColumnAsSQL(
         ast.expression,
         tableName,
         schema,
-        numericRequired
+        numericRequired,
       );
       return sql`(${inner})`;
 
@@ -221,7 +218,7 @@ function resolveLogicalType(logical: LogicalCastType): string {
 
   if (!mapping) {
     throw new Error(
-      `Unsupported dialect for logical cast type mapping: ${dialect}`
+      `Unsupported dialect for logical cast type mapping: ${dialect}`,
     );
   }
 

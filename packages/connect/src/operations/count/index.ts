@@ -14,11 +14,7 @@ import {
 export async function count(db: Kysely<any>, query: Query) {
   assert(query.operation === "count", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
-  const {
-    count: countColumns,
-    countDistinct,
-    joins,
-  } = operationParameters;
+  const { count: countColumns, countDistinct, joins } = operationParameters;
 
   const schema = await getAugmentedSchema();
   const dbForQuery = getSchemaBoundDb(db, schema);
@@ -32,7 +28,7 @@ export async function count(db: Kysely<any>, query: Query) {
         tableName: join.table,
         joinType: join.joinType,
         path: join.path,
-      })
+      }),
     ) ?? [];
 
   const aliasToTable = new Map<string, string>();
@@ -53,12 +49,14 @@ export async function count(db: Kysely<any>, query: Query) {
     const targetAlias = alias;
     if (!targetAlias) {
       throw new Error(
-        `Column ${columnName} must be qualified as tableOrAlias.column`
+        `Column ${columnName} must be qualified as tableOrAlias.column`,
       );
     }
     const targetTable = aliasToTable.get(targetAlias);
     if (!targetTable) {
-      throw new Error(`Join alias ${targetAlias} not found for column ${columnName}`);
+      throw new Error(
+        `Join alias ${targetAlias} not found for column ${columnName}`,
+      );
     }
     return getColumnFromTable({
       columnName: column,
@@ -72,7 +70,7 @@ export async function count(db: Kysely<any>, query: Query) {
 
   assert(
     normalizedCountColumns.length > 0 || normalizedDistinctColumns.length > 0,
-    "Count operation requires at least one metric"
+    "Count operation requires at least one metric",
   );
 
   if (env.DATABASE_DIALECT === "mssql") {
@@ -88,7 +86,7 @@ export async function count(db: Kysely<any>, query: Query) {
     for (const columnName of normalizedDistinctColumns) {
       const columnRef = resolveColumnRef(columnName);
       selections.push(
-        sql`COUNT(DISTINCT ${columnRef})`.as(`distinct_${columnName}`)
+        sql`COUNT(DISTINCT ${columnRef})`.as(`distinct_${columnName}`),
       );
     }
     if (selections.length > 0) {
@@ -118,11 +116,11 @@ export async function count(db: Kysely<any>, query: Query) {
     if (countPairs.length > 0) {
       if (env.DATABASE_DIALECT === "postgresql") {
         selectExpressions.push(
-          sql`json_build_object(${sql.join(countPairs, sql`, `)})`.as("_count")
+          sql`json_build_object(${sql.join(countPairs, sql`, `)})`.as("_count"),
         );
       } else {
         selectExpressions.push(
-          sql`JSON_OBJECT(${sql.join(countPairs, sql`, `)})`.as("_count")
+          sql`JSON_OBJECT(${sql.join(countPairs, sql`, `)})`.as("_count"),
         );
       }
     }
@@ -130,14 +128,14 @@ export async function count(db: Kysely<any>, query: Query) {
       if (env.DATABASE_DIALECT === "postgresql") {
         selectExpressions.push(
           sql`json_build_object(${sql.join(distinctPairs, sql`, `)})`.as(
-            "_countDistinct"
-          )
+            "_countDistinct",
+          ),
         );
       } else {
         selectExpressions.push(
           sql`JSON_OBJECT(${sql.join(distinctPairs, sql`, `)})`.as(
-            "_countDistinct"
-          )
+            "_countDistinct",
+          ),
         );
       }
     }
@@ -146,11 +144,7 @@ export async function count(db: Kysely<any>, query: Query) {
     }
   }
 
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -207,7 +201,7 @@ function splitColumnReference(columnName: string) {
   const lastDot = columnName.lastIndexOf(".");
   if (lastDot === -1) {
     throw new Error(
-      `Column ${columnName} must be qualified as tableOrAlias.column`
+      `Column ${columnName} must be qualified as tableOrAlias.column`,
     );
   }
   const alias = columnName.slice(0, lastDot);

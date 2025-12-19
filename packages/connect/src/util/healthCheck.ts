@@ -8,7 +8,7 @@ const HEALTHCHECK_TIMEOUT_MS = 5_000;
 // Minimal query to make sure the configured database is reachable before we start serving traffic.
 // BigQuery is bypassed because it doesn't support cheap healthcheck queries like `SELECT 1`.
 export async function checkDatabaseHealth(
-  timeoutMs: number = HEALTHCHECK_TIMEOUT_MS
+  timeoutMs: number = HEALTHCHECK_TIMEOUT_MS,
 ): Promise<void> {
   // BigQuery doesn't support cheap healthcheck queries - bypass entirely
   if (env.DATABASE_DIALECT === "bigquery") {
@@ -34,10 +34,10 @@ export async function checkDatabaseHealth(
         reject(
           Object.assign(
             new Error(
-              `Database health check timed out after ${timeoutMs}ms (dialect: ${process.env.DATABASE_DIALECT})`
+              `Database health check timed out after ${timeoutMs}ms (dialect: ${process.env.DATABASE_DIALECT})`,
             ),
-            { code: "DB_HEALTHCHECK_TIMEOUT" }
-          )
+            { code: "DB_HEALTHCHECK_TIMEOUT" },
+          ),
         );
       }, timeoutMs);
 

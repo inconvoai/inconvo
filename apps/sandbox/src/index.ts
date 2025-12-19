@@ -202,11 +202,11 @@ app.post(
           path: targetPath,
           size: file.size,
         };
-      })
+      }),
     );
 
     return c.json({ files: storedFiles });
-  }
+  },
 );
 
 app.post(
@@ -274,7 +274,7 @@ app.post(
             success: false,
           };
         }
-      })
+      }),
     );
 
     // Then, run all exec commands in parallel
@@ -293,8 +293,8 @@ app.post(
         try {
           const structure = await sandbox.exec(
             `python3 /workspace/analyze_json.py ${JSON.stringify(
-              file.targetPath
-            )}`
+              file.targetPath,
+            )}`,
           );
 
           return {
@@ -316,11 +316,11 @@ app.post(
             success: false,
           };
         }
-      })
+      }),
     );
 
     return c.json({ files: fileDescriptions });
-  }
+  },
 );
 
 app.post(
@@ -345,7 +345,7 @@ app.post(
       exitCode: result.exitCode,
       success: result.success,
     });
-  }
+  },
 );
 
 app.delete("/sandbox", async (c) => {

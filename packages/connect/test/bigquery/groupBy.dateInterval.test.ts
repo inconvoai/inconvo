@@ -11,8 +11,8 @@ function parseAggregateCell(value: unknown): Record<string, number> {
 
 describe("BigQuery groupBy dateInterval buckets", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let groupBy: typeof import("~/operations/groupBy")["groupBy"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -70,7 +70,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
               ? Number(parseAggregateCell(row._count)["orders.created_at"])
               : 0,
         },
-      ])
+      ]),
     );
 
     const { rows: sqlRows } = await sql`
@@ -87,7 +87,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
       sqlRows.map((row: any) => [
         row.month_bucket,
         { count: Number(row.order_count) },
-      ])
+      ]),
     );
 
     expect(byMonth).toEqual(expectedByMonth);

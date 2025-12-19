@@ -5,13 +5,13 @@ import type { SchemaResponse } from "~/types/types";
 export function createAggregationFields(
   columns: string[] | null | undefined,
   aggregationFn: (column: any) => any,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): [string, any][] | undefined {
   if (!columns || columns.length === 0) return undefined;
   return columns.map((columnIdentifier) => {
     assert(
       columnIdentifier.split(".").length === 2,
-      "Invalid column format for aggregation (not table.column)"
+      "Invalid column format for aggregation (not table.column)",
     );
     const [tableName, columnName] = columnIdentifier.split(".");
     return [
@@ -21,7 +21,7 @@ export function createAggregationFields(
           columnName,
           tableName,
           schema,
-        })
+        }),
       ),
     ];
   });

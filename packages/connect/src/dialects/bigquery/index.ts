@@ -106,7 +106,7 @@ class BigQueryDriver implements Driver {
 
   async beginTransaction(
     _connection: DatabaseConnection,
-    _settings: TransactionSettings
+    _settings: TransactionSettings,
   ) {
     throw new Error("BigQuery does not support transactions");
   }
@@ -131,7 +131,7 @@ class BigQueryDriver implements Driver {
 class BigQueryConnection implements DatabaseConnection {
   constructor(
     private readonly client: BigQuery,
-    private readonly config: BigQueryDialectConfig
+    private readonly config: BigQueryDialectConfig,
   ) {}
 
   async executeQuery<O>(compiledQuery: CompiledQuery): Promise<QueryResult<O>> {
@@ -169,7 +169,7 @@ class BigQueryConnection implements DatabaseConnection {
 
   async *streamQuery<R>(
     compiledQuery: CompiledQuery,
-    chunkSize = 1000
+    chunkSize = 1000,
   ): AsyncIterableIterator<QueryResult<R>> {
     const maxBytes =
       this.config.maximumBytesBilled !== undefined
@@ -224,7 +224,7 @@ export class BigQueryIntrospector implements DatabaseIntrospector {
   }
 
   async getTables(
-    _options: DatabaseMetadataOptions = { withInternalKyselyTables: false }
+    _options: DatabaseMetadataOptions = { withInternalKyselyTables: false },
   ): Promise<TableMetadata[]> {
     const datasetPath = `\`${this.config.projectId}.${this.config.dataset}\``;
     const tablesQuery = `
@@ -272,7 +272,7 @@ export class BigQueryIntrospector implements DatabaseIntrospector {
   }
 
   async getMetadata(
-    options?: DatabaseMetadataOptions
+    options?: DatabaseMetadataOptions,
   ): Promise<DatabaseMetadata> {
     return {
       tables: await this.getTables(options),
@@ -312,10 +312,10 @@ export class BigQueryIntrospector implements DatabaseIntrospector {
     for (const row of rows as any[]) {
       const fieldPath = row.field_path as string;
       // Split by first dot to get parent column and nested field path
-      const firstDotIndex = fieldPath.indexOf('.');
+      const firstDotIndex = fieldPath.indexOf(".");
       if (firstDotIndex === -1) {
         console.warn(
-          `[BigQueryIntrospector] Unexpected field_path without dot: "${fieldPath}"`
+          `[BigQueryIntrospector] Unexpected field_path without dot: "${fieldPath}"`,
         );
         continue;
       }

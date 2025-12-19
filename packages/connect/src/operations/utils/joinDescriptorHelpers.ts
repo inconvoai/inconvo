@@ -10,7 +10,7 @@ export function parseQualifiedColumn(column: string): QualifiedColumn {
   const parts = column.split(".");
   if (parts.length !== 2) {
     throw new Error(
-      `Join path columns must be fully qualified (table.column). Received ${column}`
+      `Join path columns must be fully qualified (table.column). Received ${column}`,
     );
   }
   const [tableName, columnName] = parts;
@@ -28,7 +28,7 @@ export type JoinHopMetadata = {
 export function normaliseJoinHop(hop: JoinPathHop): JoinHopMetadata {
   if (hop.source.length !== hop.target.length) {
     throw new Error(
-      `Join path hop must pair equal numbers of source and target columns.`
+      `Join path hop must pair equal numbers of source and target columns.`,
     );
   }
   return {
@@ -40,7 +40,7 @@ export function normaliseJoinHop(hop: JoinPathHop): JoinHopMetadata {
 function applyJoinConditions(
   joinBuilder: JoinBuilder<any, any>,
   sourceRefs: string[],
-  targetRefs: string[]
+  targetRefs: string[],
 ) {
   let builder = joinBuilder.onRef(sourceRefs[0], "=", targetRefs[0]);
   for (let index = 1; index < sourceRefs.length; index++) {
@@ -52,7 +52,7 @@ function applyJoinConditions(
 export function applyJoinHop(
   query: any,
   joinType: "inner" | "left" | "right",
-  hop: JoinHopMetadata
+  hop: JoinHopMetadata,
 ) {
   const targetTableName = hop.target[0]?.tableName;
   if (!targetTableName) {
@@ -60,25 +60,25 @@ export function applyJoinHop(
   }
 
   const sourceRefs = hop.source.map(
-    (column) => `${column.tableName}.${column.columnName}`
+    (column) => `${column.tableName}.${column.columnName}`,
   );
   const targetRefs = hop.target.map(
-    (column) => `${column.tableName}.${column.columnName}`
+    (column) => `${column.tableName}.${column.columnName}`,
   );
 
   switch (joinType) {
     case "inner":
       return query.innerJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
-        applyJoinConditions(jb, sourceRefs, targetRefs)
+        applyJoinConditions(jb, sourceRefs, targetRefs),
       );
     case "right":
       return query.rightJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
-        applyJoinConditions(jb, sourceRefs, targetRefs)
+        applyJoinConditions(jb, sourceRefs, targetRefs),
       );
     case "left":
     default:
       return query.leftJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
-        applyJoinConditions(jb, sourceRefs, targetRefs)
+        applyJoinConditions(jb, sourceRefs, targetRefs),
       );
   }
 }

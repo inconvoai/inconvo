@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("PostgreSQL countRelations Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let countRelations: typeof import("~/operations/countRelations")["countRelations"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -14,7 +14,8 @@ describe("PostgreSQL countRelations Operation", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
-    countRelations = (await import("~/operations/countRelations")).countRelations;
+    countRelations = (await import("~/operations/countRelations"))
+      .countRelations;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });

@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery groupBy Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let groupBy: typeof import("~/operations/groupBy")["groupBy"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -94,12 +94,12 @@ describe("BigQuery groupBy Operation", () => {
     expected.forEach((expectedRow, index) => {
       const actualRow = resultRows[index] as typeof expectedRow;
       expect(actualRow["orders.product_id"]).toBe(
-        expectedRow["orders.product_id"]
+        expectedRow["orders.product_id"],
       );
       expect(actualRow["products.title"]).toBe(expectedRow["products.title"]);
       expect(actualRow._sum["orders.subtotal"]).toBeCloseTo(
         expectedRow._sum["orders.subtotal"],
-        4
+        4,
       );
     });
   });
@@ -158,11 +158,13 @@ describe("BigQuery groupBy Operation", () => {
     expected.forEach((expectedRow, index) => {
       const actualRow = resultRows[index] as typeof expectedRow;
       expect(actualRow["orders.organisation_id"]).toBe(
-        expectedRow["orders.organisation_id"]
+        expectedRow["orders.organisation_id"],
       );
-      expect(actualRow._count["orders.id"]).toBe(expectedRow._count["orders.id"]);
+      expect(actualRow._count["orders.id"]).toBe(
+        expectedRow._count["orders.id"],
+      );
       expect(actualRow._countDistinct["orders.product_id"]).toBe(
-        expectedRow._countDistinct["orders.product_id"]
+        expectedRow._countDistinct["orders.product_id"],
       );
     });
   });
@@ -189,8 +191,20 @@ describe("BigQuery groupBy Operation", () => {
         },
         limit: 10,
         having: [
-          { type: "aggregate", function: "count", column: "orders.id", operator: "gte", value: 2 },
-          { type: "aggregate", function: "sum", column: "orders.subtotal", operator: "gt", value: 100 },
+          {
+            type: "aggregate",
+            function: "count",
+            column: "orders.id",
+            operator: "gte",
+            value: 2,
+          },
+          {
+            type: "aggregate",
+            function: "sum",
+            column: "orders.subtotal",
+            operator: "gt",
+            value: 100,
+          },
         ],
       },
     };
@@ -225,12 +239,14 @@ describe("BigQuery groupBy Operation", () => {
     expected.forEach((expectedRow, index) => {
       const actualRow = resultRows[index] as typeof expectedRow;
       expect(actualRow["orders.organisation_id"]).toBe(
-        expectedRow["orders.organisation_id"]
+        expectedRow["orders.organisation_id"],
       );
-      expect(actualRow._count["orders.id"]).toBe(expectedRow._count["orders.id"]);
+      expect(actualRow._count["orders.id"]).toBe(
+        expectedRow._count["orders.id"],
+      );
       expect(actualRow._sum["orders.subtotal"]).toBeCloseTo(
         expectedRow._sum["orders.subtotal"],
-        4
+        4,
       );
     });
   });
@@ -242,7 +258,9 @@ describe("BigQuery groupBy Operation", () => {
       operation: "groupBy" as const,
       operationParameters: {
         joins: null,
-        groupBy: [{ type: "column", column: "orders.organisation_id", alias: "org" }],
+        groupBy: [
+          { type: "column", column: "orders.organisation_id", alias: "org" },
+        ],
         count: ["orders.id"],
         countDistinct: null,
         sum: null,
@@ -287,7 +305,9 @@ describe("BigQuery groupBy Operation", () => {
     expected.forEach((expectedRow, index) => {
       const actualRow = resultRows[index] as typeof expectedRow;
       expect(actualRow["org"]).toBe(expectedRow["org"]);
-      expect(actualRow._count["orders.id"]).toBe(expectedRow._count["orders.id"]);
+      expect(actualRow._count["orders.id"]).toBe(
+        expectedRow._count["orders.id"],
+      );
     });
   });
 });

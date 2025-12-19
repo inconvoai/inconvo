@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery findDistinctByEditDistance Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let findDistinctByEditDistance: typeof import("~/operations/findDistinctByEditDistance")["findDistinctByEditDistance"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let findDistinctByEditDistance: (typeof import("~/operations/findDistinctByEditDistance"))["findDistinctByEditDistance"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);

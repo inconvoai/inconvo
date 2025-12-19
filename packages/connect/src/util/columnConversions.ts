@@ -9,7 +9,7 @@ export type ColumnConversion = {
 };
 
 export function getSchemaColumnConversions(
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): ColumnConversion[] | undefined {
   const conversions: ColumnConversion[] = [];
 

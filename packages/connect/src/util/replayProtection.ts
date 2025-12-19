@@ -21,7 +21,7 @@ export function registerNonce(
   options?: {
     nowSeconds?: number;
     windowSeconds?: number;
-  }
+  },
 ): boolean {
   const windowSeconds = options?.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
   const nowSeconds = options?.nowSeconds ?? Math.floor(Date.now() / 1000);

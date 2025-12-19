@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery simple smoke tests", () => {
   let db: Kysely<any>;
-  let getCachedSchema: typeof import("~/util/schemaCache")["getCachedSchema"];
-  let clearSchemaCache: typeof import("~/util/schemaCache")["clearSchemaCache"];
+  let getCachedSchema: (typeof import("~/util/schemaCache"))["getCachedSchema"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -14,9 +14,8 @@ describe("BigQuery simple smoke tests", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
-    ({ getCachedSchema, clearSchemaCache } = await import(
-      "~/util/schemaCache"
-    ));
+    ({ getCachedSchema, clearSchemaCache } =
+      await import("~/util/schemaCache"));
     await clearSchemaCache();
 
     const { getDb } = await import("~/dbConnection");

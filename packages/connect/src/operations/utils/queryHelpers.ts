@@ -3,7 +3,7 @@ import { env } from "~/env";
 
 export function applyLimit<DB, TB extends keyof DB, O>(
   query: SelectQueryBuilder<DB, TB, O>,
-  limit: number | null | undefined
+  limit: number | null | undefined,
 ): SelectQueryBuilder<DB, TB, O> {
   if (!limit) {
     return query;

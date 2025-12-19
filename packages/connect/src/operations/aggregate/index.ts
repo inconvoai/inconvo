@@ -21,7 +21,7 @@ export async function aggregate(db: Kysely<any>, query: Query) {
 
   const createAggregateFields = (
     columns: string[] | undefined,
-    aggregateFn: (column: any) => any
+    aggregateFn: (column: any) => any,
   ): [string, any][] | undefined => {
     return columns?.map((columnName) => {
       const column = resolveColumnReference({
@@ -38,31 +38,31 @@ export async function aggregate(db: Kysely<any>, query: Query) {
 
   const avgFields = createAggregateFields(
     operationParameters.avg ?? undefined,
-    (column) => sql`AVG(${column})`
+    (column) => sql`AVG(${column})`,
   );
   const sumFields = createAggregateFields(
     operationParameters.sum ?? undefined,
-    (column) => sql`SUM(${column})`
+    (column) => sql`SUM(${column})`,
   );
   const minFields = createAggregateFields(
     operationParameters.min ?? undefined,
-    (column) => sql`MIN(${column})`
+    (column) => sql`MIN(${column})`,
   );
   const maxFields = createAggregateFields(
     operationParameters.max ?? undefined,
-    (column) => sql`MAX(${column})`
+    (column) => sql`MAX(${column})`,
   );
   const countFields = createAggregateFields(
     operationParameters.count ?? undefined,
-    (column) => sql`COUNT(${column})`
+    (column) => sql`COUNT(${column})`,
   );
   const countDistinctFields = createAggregateFields(
     operationParameters.countDistinct ?? undefined,
-    (column) => sql`COUNT(DISTINCT ${column})`
+    (column) => sql`COUNT(DISTINCT ${column})`,
   );
   const medianFields = createAggregateFields(
     operationParameters.median ?? undefined,
-    (column) => buildMedianExpression(column)
+    (column) => buildMedianExpression(column),
   );
 
   if (avgFields) {
@@ -81,7 +81,9 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     selectFields.push(buildJsonObject(countFields).as("_count"));
   }
   if (countDistinctFields) {
-    selectFields.push(buildJsonObject(countDistinctFields).as("_countDistinct"));
+    selectFields.push(
+      buildJsonObject(countDistinctFields).as("_countDistinct"),
+    );
   }
   if (medianFields) {
     selectFields.push(buildJsonObject(medianFields).as("_median"));
@@ -96,7 +98,7 @@ export async function aggregate(db: Kysely<any>, query: Query) {
         tableName: join.table,
         joinType: join.joinType,
         path: join.path,
-      })
+      }),
     ) ?? [];
 
   for (const joinDescriptor of resolvedJoins) {
@@ -109,11 +111,7 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     dbQuery = dbQuery.select(selectFields);
   }
 
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -127,7 +125,15 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     : undefined;
 
   if (parsedRow) {
-    for (const key of ["_avg", "_sum", "_min", "_max", "_count", "_countDistinct", "_median"]) {
+    for (const key of [
+      "_avg",
+      "_sum",
+      "_min",
+      "_max",
+      "_count",
+      "_countDistinct",
+      "_median",
+    ]) {
       const value = parsedRow[key];
       if (value && typeof value === "object" && !Array.isArray(value)) {
         parsedRow[key] = flattenObjectKeys(value as Record<string, unknown>);
@@ -145,7 +151,7 @@ type AggregateQueryType = Extract<Query, { operation: "aggregate" }>;
 
 function buildAliasToTable(
   baseTable: string,
-  joins: AggregateQueryType["operationParameters"]["joins"]
+  joins: AggregateQueryType["operationParameters"]["joins"],
 ) {
   const map = new Map<string, string>();
   map.set(baseTable, baseTable);
@@ -163,7 +169,7 @@ function splitColumnReference(columnName: string) {
   const lastDot = columnName.lastIndexOf(".");
   if (lastDot === -1) {
     throw new Error(
-      `Column ${columnName} must be qualified as tableOrAlias.column`
+      `Column ${columnName} must be qualified as tableOrAlias.column`,
     );
   }
   const alias = columnName.slice(0, lastDot);

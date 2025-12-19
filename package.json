@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=web --filter=connect-server --filter=sandbox",
+    "dev": "turbo run dev --filter=web... --filter=connect-server... --filter=sandbox...",
+    "dev:connect": "turbo run dev --filter=connect-server...",
     "lint": "turbo run lint --ui=stream",
     "check-types": "turbo run check-types",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",

@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("MSSQL count Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let count: typeof import("~/operations/count")["count"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let count: (typeof import("~/operations/count"))["count"];
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -121,16 +121,15 @@ describe("MSSQL count Operation", () => {
       .select((eb) => [
         sql<number>`CAST(COUNT(p.id) AS INT)`.as("total_product_rows"),
         sql<number>`CAST(COUNT(DISTINCT p.title) AS INT)`.as(
-          "distinct_product_titles"
+          "distinct_product_titles",
         ),
       ])
       .execute();
 
-    const expected =
-      expectedRows[0] ?? {
-        total_product_rows: 0,
-        distinct_product_titles: 0,
-      };
+    const expected = expectedRows[0] ?? {
+      total_product_rows: 0,
+      distinct_product_titles: 0,
+    };
     const result = response.data ?? response;
 
     expect(result).toEqual({
@@ -159,7 +158,9 @@ describe("MSSQL count Operation", () => {
 
     const expectedRows = await db
       .selectFrom("orders")
-      .select(sql<number>`CAST(COUNT(DISTINCT id) AS INT)`.as("distinct_order_ids"))
+      .select(
+        sql<number>`CAST(COUNT(DISTINCT id) AS INT)`.as("distinct_order_ids"),
+      )
       .execute();
 
     const expected = expectedRows[0] ?? { distinct_order_ids: 0 };
@@ -183,7 +184,7 @@ describe("MSSQL count Operation", () => {
           count: null,
           countDistinct: null,
         },
-      })
+      }),
     ).toThrow(/at least one metric/);
   });
 });

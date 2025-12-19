@@ -15,11 +15,11 @@ const SUPPORTED_OPERATORS = new Set([
 export function applyHavingComparison(
   expression: Expression<unknown>,
   operator: string,
-  value: any
+  value: any,
 ): Expression<SqlBool> {
   assert(
     SUPPORTED_OPERATORS.has(operator),
-    `Unsupported having operator ${operator}`
+    `Unsupported having operator ${operator}`,
   );
 
   switch (operator) {
@@ -35,7 +35,7 @@ export function applyHavingComparison(
       }
       return sql<SqlBool>`${expression} IN (${sql.join(
         value.map((v) => sql`${v}`),
-        sql`, `
+        sql`, `,
       )})`;
     case "notIn":
       if (!Array.isArray(value) || value.length === 0) {
@@ -43,7 +43,7 @@ export function applyHavingComparison(
       }
       return sql<SqlBool>`${expression} NOT IN (${sql.join(
         value.map((v) => sql`${v}`),
-        sql`, `
+        sql`, `,
       )})`;
     case "lt":
       return sql<SqlBool>`${expression} < ${value}`;

@@ -2,7 +2,7 @@ import type { SchemaResponse } from "~/types/types";
 import type { ComputedColumn } from "~/types/querySchema";
 
 export function getSchemaComputedColumns(
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): ComputedColumn[] | undefined {
   const computed: ComputedColumn[] = [];
   for (const table of schema.tables) {

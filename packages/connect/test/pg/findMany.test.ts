@@ -14,8 +14,8 @@ const normalizeRows = (rows: any[]) =>
 
 describe("PostgreSQL findMany Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let findMany: typeof import("~/operations/findMany")["findMany"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let findMany: (typeof import("~/operations/findMany"))["findMany"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");

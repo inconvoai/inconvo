@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("MySQL aggregate Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let aggregate: typeof import("~/operations/aggregate")["aggregate"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
 
   beforeAll(async () => {
     loadTestEnv("mysql");
@@ -59,20 +59,20 @@ describe("MySQL aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      9
+      9,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      4
+      4,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
   });
 
@@ -119,20 +119,20 @@ describe("MySQL aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      9
+      9,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      4
+      4,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
   });
 
@@ -195,7 +195,7 @@ describe("MySQL aggregate Operation", () => {
       "data" in response ? (response.data as any) : (response as any);
 
     expect(aggregateResult?._sum?.["orders.quantity"]).toEqual(
-      expect.any(Number)
+      expect.any(Number),
     );
   });
 
@@ -264,7 +264,7 @@ describe("MySQL aggregate Operation", () => {
       .where("orders.organisation_id", "=", 1)
       .where("orders.created_at", ">=", startDate)
       .where(({ eb }) =>
-        eb(sql`LOWER(products.title)`, "like", sql`LOWER(${`%macbook%`})`)
+        eb(sql`LOWER(products.title)`, "like", sql`LOWER(${`%macbook%`})`),
       )
       .select(({ fn }) => [
         fn.sum<number>("orders.quantity").as("sum_orders_quantity"),
@@ -274,7 +274,7 @@ describe("MySQL aggregate Operation", () => {
     const expectedSum = Number(expectedRows[0]?.sum_orders_quantity ?? 0);
     expect(aggregateResult?._sum?.["orders.quantity"]).toBeCloseTo(
       expectedSum,
-      6
+      6,
     );
   });
 
@@ -304,20 +304,20 @@ describe("MySQL aggregate Operation", () => {
       .select([
         sql<number>`COUNT(id)`.as("count_id"),
         sql<number>`COUNT(DISTINCT product_id)`.as("distinct_product_id"),
-        sql<number>`COUNT(DISTINCT organisation_id)`.as("distinct_organisation_id"),
+        sql<number>`COUNT(DISTINCT organisation_id)`.as(
+          "distinct_organisation_id",
+        ),
       ])
       .execute();
 
     const expected = expectedRows[0] ?? {};
 
-    expect(aggregateResult._count["orders.id"]).toBe(
-      Number(expected.count_id)
-    );
+    expect(aggregateResult._count["orders.id"]).toBe(Number(expected.count_id));
     expect(aggregateResult._countDistinct["orders.product_id"]).toBe(
-      Number(expected.distinct_product_id)
+      Number(expected.distinct_product_id),
     );
     expect(aggregateResult._countDistinct["orders.organisation_id"]).toBe(
-      Number(expected.distinct_organisation_id)
+      Number(expected.distinct_organisation_id),
     );
   });
 });

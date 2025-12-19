@@ -70,14 +70,15 @@ export type SQLCastBrackets = {
   expression: SQLCastExpressionAst;
 };
 
-export const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> = z.lazy(() =>
-  z.union([
-    SQLColumnReferenceSchema,
-    SQLValueSchema,
-    SQLOperationSchema,
-    SQLBracketsSchema,
-  ])
-);
+export const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> =
+  z.lazy(() =>
+    z.union([
+      SQLColumnReferenceSchema,
+      SQLValueSchema,
+      SQLOperationSchema,
+      SQLBracketsSchema,
+    ]),
+  );
 
 const SQLOperatorSchema: z.ZodType<SQLOperator> = z.union([
   z.literal("+"),
@@ -108,12 +109,11 @@ const SQLBracketsSchema: z.ZodType<SQLBrackets> = z.object({
   expression: SQLComputedColumnAstSchema,
 });
 
-const SQLCastColumnReferenceSchema: z.ZodType<SQLCastColumnReference> = z.object(
-  {
+const SQLCastColumnReferenceSchema: z.ZodType<SQLCastColumnReference> =
+  z.object({
     type: z.literal("column"),
     name: z.string(),
-  }
-);
+  });
 
 const SQLCastValueSchema: z.ZodType<SQLCastValue> = z.object({
   type: z.literal("value"),
@@ -137,16 +137,16 @@ const SQLCastBracketsSchema: z.ZodType<SQLCastBrackets> = z.object({
   expression: z.lazy(() => SQLCastExpressionAstSchema),
 });
 
-export const SQLCastExpressionAstSchema: z.ZodType<SQLCastExpressionAst> = z.lazy(
-  () =>
+export const SQLCastExpressionAstSchema: z.ZodType<SQLCastExpressionAst> =
+  z.lazy(() =>
     z.union([
       SQLCastColumnReferenceSchema,
       SQLCastValueSchema,
       SQLCastOperationSchema,
       SQLCastCoalesceSchema,
       SQLCastBracketsSchema,
-    ])
-);
+    ]),
+  );
 
 const _computedColumnSchema = z.object({
   name: z.string(),
@@ -170,10 +170,10 @@ export const dateConditionSchema = z
                 operator: z.enum(["gte", "lte", "equals"]),
                 value: z.string(),
               })
-              .strict()
+              .strict(),
           ),
         })
-        .strict()
+        .strict(),
     ),
   })
   .strict()
@@ -218,8 +218,8 @@ const questionConditionSchema: z.ZodType<RecursiveCondition> = z.lazy(() =>
           every: questionConditionSchema.optional(),
           none: questionConditionSchema.optional(),
         }),
-      ])
-    )
+      ]),
+    ),
 );
 
 export const questionConditionsSchema = z
@@ -238,18 +238,18 @@ const dateConditionsQuerySchema = z
           AND: z.array(
             z.record(
               z.string(), // column name
-              z.record(z.string(), z.string()) // operator and value (always string for dates)
-            )
+              z.record(z.string(), z.string()), // operator and value (always string for dates)
+            ),
           ),
         })
-        .strict()
+        .strict(),
     ),
   })
   .strict();
 
 const formattedTableConditionsSchema = z.record(
   z.string(), // column name
-  z.record(z.string(), z.union([z.string(), z.number()])) // operator and value
+  z.record(z.string(), z.union([z.string(), z.number()])), // operator and value
 );
 
 // The complete whereAndArray schema
@@ -258,7 +258,7 @@ export const whereAndArraySchema = z.array(
     formattedTableConditionsSchema,
     questionConditionsSchema,
     dateConditionsQuerySchema,
-  ])
+  ]),
 );
 export type WhereConditions = z.infer<typeof whereAndArraySchema>;
 
@@ -271,9 +271,9 @@ const JsonColumnSchemaSchema = z.array(
         name: z.string(),
         relation: z.null(),
         type: z.string(),
-      })
+      }),
     ),
-  })
+  }),
 );
 
 const baseSchema = {
@@ -287,7 +287,7 @@ const fullyQualifiedColumnSchema = z
   .min(3)
   .refine(
     (value) => value.includes("."),
-    "Join column references must be fully qualified (table.column)."
+    "Join column references must be fully qualified (table.column).",
   );
 
 export const joinPathHopSchema = z
@@ -324,7 +324,7 @@ const selectMapSchema = z
   .record(z.string(), z.array(z.string()).min(1))
   .refine(
     (value) => Object.keys(value).length > 0,
-    "Select map must include at least one table."
+    "Select map must include at least one table.",
   );
 
 const findManySchema = z
@@ -382,10 +382,7 @@ const countSchema = z
     operationParameters: z
       .object({
         joins: z.array(joinDescriptorSchema).nullable().optional(),
-        count: countMetricsArraySchema
-          .nullable()
-          .optional()
-          .default(null),
+        count: countMetricsArraySchema.nullable().optional().default(null),
         countDistinct: countMetricsArraySchema
           .nullable()
           .optional()
@@ -393,8 +390,7 @@ const countSchema = z
       })
       .strict()
       .superRefine((params, ctx) => {
-        const hasCount =
-          Array.isArray(params.count) && params.count.length > 0;
+        const hasCount = Array.isArray(params.count) && params.count.length > 0;
         const hasDistinct =
           Array.isArray(params.countDistinct) &&
           params.countDistinct.length > 0;
@@ -428,7 +424,7 @@ const countRelationsSchema = z
           .array(
             joinDescriptorSchema.extend({
               name: z.string().min(1),
-            })
+            }),
           )
           .nullable()
           .optional(),
@@ -436,7 +432,7 @@ const countRelationsSchema = z
           z.object({
             name: z.string(),
             distinct: z.string().nullable(),
-          })
+          }),
         ),
         orderBy: z
           .object({
@@ -575,29 +571,31 @@ const aggregateGroupReducersObject = z
   .partial()
   .strict();
 
-const aggregateGroupsSchema = z.object({
-  ...baseSchema,
-  operation: z.literal("aggregateGroups"),
-  operationParameters: z
-    .object({
-      joins: z.array(joinDescriptorSchema).nullable().optional(),
-      groupBy: z.array(groupByKeySchema).min(1),
-      having: groupByHavingSchema,
-      aggregates: z
-        .object({
-          groupCount: z.boolean().optional(),
-          count: z.array(z.string()).nullable().optional(),
-          countDistinct: z.array(z.string()).nullable().optional(),
-          sum: z.array(z.string()).nullable().optional(),
-          min: z.array(z.string()).nullable().optional(),
-          max: z.array(z.string()).nullable().optional(),
-          avg: z.array(z.string()).nullable().optional(),
-        })
-        .strict(),
-      reducers: aggregateGroupReducersObject.optional(),
-    })
-    .strict(),
-}).strict();
+const aggregateGroupsSchema = z
+  .object({
+    ...baseSchema,
+    operation: z.literal("aggregateGroups"),
+    operationParameters: z
+      .object({
+        joins: z.array(joinDescriptorSchema).nullable().optional(),
+        groupBy: z.array(groupByKeySchema).min(1),
+        having: groupByHavingSchema,
+        aggregates: z
+          .object({
+            groupCount: z.boolean().optional(),
+            count: z.array(z.string()).nullable().optional(),
+            countDistinct: z.array(z.string()).nullable().optional(),
+            sum: z.array(z.string()).nullable().optional(),
+            min: z.array(z.string()).nullable().optional(),
+            max: z.array(z.string()).nullable().optional(),
+            avg: z.array(z.string()).nullable().optional(),
+          })
+          .strict(),
+        reducers: aggregateGroupReducersObject.optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 const groupBySchema = z
   .object({

@@ -5,8 +5,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery findDistinct Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let findDistinct: typeof import("~/operations/findDistinct")["findDistinct"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let findDistinct: (typeof import("~/operations/findDistinct"))["findDistinct"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);

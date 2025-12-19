@@ -1,7 +1,4 @@
-import type {
-  SQLCastExpressionAst,
-  SQLComputedColumnAst,
-} from "./querySchema";
+import type { SQLCastExpressionAst, SQLComputedColumnAst } from "./querySchema";
 
 export interface SchemaColumn {
   name: string;

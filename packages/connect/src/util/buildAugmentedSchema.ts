@@ -47,7 +47,7 @@ function initRelationRegistry(tables: SchemaTable[]): RelationNameRegistry {
 function getUniqueRelationName(
   registry: RelationNameRegistry,
   tableName: string,
-  desired: string
+  desired: string,
 ): string {
   if (!registry.has(tableName)) {
     registry.set(tableName, new Map());
@@ -91,7 +91,7 @@ function addRelationToTable(
     source?: "FK" | "MANUAL";
     status?: "VALID" | "BROKEN";
     errorTag?: string | null;
-  }
+  },
 ) {
   if (!table.relations) {
     table.relations = [];
@@ -102,7 +102,7 @@ function addRelationToTable(
 function columnsExist(
   table: SchemaTable,
   columns: string[],
-  columnType: "source" | "target"
+  columnType: "source" | "target",
 ) {
   const available = new Set(table.columns.map((column) => column.name));
   const missing = columns.filter((column) => !available.has(column));
@@ -113,14 +113,16 @@ function columnsExist(
         columnType,
         missing,
       },
-      "Augmented schema - manual relation references missing columns"
+      "Augmented schema - manual relation references missing columns",
     );
     return false;
   }
   return true;
 }
 
-function deriveSimpleTypeFromCast(ast: SQLCastExpressionAst): string | undefined {
+function deriveSimpleTypeFromCast(
+  ast: SQLCastExpressionAst,
+): string | undefined {
   switch (ast.type) {
     case "cast": {
       const lowered = ast.as.toLowerCase();
@@ -195,7 +197,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           sourceTable: relation.sourceTable,
           targetTable: relation.targetTable,
         },
-        "Augmented schema - manual relation references unknown table"
+        "Augmented schema - manual relation references unknown table",
       );
       continue;
     }
@@ -207,7 +209,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           sourceTable: relation.sourceTable,
           targetTable: relation.targetTable,
         },
-        "Augmented schema - manual relation column metadata mismatch"
+        "Augmented schema - manual relation column metadata mismatch",
       );
       continue;
     }
@@ -215,12 +217,12 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     const sourceColumnsValid = columnsExist(
       sourceTable,
       relation.sourceColumns,
-      "source"
+      "source",
     );
     const targetColumnsValid = columnsExist(
       targetTable,
       relation.targetColumns,
-      "target"
+      "target",
     );
     if (!sourceColumnsValid || !targetColumnsValid) {
       continue;
@@ -229,7 +231,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     const uniqueRelationName = getUniqueRelationName(
       relationRegistry,
       sourceTable.name,
-      relation.name
+      relation.name,
     );
 
     addRelationToTable(sourceTable, {
@@ -248,7 +250,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     const reverseRelationName = getUniqueRelationName(
       relationRegistry,
       targetTable.name,
-      reverseCandidate
+      reverseCandidate,
     );
 
     addRelationToTable(targetTable, {
@@ -278,7 +280,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           computedColumn: computed.name,
           table: computed.table,
         },
-        "Augmented schema - computed column references unknown table"
+        "Augmented schema - computed column references unknown table",
       );
       continue;
     }
@@ -291,7 +293,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           table: computed.table,
           issues: parsedAst.error.issues,
         },
-        "Augmented schema - computed column has invalid AST"
+        "Augmented schema - computed column has invalid AST",
       );
       continue;
     }
@@ -309,7 +311,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     };
 
     const existingIndex = targetTable.computedColumns.findIndex(
-      (column) => column.name === normalized.name
+      (column) => column.name === normalized.name,
     );
     if (existingIndex >= 0) {
       targetTable.computedColumns[existingIndex] = normalized;
@@ -325,11 +327,12 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
       {
         computedColumns: attachedComputedColumns,
       },
-      "Augmented schema - computed columns augmentation merged"
+      "Augmented schema - computed columns augmentation merged",
     );
   }
 
-  const columnConversions = columnConversionsAugmentation.columnConversions ?? [];
+  const columnConversions =
+    columnConversionsAugmentation.columnConversions ?? [];
   let attachedColumnConversions = 0;
 
   for (const conversion of columnConversions) {
@@ -344,7 +347,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           column: conversion.column,
           table: conversion.table,
         },
-        "Augmented schema - column conversion references unknown table"
+        "Augmented schema - column conversion references unknown table",
       );
       continue;
     }
@@ -357,13 +360,13 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           table: conversion.table,
           issues: parsedAst.error.issues,
         },
-        "Augmented schema - column conversion has invalid AST"
+        "Augmented schema - column conversion has invalid AST",
       );
       continue;
     }
 
     const targetColumn = targetTable.columns.find(
-      (col) => col.name === conversion.column
+      (col) => col.name === conversion.column,
     );
     if (!targetColumn) {
       logger.warn(
@@ -371,7 +374,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
           column: conversion.column,
           table: conversion.table,
         },
-        "Augmented schema - column conversion references unknown column"
+        "Augmented schema - column conversion references unknown column",
       );
       continue;
     }
@@ -390,7 +393,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     };
 
     const existingIndex = targetTable.columnConversions.findIndex(
-      (col) => col.column === normalized.column
+      (col) => col.column === normalized.column,
     );
     if (existingIndex >= 0) {
       targetTable.columnConversions[existingIndex] = normalized;
@@ -410,7 +413,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
       {
         columnConversions: attachedColumnConversions,
       },
-      "Augmented schema - column conversions augmentation merged"
+      "Augmented schema - column conversions augmentation merged",
     );
   }
 

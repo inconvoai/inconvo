@@ -10,10 +10,7 @@ import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
 import { buildDateIntervalExpression } from "~/operations/utils/buildDateIntervalExpression";
 import { buildDateComponentExpressions } from "~/operations/utils/buildDateComponentExpression";
 import assert from "assert";
-import {
-  applyJoinHop,
-  normaliseJoinHop,
-} from "../utils/joinDescriptorHelpers";
+import { applyJoinHop, normaliseJoinHop } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
 import { buildAggregateExpression } from "../utils/aggregateExpressionBuilder";
 import { applyHavingComparison } from "../utils/havingComparison";
@@ -45,37 +42,37 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   const countJsonFields = createAggregationFields(
     operationParameters.count ?? undefined,
     (column) => sql`COUNT(${column})`,
-    schema
+    schema,
   );
 
   const countDistinctJsonFields = createAggregationFields(
     operationParameters.countDistinct ?? undefined,
     (column) => sql`COUNT(DISTINCT ${column})`,
-    schema
+    schema,
   );
 
   const minJsonFields = createAggregationFields(
     operationParameters.min ?? undefined,
     (column) => sql`MIN(${column})`,
-    schema
+    schema,
   );
 
   const maxJsonFields = createAggregationFields(
     operationParameters.max ?? undefined,
     (column) => sql`MAX(${column})`,
-    schema
+    schema,
   );
 
   const sumJsonFields = createAggregationFields(
     operationParameters.sum ?? undefined,
     (column) => sql`SUM(${column})`,
-    schema
+    schema,
   );
 
   const avgJsonFields = createAggregationFields(
     operationParameters.avg ?? undefined,
     (column) => sql`AVG(${column})`,
-    schema
+    schema,
   );
 
   const selectFields: Record<string, any> = {};
@@ -120,7 +117,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     if (key.type === "column") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by (not table.column)"
+        "Invalid column format for group by (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -136,7 +133,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     } else if (key.type === "dateInterval") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by interval (not table.column)"
+        "Invalid column format for group by interval (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -148,7 +145,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
-        key.interval
+        key.interval,
       );
       selections.push(intervalExpression.as(dialectAlias));
       groupByColumns.push(intervalExpression);
@@ -159,7 +156,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     } else if (key.type === "dateComponent") {
       assert(
         key.column.split(".").length === 2,
-        "Invalid column format for group by component (not table.column)"
+        "Invalid column format for group by component (not table.column)",
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
@@ -171,7 +168,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
-        key.component
+        key.component,
       );
       selections.push(select.as(dialectAlias));
       groupByColumns.push(select);
@@ -201,11 +198,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   }
 
   // Apply WHERE conditions before grouping
-  const whereExpr = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereExpr = buildWhereConditions(whereAndArray, table, schema);
   if (whereExpr) {
     dbQuery = dbQuery.where(whereExpr);
   }
@@ -229,27 +222,27 @@ export async function groupBy(db: Kysely<any>, query: Query) {
         const expression = groupKeyExpressions.get(condition.key);
         assert(
           expression,
-          `HAVING groupKey ${condition.key} must reference a defined groupBy alias`
+          `HAVING groupKey ${condition.key} must reference a defined groupBy alias`,
         );
         havingExpressions.push(
           applyHavingComparison(
             expression.order,
             condition.operator,
-            condition.value
-          )
+            condition.value,
+          ),
         );
       } else {
         const aggregateExpr = buildAggregateExpression(
           condition.function,
           condition.column,
-          schema
+          schema,
         );
         havingExpressions.push(
           applyHavingComparison(
             aggregateExpr,
             condition.operator,
-            condition.value
-          )
+            condition.value,
+          ),
         );
       }
     }
@@ -273,13 +266,13 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     const expression = groupKeyExpressions.get(orderBy.key);
     assert(
       expression,
-      `Order By key ${orderBy.key} must reference a defined groupBy key`
+      `Order By key ${orderBy.key} must reference a defined groupBy key`,
     );
     dbQuery = dbQuery.orderBy(expression.order, dir);
   } else {
     assert(
       orderBy.column.split(".").length === 2,
-      "Order By column must be in the format table.column"
+      "Order By column must be in the format table.column",
     );
     const [tableName, columnName] = orderBy.column.split(".");
     const column = getColumnFromTable({
@@ -317,12 +310,17 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   const response = await dbQuery.execute();
   const normalisedRows = response.map((row) => {
     const parsed = parseJsonStrings(row) as Record<string, unknown>;
-    for (const key of ["_avg", "_sum", "_min", "_max", "_count", "_countDistinct"]) {
+    for (const key of [
+      "_avg",
+      "_sum",
+      "_min",
+      "_max",
+      "_count",
+      "_countDistinct",
+    ]) {
       const value = parsed[key];
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        parsed[key] = flattenObjectKeys(
-          value as Record<string, unknown>
-        );
+        parsed[key] = flattenObjectKeys(value as Record<string, unknown>);
       }
     }
     aliasRenameMap.forEach((original, sanitized) => {

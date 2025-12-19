@@ -29,8 +29,8 @@ const MONTH_ORDER = [
 
 describe("PostgreSQL groupBy dateComponent buckets", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let groupBy: typeof import("~/operations/groupBy")["groupBy"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -90,7 +90,7 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
     const orderIndexes = seenOrder.map((label) => DAY_ORDER.indexOf(label));
     expect(orderIndexes).not.toContain(-1);
     expect([...orderIndexes]).toEqual(
-      [...orderIndexes].slice().sort((a, b) => a - b)
+      [...orderIndexes].slice().sort((a, b) => a - b),
     );
   });
 
@@ -136,7 +136,7 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
     const orderIndexes = seenOrder.map((label) => MONTH_ORDER.indexOf(label));
     expect(orderIndexes).not.toContain(-1);
     expect([...orderIndexes]).toEqual(
-      [...orderIndexes].slice().sort((a, b) => a - b)
+      [...orderIndexes].slice().sort((a, b) => a - b),
     );
   });
 
@@ -180,12 +180,10 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
 
     const seenOrder = rows.map((row: any) => row.quarter_bucket) as string[];
     const quarterOrder = ["Q1", "Q2", "Q3", "Q4"];
-    const orderIndexes = seenOrder.map((label) =>
-      quarterOrder.indexOf(label)
-    );
+    const orderIndexes = seenOrder.map((label) => quarterOrder.indexOf(label));
     expect(orderIndexes).not.toContain(-1);
     expect([...orderIndexes]).toEqual(
-      [...orderIndexes].slice().sort((a, b) => a - b)
+      [...orderIndexes].slice().sort((a, b) => a - b),
     );
   });
 });

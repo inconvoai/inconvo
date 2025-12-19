@@ -1,8 +1,7 @@
 import { sql } from "kysely";
 import { env } from "~/env";
 
-const getDialect = () =>
-  process.env.DATABASE_DIALECT || env.DATABASE_DIALECT;
+const getDialect = () => process.env.DATABASE_DIALECT || env.DATABASE_DIALECT;
 
 export function buildJsonObject(fields: [string, any][]): any {
   if (fields.length === 0) return null;
@@ -23,8 +22,8 @@ export function buildJsonObject(fields: [string, any][]): any {
   } else if (dialect === "mssql") {
     // For MSSQL, we build JSON using FOR JSON PATH
     // We need to select each field with an alias that becomes the JSON key
-    const selections = fields.map(([name, value]) =>
-      sql`${value} AS ${sql.id(name)}`
+    const selections = fields.map(
+      ([name, value]) => sql`${value} AS ${sql.id(name)}`,
     );
     return sql`(SELECT ${sql.join(selections, sql`, `)} FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)`;
   } else if (dialect === "bigquery") {

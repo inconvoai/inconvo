@@ -3,7 +3,7 @@ export function parseJsonStrings<T>(value: T): T {
 }
 
 export function flattenObjectKeys(
-  input: Record<string, unknown> | undefined
+  input: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!input) return input;
   return flattenRecursively(input, "");
@@ -45,7 +45,7 @@ function parseJsonRecursively(value: any): any {
 
 function flattenRecursively(
   value: Record<string, unknown>,
-  prefix: string
+  prefix: string,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -60,9 +60,5 @@ function flattenRecursively(
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

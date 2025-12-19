@@ -4,12 +4,12 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery STRUCT Field Support", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let findMany: typeof import("~/operations/findMany")["findMany"];
-  let groupBy: typeof import("~/operations/groupBy")["groupBy"];
-  let count: typeof import("~/operations/count")["count"];
-  let getCachedSchema: typeof import("~/util/schemaCache")["getCachedSchema"];
-  let clearSchemaCache: typeof import("~/util/schemaCache")["clearSchemaCache"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
+  let count: (typeof import("~/operations/count"))["count"];
+  let getCachedSchema: (typeof import("~/util/schemaCache"))["getCachedSchema"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -18,9 +18,8 @@ describe("BigQuery STRUCT Field Support", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
-    ({ getCachedSchema, clearSchemaCache } = await import(
-      "~/util/schemaCache"
-    ));
+    ({ getCachedSchema, clearSchemaCache } =
+      await import("~/util/schemaCache"));
     await clearSchemaCache();
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
@@ -69,7 +68,7 @@ describe("BigQuery STRUCT Field Support", () => {
 
       const eventsTable = schema.tables.find((t) => t.name === "events");
       const paymentMethodCol = eventsTable.columns.find(
-        (c) => c.name === "properties#payment_method"
+        (c) => c.name === "properties#payment_method",
       );
 
       expect(paymentMethodCol).toBeDefined();
@@ -89,7 +88,7 @@ describe("BigQuery STRUCT Field Support", () => {
       // The parent STRUCT columns should not be included directly
       // Only the nested fields with # notation should be present
       const structParentColumns = columnNames.filter(
-        (name) => name === "properties" || name === "raw_properties"
+        (name) => name === "properties" || name === "raw_properties",
       );
       expect(structParentColumns.length).toBe(0);
     });

@@ -3,7 +3,10 @@ import { env } from "~/env";
 
 type SupportedInterval = "day" | "week" | "month" | "quarter" | "year" | "hour";
 
-export function buildDateIntervalExpression(column: any, interval: SupportedInterval) {
+export function buildDateIntervalExpression(
+  column: any,
+  interval: SupportedInterval,
+) {
   if (env.DATABASE_DIALECT === "postgresql") {
     switch (interval) {
       case "day":
@@ -67,6 +70,6 @@ export function buildDateIntervalExpression(column: any, interval: SupportedInte
   }
 
   throw new Error(
-    "Unsupported database provider. URL must start with 'mysql', 'postgres', 'mssql', or 'bigquery'"
+    "Unsupported database provider. URL must start with 'mysql', 'postgres', 'mssql', or 'bigquery'",
   );
 }

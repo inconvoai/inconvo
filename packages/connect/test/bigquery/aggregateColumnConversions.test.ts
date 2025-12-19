@@ -8,12 +8,12 @@ import {
 } from "../utils/augmentations";
 
 describe("BigQuery aggregate with column conversions", () => {
-  let aggregate: typeof import("~/operations/aggregate")["aggregate"];
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let clearSchemaCache: typeof import("~/util/schemaCache")["clearSchemaCache"];
-  let clearAugmentedSchemaCache: typeof import("~/util/augmentedSchemaCache")["clearAugmentedSchemaCache"];
-  let getAugmentedSchema: typeof import("~/util/augmentedSchemaCache")["getAugmentedSchema"];
-  let getSchemaColumnConversions: typeof import("~/util/columnConversions")["getSchemaColumnConversions"];
+  let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache: (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"];
+  let getAugmentedSchema: (typeof import("~/util/augmentedSchemaCache"))["getAugmentedSchema"];
+  let getSchemaColumnConversions: (typeof import("~/util/columnConversions"))["getSchemaColumnConversions"];
   let db: import("kysely").Kysely<any>;
 
   // Use the runtime augmentations dir configured by jest.setup (falls back to a temp under /test)
@@ -56,9 +56,8 @@ describe("BigQuery aggregate with column conversions", () => {
     });
 
     ({ clearSchemaCache } = await import("~/util/schemaCache"));
-    ({ clearAugmentedSchemaCache } = await import(
-      "~/util/augmentedSchemaCache"
-    ));
+    ({ clearAugmentedSchemaCache } =
+      await import("~/util/augmentedSchemaCache"));
     await clearSchemaCache();
     await clearAugmentedSchemaCache();
 
@@ -86,7 +85,7 @@ describe("BigQuery aggregate with column conversions", () => {
     const schema = await getAugmentedSchema();
     const conversions = getSchemaColumnConversions(schema);
     const hasConversion = conversions?.some(
-      (c) => c.table.name === "events" && c.column === "properties#total_price"
+      (c) => c.table.name === "events" && c.column === "properties#total_price",
     );
     expect(hasConversion).toBe(true);
 

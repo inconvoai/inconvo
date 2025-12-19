@@ -3,16 +3,22 @@ import { sql, type Expression } from "kysely";
 import { getColumnFromTable } from "./computedColumns";
 import type { SchemaResponse } from "~/types/types";
 
-export type AggregateFn = "count" | "countDistinct" | "sum" | "min" | "max" | "avg";
+export type AggregateFn =
+  | "count"
+  | "countDistinct"
+  | "sum"
+  | "min"
+  | "max"
+  | "avg";
 
 export function buildAggregateExpression(
   fn: AggregateFn,
   columnRef: string,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Expression<unknown> {
   assert(
     columnRef.split(".").length === 2,
-    "Aggregate column must be in the format table.column"
+    "Aggregate column must be in the format table.column",
   );
   const [tableName, columnName] = columnRef.split(".");
   const column = getColumnFromTable({

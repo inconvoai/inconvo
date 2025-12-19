@@ -41,13 +41,13 @@ export const env = createEnv({
         (value) =>
           Boolean(
             value.INCONVO_BIGQUERY_CREDENTIALS_JSON ||
-              value.INCONVO_BIGQUERY_KEYFILE
+            value.INCONVO_BIGQUERY_KEYFILE,
           ),
         {
           path: ["INCONVO_BIGQUERY_CREDENTIALS_JSON"],
           message:
             "Provide INCONVO_BIGQUERY_CREDENTIALS_JSON or INCONVO_BIGQUERY_KEYFILE",
-        }
+        },
       );
 
     return z.discriminatedUnion("DATABASE_DIALECT", [

@@ -10,7 +10,7 @@ type _FilterObject = Record<string, unknown>;
 // Avoids the RawBuilder await issue by using a loop instead of reduce
 function combineSqlExpressions(
   expressions: Expression<SqlBool>[],
-  operator: "AND" | "OR"
+  operator: "AND" | "OR",
 ): Expression<SqlBool> {
   if (expressions.length === 0) {
     throw new Error("Cannot combine empty array of expressions");
@@ -35,7 +35,7 @@ function combineSqlExpressions(
 export function buildWhereConditions(
   whereAndArray: WhereConditions,
   tableName: string,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Expression<SqlBool> | undefined {
   if (!whereAndArray || whereAndArray.length === 0) {
     return undefined;
@@ -75,7 +75,7 @@ export function buildWhereConditions(
 function parseConditionObject(
   condition: any,
   tableName: string,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Expression<SqlBool> | undefined {
   if (!condition || typeof condition !== "object") {
     return undefined;
@@ -166,13 +166,13 @@ function parseConditionObject(
 
     // Check if this column is a relation
     const isRelation = currentTable?.relations?.some(
-      (r: any) => r.name === column
+      (r: any) => r.name === column,
     );
 
     if (operators === null) {
       // Column IS NULL
       columnConditions.push(
-        buildOperatorCondition(column, "equals", null, tableName, schema)
+        buildOperatorCondition(column, "equals", null, tableName, schema),
       );
     } else if (typeof operators === "object" && !Array.isArray(operators)) {
       // Check if this is a relation filter
@@ -182,7 +182,7 @@ function parseConditionObject(
           column,
           operators,
           tableName,
-          schema
+          schema,
         );
         if (relationCondition) {
           columnConditions.push(relationCondition);
@@ -202,14 +202,20 @@ function parseConditionObject(
               column,
               { [operator]: value },
               tableName,
-              schema
+              schema,
             );
             if (relationCondition) {
               columnConditions.push(relationCondition);
             }
           } else {
             columnConditions.push(
-              buildOperatorCondition(column, operator, value, tableName, schema)
+              buildOperatorCondition(
+                column,
+                operator,
+                value,
+                tableName,
+                schema,
+              ),
             );
           }
         }
@@ -217,7 +223,7 @@ function parseConditionObject(
     } else {
       // Direct value comparison (implicit equals)
       columnConditions.push(
-        buildOperatorCondition(column, "equals", operators, tableName, schema)
+        buildOperatorCondition(column, "equals", operators, tableName, schema),
       );
     }
   }
@@ -238,7 +244,7 @@ function buildRelationFilter(
   relationName: string,
   filterObj: Record<string, any>,
   currentTableName: string,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Expression<SqlBool> | undefined {
   // Use the schema passed from above
   const currentTable = schema.tables.find((t) => t.name === currentTableName);
@@ -249,7 +255,7 @@ function buildRelationFilter(
 
   // Find the relation by name
   const relation = currentTable.relations?.find(
-    (r: any) => r.name === relationName
+    (r: any) => r.name === relationName,
   );
 
   if (!relation) {
@@ -282,8 +288,8 @@ function buildRelationFilter(
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
         sql<SqlBool>`${sql.ref(
-          `${targetTable}.${targetColumns[i]}`
-        )} = ${sql.ref(`${currentTableName}.${sourceCol}`)}`
+          `${targetTable}.${targetColumns[i]}`,
+        )} = ${sql.ref(`${currentTableName}.${sourceCol}`)}`,
     );
     if (conditions.length === 1) {
       joinCondition = conditions[0];
@@ -302,8 +308,8 @@ function buildRelationFilter(
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
         sql<SqlBool>`${sql.ref(`${currentTableName}.${sourceCol}`)} = ${sql.ref(
-          `${targetTable}.${targetColumns[i]}`
-        )}`
+          `${targetTable}.${targetColumns[i]}`,
+        )}`,
     );
     if (conditions.length === 1) {
       joinCondition = conditions[0];
@@ -329,7 +335,7 @@ function buildRelationFilter(
     const nestedWhere = parseConditionObject(
       nestedCondition,
       targetTable,
-      schema
+      schema,
     );
 
     // Build the EXISTS/NOT EXISTS subquery
@@ -373,7 +379,7 @@ function buildRelationFilter(
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`
+              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
           );
           return combineSqlExpressions(notNullChecks, "AND");
         }
@@ -391,7 +397,7 @@ function buildRelationFilter(
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`
+              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
           );
           return nullChecks.length === 1
             ? nullChecks[0]
@@ -427,7 +433,7 @@ function buildRelationFilter(
         // Check if foreign key is null
         const nullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`
+            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
         );
         return nullChecks.length === 1
           ? nullChecks[0]
@@ -436,7 +442,7 @@ function buildRelationFilter(
         // Empty object - check if foreign key is not null
         const notNullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`
+            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
         );
         return combineSqlExpressions(notNullChecks, "AND");
       } else {
@@ -444,7 +450,7 @@ function buildRelationFilter(
         const nestedWhere = parseConditionObject(
           nestedCondition,
           targetTable,
-          schema
+          schema,
         );
         if (nestedWhere) {
           return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
@@ -452,7 +458,7 @@ function buildRelationFilter(
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`
+              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
           );
           return combineSqlExpressions(notNullChecks, "AND");
         }
@@ -468,7 +474,7 @@ function buildRelationFilter(
         // Check if foreign key is not null
         const notNullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`
+            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
         );
         return combineSqlExpressions(notNullChecks, "AND");
       } else {
@@ -476,7 +482,7 @@ function buildRelationFilter(
         const nestedWhere = parseConditionObject(
           nestedCondition,
           targetTable,
-          schema
+          schema,
         );
         if (nestedWhere) {
           return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
@@ -484,7 +490,7 @@ function buildRelationFilter(
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`
+              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
           );
           return nullChecks.length === 1
             ? nullChecks[0]
@@ -502,7 +508,7 @@ function buildOperatorCondition(
   operator: string,
   value: any,
   tableName: string,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Expression<SqlBool> {
   const columnRef = getColumnFromTable({
     columnName: column,
@@ -542,7 +548,7 @@ function buildOperatorCondition(
       }
       return sql<SqlBool>`${columnRef} IN (${sql.join(
         processedValue.map((v) => sql`${v}`),
-        sql`, `
+        sql`, `,
       )})`;
 
     case "notIn":
@@ -551,7 +557,7 @@ function buildOperatorCondition(
       }
       return sql<SqlBool>`${columnRef} NOT IN (${sql.join(
         processedValue.map((v) => sql`${v}`),
-        sql`, `
+        sql`, `,
       )})`;
 
     case "lt":

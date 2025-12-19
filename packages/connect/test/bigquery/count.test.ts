@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("BigQuery count Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let count: typeof import("~/operations/count")["count"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let count: (typeof import("~/operations/count"))["count"];
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -121,9 +121,7 @@ describe("BigQuery count Operation", () => {
       .innerJoin("products as p", "p.id", "o.product_id")
       .select((eb) => [
         eb.fn.count("p.id").as("total_product_rows"),
-        sql<number>`COUNT(DISTINCT p.title)`.as(
-          "distinct_product_titles"
-        ),
+        sql<number>`COUNT(DISTINCT p.title)`.as("distinct_product_titles"),
       ])
       .execute();
 
@@ -139,9 +137,7 @@ describe("BigQuery count Operation", () => {
         "orders.products.id": Number(totals.total_product_rows ?? 0),
       },
       _countDistinct: {
-        "orders.products.title": Number(
-          totals.distinct_product_titles ?? 0
-        ),
+        "orders.products.title": Number(totals.distinct_product_titles ?? 0),
       },
     });
   });
@@ -186,7 +182,7 @@ describe("BigQuery count Operation", () => {
           count: null,
           countDistinct: null,
         },
-      })
+      }),
     ).toThrow(/at least one metric/);
   });
 });

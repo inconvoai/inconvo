@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("PostgreSQL aggregateGroups Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let aggregateGroups: typeof import("~/operations/aggregateGroups")["aggregateGroups"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let aggregateGroups: (typeof import("~/operations/aggregateGroups"))["aggregateGroups"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -14,7 +14,8 @@ describe("PostgreSQL aggregateGroups Operation", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
-    aggregateGroups = (await import("~/operations/aggregateGroups")).aggregateGroups;
+    aggregateGroups = (await import("~/operations/aggregateGroups"))
+      .aggregateGroups;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });
@@ -32,7 +33,13 @@ describe("PostgreSQL aggregateGroups Operation", () => {
         joins: null,
         groupBy: [{ type: "column", column: "orders.user_id" }],
         having: [
-          { type: "aggregate", function: "count", column: "orders.id", operator: "gt", value: 2 },
+          {
+            type: "aggregate",
+            function: "count",
+            column: "orders.id",
+            operator: "gt",
+            value: 2,
+          },
         ],
         aggregates: { groupCount: true },
       },
@@ -60,9 +67,19 @@ describe("PostgreSQL aggregateGroups Operation", () => {
         joins: null,
         groupBy: [{ type: "column", column: "orders.user_id" }],
         having: [
-          { type: "aggregate", function: "count", column: "orders.id", operator: "gt", value: 1 },
+          {
+            type: "aggregate",
+            function: "count",
+            column: "orders.id",
+            operator: "gt",
+            value: 1,
+          },
         ],
-        aggregates: { groupCount: true, count: ["orders.id"], sum: ["orders.subtotal"] },
+        aggregates: {
+          groupCount: true,
+          count: ["orders.id"],
+          sum: ["orders.subtotal"],
+        },
         reducers: { count: ["sum", "max"], sum: ["sum", "avg"] },
       },
     };
@@ -84,15 +101,15 @@ describe("PostgreSQL aggregateGroups Operation", () => {
     const expectedGroupCount = grouped.length;
     const totalOrderCount = grouped.reduce(
       (acc, row) => acc + Number(row.count_id ?? 0),
-      0
+      0,
     );
     const maxOrderCount = grouped.reduce(
       (acc, row) => Math.max(acc, Number(row.count_id ?? 0)),
-      0
+      0,
     );
     const totalRevenue = grouped.reduce(
       (acc, row) => acc + Number(row.sum_subtotal ?? 0),
-      0
+      0,
     );
     const avgRevenue = grouped.length ? totalRevenue / grouped.length : 0;
 

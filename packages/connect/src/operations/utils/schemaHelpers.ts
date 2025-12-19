@@ -4,7 +4,7 @@ import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
 import { env } from "~/env";
 
 export async function getRelatedTableNameFromPath(
-  path: string[]
+  path: string[],
 ): Promise<string> {
   if (path.length < 2) {
     if (!path[0]) {
@@ -26,10 +26,10 @@ export async function getRelatedTableNameFromPath(
 
     const relations = table.relations || [];
     const directMatch = relations.find(
-      (relation: any) => relation.name === nextRelationName
+      (relation: any) => relation.name === nextRelationName,
     );
     const tableMatch = relations.find(
-      (relation: any) => relation.targetTable === nextRelationName
+      (relation: any) => relation.targetTable === nextRelationName,
     );
     const relation = directMatch ?? tableMatch;
 
@@ -62,7 +62,7 @@ export async function getAUniqueKeyInTable(tableName: string): Promise<string> {
 
 export function getSchemaBoundDb<DB>(
   db: Kysely<DB>,
-  schema: SchemaResponse
+  schema: SchemaResponse,
 ): Kysely<DB> {
   if (!schema.databaseSchema || env.DATABASE_DIALECT === "bigquery") {
     return db;

@@ -28,24 +28,27 @@ export async function countRelations(db: Kysely<any>, query: Query) {
   const schema = await getAugmentedSchema();
 
   const joinDescriptors = new Map(
-    (operationParameters.joins ?? []).map((join) => [join.name ?? join.table, join])
+    (operationParameters.joins ?? []).map((join) => [
+      join.name ?? join.table,
+      join,
+    ]),
   );
 
   const plans: RelationCountPlan[] = relationsToCount.map((relation) => {
     const joinDescriptor = joinDescriptors.get(relation.name);
     if (!joinDescriptor) {
       throw new Error(
-        `Join descriptor for relation ${relation.name} not provided in joins array.`
+        `Join descriptor for relation ${relation.name} not provided in joins array.`,
       );
     }
     if (joinDescriptor.path.length === 0) {
       throw new Error(
-        `Join descriptor for relation ${relation.name} must include at least one hop.`
+        `Join descriptor for relation ${relation.name} must include at least one hop.`,
       );
     }
     if (joinDescriptor.path.length > 1) {
       throw new Error(
-        `countRelations currently supports direct relations only. Found ${joinDescriptor.path.length} hops for ${relation.name}.`
+        `countRelations currently supports direct relations only. Found ${joinDescriptor.path.length} hops for ${relation.name}.`,
       );
     }
 
@@ -55,14 +58,14 @@ export async function countRelations(db: Kysely<any>, query: Query) {
 
     if (!sourceColumns.every((column) => column.tableName === table)) {
       throw new Error(
-        `Relation ${relation.name} must originate from base table ${table}.`
+        `Relation ${relation.name} must originate from base table ${table}.`,
       );
     }
 
     const targetTableName = targetColumns[0]?.tableName;
     if (!targetTableName) {
       throw new Error(
-        `Unable to determine target table for relation ${relation.name}.`
+        `Unable to determine target table for relation ${relation.name}.`,
       );
     }
 
@@ -75,7 +78,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
       ? parseQualifiedColumn(
           relation.distinct.includes(".")
             ? relation.distinct
-            : `${targetTableName}.${relation.distinct}`
+            : `${targetTableName}.${relation.distinct}`,
         )
       : null;
 
@@ -84,7 +87,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
       distinctColumnQualified.tableName !== targetTableName
     ) {
       throw new Error(
-        `Distinct column ${relation.distinct} must belong to relation table ${targetTableName}.`
+        `Distinct column ${relation.distinct} must belong to relation table ${targetTableName}.`,
       );
     }
 
@@ -93,25 +96,25 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     for (const column of targetColumns) {
       cte = cte.select(
         sql`${sql.ref(`${targetTableName}.${column.columnName}`)}`.as(
-          column.columnName
-        )
+          column.columnName,
+        ),
       );
     }
 
     const countExpression = distinctColumnQualified
       ? sql`COUNT(DISTINCT ${sql.ref(
-          `${distinctColumnQualified.tableName}.${distinctColumnQualified.columnName}`
+          `${distinctColumnQualified.tableName}.${distinctColumnQualified.columnName}`,
         )})`
       : sql`COUNT(${sql.ref(
-          `${targetTableName}.${targetColumns[0].columnName}`
+          `${targetTableName}.${targetColumns[0].columnName}`,
         )})`;
 
     cte = cte
       .select(countExpression.as(countColumnAlias))
       .groupBy(
         targetColumns.map((column) =>
-          sql.ref(`${targetTableName}.${column.columnName}`)
-        ) as any
+          sql.ref(`${targetTableName}.${column.columnName}`),
+        ) as any,
       );
 
     return {
@@ -148,16 +151,12 @@ export async function countRelations(db: Kysely<any>, query: Query) {
   for (const plan of plans) {
     selectBuilder = selectBuilder.select(
       sql`COALESCE(${sql.ref(`${plan.cteName}.${plan.countColumnAlias}`)}, 0)`.as(
-        plan.countColumnAlias
-      )
+        plan.countColumnAlias,
+      ),
     );
   }
 
-  const whereExpr = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema
-  );
+  const whereExpr = buildWhereConditions(whereAndArray, table, schema);
   if (whereExpr) {
     selectBuilder = selectBuilder.where(whereExpr);
   }
@@ -167,13 +166,13 @@ export async function countRelations(db: Kysely<any>, query: Query) {
       let joinBuilder = join.onRef(
         `${table}.${plan.sourceColumns[0].columnName}`,
         "=",
-        `${plan.cteName}.${plan.targetColumns[0].columnName}`
+        `${plan.cteName}.${plan.targetColumns[0].columnName}`,
       );
       for (let index = 1; index < plan.sourceColumns.length; index++) {
         joinBuilder = joinBuilder.onRef(
           `${table}.${plan.sourceColumns[index].columnName}`,
           "=",
-          `${plan.cteName}.${plan.targetColumns[index].columnName}`
+          `${plan.cteName}.${plan.targetColumns[index].columnName}`,
         );
       }
       return joinBuilder;
@@ -187,7 +186,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     }
     selectBuilder = selectBuilder.orderBy(
       sql.ref(plan.countColumnAlias),
-      orderBy.direction
+      orderBy.direction,
     );
   }
 
@@ -200,9 +199,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     const entry: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(row)) {
-      const matchingPlan = plans.find(
-        (plan) => plan.countColumnAlias === key
-      );
+      const matchingPlan = plans.find((plan) => plan.countColumnAlias === key);
 
       if (matchingPlan) {
         entry[key] = Number(value ?? 0);

@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("PostgreSQL count Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let count: typeof import("~/operations/count")["count"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let count: (typeof import("~/operations/count"))["count"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -120,17 +120,14 @@ describe("PostgreSQL count Operation", () => {
       .innerJoin("products as p", "p.id", "o.product_id")
       .select((eb) => [
         sql<number>`COUNT(p.id)::int`.as("total_product_rows"),
-        sql<number>`COUNT(DISTINCT p.title)::int`.as(
-          "distinct_product_titles"
-        ),
+        sql<number>`COUNT(DISTINCT p.title)::int`.as("distinct_product_titles"),
       ])
       .execute();
 
-    const expected =
-      expectedRows[0] ?? {
-        total_product_rows: 0,
-        distinct_product_titles: 0,
-      };
+    const expected = expectedRows[0] ?? {
+      total_product_rows: 0,
+      distinct_product_titles: 0,
+    };
     const result = response.data ?? response;
 
     expect(result).toEqual({
@@ -183,7 +180,7 @@ describe("PostgreSQL count Operation", () => {
           count: null,
           countDistinct: null,
         },
-      })
+      }),
     ).toThrow(/at least one metric/);
   });
 });

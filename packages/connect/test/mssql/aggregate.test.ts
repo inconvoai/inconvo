@@ -4,8 +4,8 @@ import { loadTestEnv } from "../loadTestEnv";
 
 describe("MSSQL aggregate Operation", () => {
   let db: Kysely<any>;
-  let QuerySchema: typeof import("~/types/querySchema")["QuerySchema"];
-  let aggregate: typeof import("~/operations/aggregate")["aggregate"];
+  let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
+  let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -59,20 +59,20 @@ describe("MSSQL aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      9
+      9,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      4
+      4,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
   });
 
@@ -119,20 +119,20 @@ describe("MSSQL aggregate Operation", () => {
 
     expect(aggregateResult._avg["orders.subtotal"]).toBeCloseTo(
       Number(expected.avg_subtotal),
-      9
+      9,
     );
     expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
       Number(expected.sum_subtotal),
-      4
+      4,
     );
     expect(aggregateResult._min["orders.subtotal"]).toBe(
-      Number(expected.min_subtotal)
+      Number(expected.min_subtotal),
     );
     expect(aggregateResult._max["orders.subtotal"]).toBe(
-      Number(expected.max_subtotal)
+      Number(expected.max_subtotal),
     );
     expect(aggregateResult._count["orders.subtotal"]).toBe(
-      Number(expected.count_subtotal)
+      Number(expected.count_subtotal),
     );
   });
 
@@ -162,20 +162,20 @@ describe("MSSQL aggregate Operation", () => {
       .select([
         sql<number>`COUNT(id)`.as("count_id"),
         sql<number>`COUNT(DISTINCT product_id)`.as("distinct_product_id"),
-        sql<number>`COUNT(DISTINCT organisation_id)`.as("distinct_organisation_id"),
+        sql<number>`COUNT(DISTINCT organisation_id)`.as(
+          "distinct_organisation_id",
+        ),
       ])
       .execute();
 
     const expected = expectedRows[0] ?? {};
 
-    expect(aggregateResult._count["orders.id"]).toBe(
-      Number(expected.count_id)
-    );
+    expect(aggregateResult._count["orders.id"]).toBe(Number(expected.count_id));
     expect(aggregateResult._countDistinct["orders.product_id"]).toBe(
-      Number(expected.distinct_product_id)
+      Number(expected.distinct_product_id),
     );
     expect(aggregateResult._countDistinct["orders.organisation_id"]).toBe(
-      Number(expected.distinct_organisation_id)
+      Number(expected.distinct_organisation_id),
     );
   });
 });

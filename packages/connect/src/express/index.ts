@@ -55,7 +55,7 @@ export async function inconvo(): Promise<Router> {
           safeJsonStringify({
             ok: true,
             duration: Date.now() - startedAt,
-          })
+          }),
         );
     } catch (error) {
       logger.error({ error }, "GET /healthz - health check failed");
@@ -67,7 +67,7 @@ export async function inconvo(): Promise<Router> {
           safeJsonStringify({
             ok: false,
             error: "Database health check failed",
-          })
+          }),
         );
     }
   });
@@ -115,9 +115,9 @@ export async function inconvo(): Promise<Router> {
               structParent: _structParent,
               structFieldPath: _structFieldPath,
               ...column
-            }) => column
+            }) => column,
           ),
-        })
+        }),
       );
       const publicSchema = {
         tables: sanitizedTables,
@@ -152,7 +152,7 @@ export async function inconvo(): Promise<Router> {
       if (error instanceof ZodError) {
         logger.warn(
           { issues: error.issues },
-          "POST /sync/custom-relations - invalid payload"
+          "POST /sync/custom-relations - invalid payload",
         );
         return res
           .status(400)
@@ -164,7 +164,7 @@ export async function inconvo(): Promise<Router> {
         .status(500)
         .setHeader("Content-Type", "application/json")
         .send(
-          safeJsonStringify({ error: "Failed to persist custom relations" })
+          safeJsonStringify({ error: "Failed to persist custom relations" }),
         );
     }
   });
@@ -185,7 +185,7 @@ export async function inconvo(): Promise<Router> {
       if (error instanceof ZodError) {
         logger.warn(
           { issues: error.issues },
-          "POST /sync/computed-columns - invalid payload"
+          "POST /sync/computed-columns - invalid payload",
         );
         return res
           .status(400)
@@ -197,7 +197,7 @@ export async function inconvo(): Promise<Router> {
         .status(500)
         .setHeader("Content-Type", "application/json")
         .send(
-          safeJsonStringify({ error: "Failed to persist computed columns" })
+          safeJsonStringify({ error: "Failed to persist computed columns" }),
         );
     }
   });
@@ -220,7 +220,7 @@ export async function inconvo(): Promise<Router> {
         if (error instanceof ZodError) {
           logger.warn(
             { issues: error.issues },
-            "POST /sync/column-conversions - invalid payload"
+            "POST /sync/column-conversions - invalid payload",
           );
           return res
             .status(400)
@@ -234,10 +234,10 @@ export async function inconvo(): Promise<Router> {
           .send(
             safeJsonStringify({
               error: "Failed to persist column conversions",
-            })
+            }),
           );
       }
-    }
+    },
   );
 
   router.post("/", async (req: Request, res: Response) => {
@@ -281,7 +281,7 @@ export async function inconvo(): Promise<Router> {
       const duration = Date.now() - startTime;
       logger.info(
         { duration },
-        `POST / - Operation completed in ${duration}ms`
+        `POST / - Operation completed in ${duration}ms`,
       );
       res.setHeader("Content-Type", "application/json");
       return res.send(safeJsonStringify(response));
@@ -290,7 +290,7 @@ export async function inconvo(): Promise<Router> {
       if (error instanceof ZodError) {
         logger.error(
           { duration, issues: error.issues },
-          `POST / - Validation error after ${duration}ms`
+          `POST / - Validation error after ${duration}ms`,
         );
         return res
           .status(400)
@@ -299,7 +299,7 @@ export async function inconvo(): Promise<Router> {
       }
       logger.error(
         { error, duration },
-        `POST / - Operation failed after ${duration}ms`
+        `POST / - Operation failed after ${duration}ms`,
       );
       res
         .status(500)

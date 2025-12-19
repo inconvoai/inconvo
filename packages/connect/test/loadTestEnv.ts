@@ -35,7 +35,7 @@ export function loadTestEnv(dialect: SupportedDialect) {
 
   if (SQL_DIALECTS.has(dialect) && !process.env.INCONVO_DATABASE_URL) {
     throw new Error(
-      `INCONVO_DATABASE_URL is required for ${dialect} tests. Create a ${dialect}.env file under packages/connect/test or set the variable in your shell.`
+      `INCONVO_DATABASE_URL is required for ${dialect} tests. Create a ${dialect}.env file under packages/connect/test or set the variable in your shell.`,
     );
   }
 
@@ -57,14 +57,16 @@ export function loadTestEnv(dialect: SupportedDialect) {
       !process.env.INCONVO_BIGQUERY_CREDENTIALS_JSON &&
       !process.env.INCONVO_BIGQUERY_KEYFILE
     ) {
-      missing.push("INCONVO_BIGQUERY_KEYFILE (or INCONVO_BIGQUERY_CREDENTIALS_JSON)");
+      missing.push(
+        "INCONVO_BIGQUERY_KEYFILE (or INCONVO_BIGQUERY_CREDENTIALS_JSON)",
+      );
     }
 
     if (missing.length > 0) {
       throw new Error(
         `Missing BigQuery test configuration: ${missing.join(
-          ", "
-        )}. Create a bigquery.env file under packages/connect/test or set the variables in your shell.`
+          ", ",
+        )}. Create a bigquery.env file under packages/connect/test or set the variables in your shell.`,
       );
     }
   }

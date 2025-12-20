@@ -5,8 +5,6 @@ export default [
   ...config,
   {
     rules: {
-      // Many anys exist - off for now Fix later
-      "@typescript-eslint/no-explicit-any": "off", // "warn",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {
@@ -17,6 +15,6 @@ export default [
     },
   },
   {
-    ignores: ["dist/**", "test/**"],
+    ignores: ["dist/**"],
   },
 ];

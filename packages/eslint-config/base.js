@@ -18,7 +18,8 @@ export const config = [
       turbo: turboPlugin,
     },
     rules: {
-      "turbo/no-undeclared-env-vars": "warn",
+      // Disabled: env vars are runtime, not build-time dependencies
+      "turbo/no-undeclared-env-vars": "off",
     },
   },
   {

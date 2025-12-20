@@ -25,4 +25,27 @@ export type {
   ConnectionConfig,
 } from "./types/types";
 
-export type { Query } from "./types/querySchema";
+// Export query types and schemas
+export type {
+  Query,
+  WhereConditions,
+  QuestionConditions,
+  DateCondition,
+  JoinPathHop,
+  GroupByKey,
+  GroupByOrderBy,
+  GroupByHaving,
+  ComputedColumn,
+  SQLComputedColumnAst,
+} from "./types/querySchema";
+
+export {
+  QuerySchema,
+  questionConditionsSchema,
+  dateConditionSchema,
+  whereAndArraySchema,
+  joinDescriptorSchema,
+  joinPathHopSchema,
+  groupByKeySchema,
+  SQLComputedColumnAstSchema,
+} from "./types/querySchema";

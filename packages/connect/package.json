@@ -27,9 +27,20 @@
     "registry": "https://npm.pkg.github.com"
   },
   "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js"
+    },
     "./express": {
+      "types": "./dist/express/index.d.ts",
       "require": "./dist/express/index.js",
       "import": "./dist/express/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "require": "./dist/client/index.js",
+      "import": "./dist/client/index.js"
     }
   },
   "files": [
@@ -42,7 +53,9 @@
   },
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
+    "@repo/types": "workspace:*",
     "@t3-oss/env-core": "^0.13.8",
+    "axios": "^1.13.2",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "fast-levenshtein": "^3.0.0",
@@ -72,8 +85,10 @@
   "tsup": {
     "entry": [
       "src/index.ts",
-      "src/express/index.ts"
+      "src/express/index.ts",
+      "src/client/index.ts"
     ],
+    "noExternal": ["@repo/types"],
     "minify": true,
     "bundle": true,
     "splitting": false,

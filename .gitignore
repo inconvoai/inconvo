@@ -16,6 +16,9 @@ db.sqlite
 # temp files
 tempFiles
 
+# connect-server schema augmentations (generated)
+apps/connect-server/schema-augmentations
+
 # next.js
 .next
 out

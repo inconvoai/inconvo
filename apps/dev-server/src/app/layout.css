@@ -1,0 +1,12 @@
+@import "@mantine/core/styles.css" layer(mantine-core);
+@import "@mantine/charts/styles.css" layer(mantine-core);
+@layer mantine-core;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}

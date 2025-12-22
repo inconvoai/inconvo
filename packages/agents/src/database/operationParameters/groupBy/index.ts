@@ -13,7 +13,7 @@ import {
   joinPathHopSchema,
   joinTypeSchema,
 } from "@repo/types";
-import { stringArrayToZodEnum } from "~/utils/zodHelpers";
+import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
 import {
   buildOperationParametersPromptMessages,
   buildOperationParametersTableSchemasString,

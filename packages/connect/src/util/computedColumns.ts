@@ -1,5 +1,5 @@
-import type { SchemaResponse } from "~/types/types";
-import type { ComputedColumn } from "~/types/querySchema";
+import type { SchemaResponse } from "../types/types";
+import type { ComputedColumn } from "../types/querySchema";
 
 export function getSchemaComputedColumns(
   schema: SchemaResponse,

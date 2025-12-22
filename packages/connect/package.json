@@ -1,13 +1,12 @@
 {
-  "name": "@ten-dev/inconvo",
+  "name": "@repo/connect",
   "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
-  "main": "dist/index.js",
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
@@ -19,33 +18,11 @@
     "test:pg:watch": "jest test/pg --watch",
     "test:bq": "NODE_OPTIONS=--experimental-vm-modules jest test/bigquery"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ten-dev/inconvo-js.git"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/index.js"
-    },
-    "./express": {
-      "types": "./dist/express/index.d.ts",
-      "require": "./dist/express/index.js",
-      "import": "./dist/express/index.js"
-    },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "require": "./dist/client/index.js",
-      "import": "./dist/client/index.js"
-    }
+    ".": "./src/index.ts",
+    "./express": "./src/express/index.ts",
+    "./client": "./src/client/index.ts"
   },
-  "files": [
-    "dist"
-  ],
   "author": "",
   "license": "UNLICENSED",
   "peerDependencies": {
@@ -79,22 +56,6 @@
     "jest": "^30.0.5",
     "node-fetch": "^3.3.2",
     "ts-jest": "^29.4.1",
-    "tsup": "^8.5.0",
     "tsx": "^4.20.4"
-  },
-  "tsup": {
-    "entry": [
-      "src/index.ts",
-      "src/express/index.ts",
-      "src/client/index.ts"
-    ],
-    "noExternal": ["@repo/types"],
-    "minify": true,
-    "bundle": true,
-    "splitting": false,
-    "clean": true,
-    "dts": true,
-    "css": true,
-    "outDir": "dist"
   }
 }

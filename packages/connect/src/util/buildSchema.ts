@@ -1,14 +1,15 @@
-import {
+import type {
   SchemaResponse,
   SchemaTable,
   SchemaColumn,
   SchemaRelation,
-} from "~/types/types";
-import { getDb } from "~/dbConnection";
-import { env } from "~/env";
+} from "../types/types";
+import { getDb } from "../dbConnection";
+import { env } from "../env";
 import { sql } from "kysely";
-import { logger } from "~/util/logger";
-import { BigQueryIntrospector, StructFieldMetadata } from "~/dialects/bigquery";
+import { logger } from "./logger";
+import { BigQueryIntrospector } from "../dialects/bigquery";
+import type { StructFieldMetadata } from "../dialects/bigquery";
 
 interface NormalizedForeignKeyRow {
   sourceTable: string;
@@ -538,11 +539,11 @@ async function extractForeignKeys(
       }
 
       foreignKeys.push({
-        sourceTable: sortedGroup[0].sourceTable,
+        sourceTable: sortedGroup[0]!.sourceTable,
         targetTable,
         sourceColumns,
         targetColumns,
-        constraintName: sortedGroup[0].constraintName,
+        constraintName: sortedGroup[0]!.constraintName,
       });
     }
 
@@ -594,7 +595,7 @@ async function extractForeignKeys(
         relationNamesPerTable.get(sourceTable)!.get(relationName) || 0;
       if (nameCount > 0) {
         // Remove common suffixes like "_id" from column name
-        const columnBase = sourceColumns[0].replace(/_id$/, "");
+        const columnBase = sourceColumns[0]!.replace(/_id$/, "");
         // Only add suffix if it's different from the target table name
         if (
           columnBase !== targetTable &&
@@ -645,7 +646,7 @@ async function extractForeignKeys(
         relationNamesPerTable.get(targetTable)!.get(relationName) || 0;
       if (nameCount > 0) {
         // Remove common suffixes like "_id" from column name
-        const columnBase = sourceColumns[0].replace(/_id$/, "");
+        const columnBase = sourceColumns[0]!.replace(/_id$/, "");
         // Only add suffix if it's meaningful
         if (
           columnBase !== targetTable &&

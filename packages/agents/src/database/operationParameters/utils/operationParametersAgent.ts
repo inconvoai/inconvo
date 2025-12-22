@@ -13,9 +13,9 @@ import {
   StateGraph,
 } from "@langchain/langgraph";
 import type { Schema } from "@repo/types";
-import { getAIModel } from "~/utils/getAIModel";
-import { getPrompt } from "~/utils/getPrompt";
-import { aiMessageContainsJsonLikeText } from "~/utils/langchainMessageUtils";
+import { getAIModel } from "../../../utils/getAIModel";
+import { getPrompt } from "../../../utils/getPrompt";
+import { aiMessageContainsJsonLikeText } from "../../../utils/langchainMessageUtils";
 import { buildTableSchemaStringFromTableSchema } from "../../utils/schemaFormatters";
 import { operationDocs } from "../../utils/operationDocs";
 

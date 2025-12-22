@@ -2,19 +2,17 @@ import {
   Kysely,
   MysqlDialect,
   MssqlDialect,
-  LogEvent,
-  LogConfig,
   PostgresDialect,
-  type MysqlDialectConfig,
 } from "kysely";
+import type { LogEvent, LogConfig, MysqlDialectConfig } from "kysely";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";
-import { env } from "~/env";
-import { logger } from "~/util/logger";
+import { env } from "./env";
+import { logger } from "./util/logger";
 import {
   BigQueryDialect,
   type BigQueryDialectConfig,
-} from "~/dialects/bigquery";
+} from "./dialects/bigquery";
 
 const globalForDb = globalThis as unknown as {
   __INCONVO_KYSELY_DB__?: Kysely<any>;

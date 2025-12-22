@@ -5,7 +5,7 @@ import type {
   Query,
   QueryResponse,
 } from "@repo/types";
-import { getAIModel } from "~/utils/getAIModel";
+import { getAIModel } from "../utils/getAIModel";
 import assert from "assert";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import {
@@ -26,7 +26,7 @@ import type {
   DateCondition,
   QuestionConditions,
 } from "@repo/types";
-import { stringArrayToZodEnum } from "~/utils/zodHelpers";
+import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import {
   buildFullSchemaString,
   buildTableSchemaStringFromTableSchema,

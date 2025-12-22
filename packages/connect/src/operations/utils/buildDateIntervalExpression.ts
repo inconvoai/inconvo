@@ -1,5 +1,5 @@
 import { sql } from "kysely";
-import { env } from "~/env";
+import { env } from "../../env";
 
 type SupportedInterval = "day" | "week" | "month" | "quarter" | "year" | "hour";
 

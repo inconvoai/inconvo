@@ -4,7 +4,7 @@ import {
   type CountRelationsQuery,
   type JoinPathHop,
 } from "@repo/types";
-import { stringArrayToZodEnum } from "~/utils/zodHelpers";
+import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
 
 const countRelationsJoinSchema = joinDescriptorSchema
   .extend({

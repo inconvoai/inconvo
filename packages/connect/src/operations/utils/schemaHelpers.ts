@@ -1,7 +1,7 @@
 import { Kysely } from "kysely";
-import type { SchemaResponse } from "~/types/types";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { env } from "~/env";
+import type { SchemaResponse } from "../../types/types";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { env } from "../../env";
 
 export async function getRelatedTableNameFromPath(
   path: string[],
@@ -14,7 +14,7 @@ export async function getRelatedTableNameFromPath(
   }
 
   const schema = await getAugmentedSchema();
-  let currentTable = path[0];
+  let currentTable = path[0]!;
 
   for (let i = 0; i < path.length - 1; i++) {
     const table = schema.tables.find((t: any) => t.name === currentTable);

@@ -1,11 +1,11 @@
 import { sql, type RawBuilder } from "kysely";
-import {
-  type LogicalCastType,
+import type {
+  LogicalCastType,
   SQLCastExpressionAst,
   SQLComputedColumnAst,
-} from "~/types/querySchema";
-import { env } from "~/env";
-import type { SchemaResponse } from "~/types/types";
+} from "../../types/querySchema";
+import { env } from "../../env";
+import type { SchemaResponse } from "../../types/types";
 
 export function getColumnFromTable({
   columnName,

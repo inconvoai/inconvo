@@ -1,5 +1,5 @@
 import { JoinBuilder } from "kysely";
-import type { JoinPathHop } from "~/types/querySchema";
+import type { JoinPathHop } from "../../types/querySchema";
 
 export type QualifiedColumn = {
   tableName: string;
@@ -42,9 +42,9 @@ function applyJoinConditions(
   sourceRefs: string[],
   targetRefs: string[],
 ) {
-  let builder = joinBuilder.onRef(sourceRefs[0], "=", targetRefs[0]);
+  let builder = joinBuilder.onRef(sourceRefs[0]!, "=", targetRefs[0]!);
   for (let index = 1; index < sourceRefs.length; index++) {
-    builder = builder.onRef(sourceRefs[index], "=", targetRefs[index]);
+    builder = builder.onRef(sourceRefs[index]!, "=", targetRefs[index]!);
   }
   return builder;
 }

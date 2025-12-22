@@ -1,0 +1,353 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { Flex, Box, Text, Center, Stack } from "@mantine/core";
+import { IconTable } from "@tabler/icons-react";
+import type {
+  TableSummary,
+  TableSchema,
+  TableAccess,
+  RequestContextField,
+  TableWithColumns,
+  UpdateTablePayload,
+  ColumnUpdatePayload,
+  ComputedColumnCreatePayload,
+  ComputedColumnUpdatePayload,
+  ManualRelationCreatePayload,
+  ManualRelationUpdatePayload,
+  ContextFilterPayload,
+  ColumnConversionCreatePayload,
+  ColumnConversionUpdatePayload,
+  ColumnUnitPayload,
+} from "./types";
+import { TableList, type FilterValue } from "./TableList";
+import { TableDetail } from "./TableDetail";
+
+export type { FilterValue };
+
+export interface SemanticModelEditorProps {
+  /** List of table summaries for the left panel */
+  tables: TableSummary[];
+  /** Currently selected table (full details) */
+  selectedTable: TableSchema | null;
+  /** Request context fields for RLS configuration */
+  requestContextFields: RequestContextField[];
+  /** Available tables for manual relations */
+  availableTables: TableWithColumns[];
+  /** Whether the table list is loading */
+  listLoading?: boolean;
+  /** Whether the selected table is loading */
+  detailLoading?: boolean;
+  /** Callback when a table is selected */
+  onTableSelect: (tableId: string) => void;
+
+  // Server-side filtering/pagination props (optional - if not provided, uses client-side)
+  /** Search query (controlled, for server-side search) */
+  searchQuery?: string;
+  /** Callback when search changes */
+  onSearchChange?: (query: string) => void;
+  /** Access filter (controlled) */
+  accessFilter?: FilterValue;
+  /** Callback when access filter changes */
+  onAccessFilterChange?: (filter: FilterValue) => void;
+  /** Total table count for pagination */
+  totalTableCount?: number;
+  /** Current page (1-indexed) */
+  currentPage?: number;
+  /** Callback when page changes */
+  onPageChange?: (page: number) => void;
+  /** Items per page */
+  perPage?: number;
+  /** Callback when table is updated */
+  onUpdateTable?: (tableId: string, payload: UpdateTablePayload) => Promise<void>;
+  /** Callback when a column is updated */
+  onUpdateColumn?: (tableId: string, columnId: string, payload: ColumnUpdatePayload) => Promise<void>;
+  /** Callback when a computed column is created */
+  onCreateComputedColumn?: (tableId: string, payload: ComputedColumnCreatePayload) => Promise<void>;
+  /** Callback when a computed column is updated */
+  onUpdateComputedColumn?: (tableId: string, columnId: string, payload: ComputedColumnUpdatePayload) => Promise<void>;
+  /** Callback when a computed column is deleted */
+  onDeleteComputedColumn?: (tableId: string, columnId: string) => Promise<void>;
+  /** Callback when a relation is updated */
+  onUpdateRelation?: (tableId: string, relationId: string, selected: boolean) => Promise<void>;
+  /** Callback when a manual relation is created */
+  onCreateManualRelation?: (tableId: string, payload: ManualRelationCreatePayload) => Promise<void>;
+  /** Callback when a manual relation is updated */
+  onUpdateManualRelation?: (tableId: string, relationId: string, payload: ManualRelationUpdatePayload) => Promise<void>;
+  /** Callback when a manual relation is deleted */
+  onDeleteManualRelation?: (tableId: string, relationId: string) => Promise<void>;
+  /** Callback when a context filter is created/updated */
+  onUpsertContextFilter?: (tableId: string, payload: ContextFilterPayload) => Promise<void>;
+  /** Callback when a context filter is deleted */
+  onDeleteContextFilter?: (tableId: string) => Promise<void>;
+  /** Callback when a column conversion is created */
+  onCreateColumnConversion?: (tableId: string, columnId: string, payload: ColumnConversionCreatePayload) => Promise<void>;
+  /** Callback when a column conversion is updated */
+  onUpdateColumnConversion?: (tableId: string, columnId: string, payload: ColumnConversionUpdatePayload) => Promise<void>;
+  /** Callback when a column conversion is deleted */
+  onDeleteColumnConversion?: (tableId: string, columnId: string) => Promise<void>;
+  /** Callback when a column unit is added */
+  onAddColumnUnit?: (tableId: string, payload: ColumnUnitPayload) => Promise<void>;
+}
+
+export function SemanticModelEditor({
+  tables,
+  selectedTable,
+  requestContextFields,
+  availableTables,
+  listLoading = false,
+  detailLoading = false,
+  onTableSelect,
+  // Server-side filtering props
+  searchQuery: controlledSearchQuery,
+  onSearchChange,
+  accessFilter: controlledAccessFilter,
+  onAccessFilterChange,
+  totalTableCount,
+  currentPage,
+  onPageChange,
+  perPage,
+  // Mutation callbacks
+  onUpdateTable,
+  onUpdateColumn,
+  onCreateComputedColumn,
+  onUpdateComputedColumn,
+  onDeleteComputedColumn,
+  onUpdateRelation,
+  onCreateManualRelation,
+  onUpdateManualRelation,
+  onDeleteManualRelation,
+  onUpsertContextFilter,
+  onDeleteContextFilter,
+  onCreateColumnConversion,
+  onUpdateColumnConversion,
+  onDeleteColumnConversion,
+  onAddColumnUnit,
+}: SemanticModelEditorProps) {
+  // Internal state for client-side mode (when server-side callbacks not provided)
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  const [internalAccessFilter, setInternalAccessFilter] = useState<FilterValue>("active");
+
+  // Use controlled or internal state
+  const searchQuery = controlledSearchQuery ?? internalSearchQuery;
+  const accessFilter = controlledAccessFilter ?? internalAccessFilter;
+
+  const handleSearchChange = onSearchChange ?? setInternalSearchQuery;
+  const handleAccessFilterChange = onAccessFilterChange ?? setInternalAccessFilter;
+
+  // Handler for changing table access from sidebar
+  const handleTableAccessChange = useCallback(
+    async (tableId: string, access: TableAccess) => {
+      await onUpdateTable?.(tableId, { access });
+    },
+    [onUpdateTable]
+  );
+
+  // Wrap callbacks to include tableId
+  const handleUpdateTable = useCallback(
+    async (payload: UpdateTablePayload) => {
+      if (selectedTable) {
+        await onUpdateTable?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onUpdateTable]
+  );
+
+  const handleUpdateColumn = useCallback(
+    async (columnId: string, payload: ColumnUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateColumn?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onUpdateColumn]
+  );
+
+  const handleCreateComputedColumn = useCallback(
+    async (payload: ComputedColumnCreatePayload) => {
+      if (selectedTable) {
+        await onCreateComputedColumn?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onCreateComputedColumn]
+  );
+
+  const handleUpdateComputedColumn = useCallback(
+    async (columnId: string, payload: ComputedColumnUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateComputedColumn?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onUpdateComputedColumn]
+  );
+
+  const handleDeleteComputedColumn = useCallback(
+    async (columnId: string) => {
+      if (selectedTable) {
+        await onDeleteComputedColumn?.(selectedTable.id, columnId);
+      }
+    },
+    [selectedTable, onDeleteComputedColumn]
+  );
+
+  const handleUpdateRelation = useCallback(
+    async (relationId: string, selected: boolean) => {
+      if (selectedTable) {
+        await onUpdateRelation?.(selectedTable.id, relationId, selected);
+      }
+    },
+    [selectedTable, onUpdateRelation]
+  );
+
+  const handleCreateManualRelation = useCallback(
+    async (payload: ManualRelationCreatePayload) => {
+      if (selectedTable) {
+        await onCreateManualRelation?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onCreateManualRelation]
+  );
+
+  const handleUpdateManualRelation = useCallback(
+    async (relationId: string, payload: ManualRelationUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateManualRelation?.(selectedTable.id, relationId, payload);
+      }
+    },
+    [selectedTable, onUpdateManualRelation]
+  );
+
+  const handleDeleteManualRelation = useCallback(
+    async (relationId: string) => {
+      if (selectedTable) {
+        await onDeleteManualRelation?.(selectedTable.id, relationId);
+      }
+    },
+    [selectedTable, onDeleteManualRelation]
+  );
+
+  const handleUpsertContextFilter = useCallback(
+    async (payload: ContextFilterPayload) => {
+      if (selectedTable) {
+        await onUpsertContextFilter?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onUpsertContextFilter]
+  );
+
+  const handleDeleteContextFilter = useCallback(async () => {
+    if (selectedTable) {
+      await onDeleteContextFilter?.(selectedTable.id);
+    }
+  }, [selectedTable, onDeleteContextFilter]);
+
+  const handleCreateColumnConversion = useCallback(
+    async (columnId: string, payload: ColumnConversionCreatePayload) => {
+      if (selectedTable) {
+        await onCreateColumnConversion?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onCreateColumnConversion]
+  );
+
+  const handleUpdateColumnConversion = useCallback(
+    async (columnId: string, payload: ColumnConversionUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateColumnConversion?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onUpdateColumnConversion]
+  );
+
+  const handleDeleteColumnConversion = useCallback(
+    async (columnId: string) => {
+      if (selectedTable) {
+        await onDeleteColumnConversion?.(selectedTable.id, columnId);
+      }
+    },
+    [selectedTable, onDeleteColumnConversion]
+  );
+
+  const handleAddColumnUnit = useCallback(
+    async (payload: ColumnUnitPayload) => {
+      if (selectedTable) {
+        await onAddColumnUnit?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onAddColumnUnit]
+  );
+
+  return (
+    <Flex h="100%" gap={0}>
+      {/* Left Sidebar - Table List */}
+      <Box
+        w={300}
+        bg="gray.0"
+        style={{
+          borderRight: "1px solid var(--mantine-color-gray-3)",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+        }}
+      >
+        <TableList
+          tables={tables}
+          selectedTableId={selectedTable?.id ?? null}
+          onTableSelect={onTableSelect}
+          onTableAccessChange={handleTableAccessChange}
+          loading={listLoading}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
+          accessFilter={accessFilter}
+          onAccessFilterChange={handleAccessFilterChange}
+          totalCount={totalTableCount}
+          currentPage={currentPage}
+          onPageChange={onPageChange}
+          perPage={perPage}
+        />
+      </Box>
+
+      {/* Right Panel - Table Details */}
+      <Box
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+          height: "100%",
+        }}
+        bg="white"
+      >
+        {selectedTable ? (
+          <TableDetail
+            table={selectedTable}
+            requestContextFields={requestContextFields}
+            availableTables={availableTables}
+            loading={detailLoading}
+            onUpdateTable={handleUpdateTable}
+            onUpdateColumn={handleUpdateColumn}
+            onCreateComputedColumn={handleCreateComputedColumn}
+            onUpdateComputedColumn={handleUpdateComputedColumn}
+            onDeleteComputedColumn={handleDeleteComputedColumn}
+            onUpdateRelation={handleUpdateRelation}
+            onCreateManualRelation={handleCreateManualRelation}
+            onUpdateManualRelation={handleUpdateManualRelation}
+            onDeleteManualRelation={handleDeleteManualRelation}
+            onUpsertContextFilter={handleUpsertContextFilter}
+            onDeleteContextFilter={handleDeleteContextFilter}
+            onCreateColumnConversion={handleCreateColumnConversion}
+            onUpdateColumnConversion={handleUpdateColumnConversion}
+            onDeleteColumnConversion={handleDeleteColumnConversion}
+            onAddColumnUnit={handleAddColumnUnit}
+          />
+        ) : (
+          <Center h="100%">
+            <Stack align="center" gap="xs">
+              <IconTable size={48} opacity={0.3} />
+              <Text c="dimmed">Select a table to view details</Text>
+            </Stack>
+          </Center>
+        )}
+      </Box>
+    </Flex>
+  );
+}

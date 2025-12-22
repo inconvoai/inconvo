@@ -1,5 +1,5 @@
-import type { SchemaResponse } from "~/types/types";
-import type { SQLCastExpressionAst } from "~/types/querySchema";
+import type { SchemaResponse } from "../types/types";
+import type { SQLCastExpressionAst } from "../types/querySchema";
 
 export type ColumnConversion = {
   table: { name: string };

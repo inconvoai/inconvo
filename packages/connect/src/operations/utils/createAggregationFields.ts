@@ -1,6 +1,6 @@
 import { getColumnFromTable } from "./computedColumns";
 import assert from "assert";
-import type { SchemaResponse } from "~/types/types";
+import type { SchemaResponse } from "../../types/types";
 
 export function createAggregationFields(
   columns: string[] | null | undefined,
@@ -13,7 +13,7 @@ export function createAggregationFields(
       columnIdentifier.split(".").length === 2,
       "Invalid column format for aggregation (not table.column)",
     );
-    const [tableName, columnName] = columnIdentifier.split(".");
+    const [tableName, columnName] = columnIdentifier.split(".") as [string, string];
     return [
       `${tableName}.${columnName}`,
       aggregationFn(

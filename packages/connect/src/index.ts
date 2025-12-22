@@ -1,6 +1,6 @@
 export { buildSchema } from "./util/buildSchema";
 export { getDb } from "./dbConnection";
-export { inconvo } from "./express";
+// Note: Express middleware exported separately from "@repo/connect/express"
 export { BigQueryDialect } from "./dialects/bigquery";
 export type { BigQueryDialectConfig } from "./dialects/bigquery";
 

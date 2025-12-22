@@ -1,22 +1,23 @@
 import assert from "assert";
-import { Kysely, Expression, SqlBool, sql } from "kysely";
-import { Query } from "~/types/querySchema";
-import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
-import { createAggregationFields } from "~/operations/utils/createAggregationFields";
-import { getColumnFromTable } from "~/operations/utils/computedColumns";
-import { buildDateIntervalExpression } from "~/operations/utils/buildDateIntervalExpression";
-import { buildDateComponentExpressions } from "~/operations/utils/buildDateComponentExpression";
+import { Kysely, sql } from "kysely";
+import type { Expression, SqlBool } from "kysely";
+import type { Query } from "../../types/querySchema";
+import { buildWhereConditions } from "../utils/whereConditionBuilder";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { createAggregationFields } from "../utils/createAggregationFields";
+import { getColumnFromTable } from "../utils/computedColumns";
+import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
+import { buildDateComponentExpressions } from "../utils/buildDateComponentExpression";
 import {
   applyJoinHop,
   normaliseJoinHop,
-} from "~/operations/utils/joinDescriptorHelpers";
-import { buildJsonObject } from "~/operations/utils/jsonBuilderHelpers";
-import { parseJsonStrings } from "~/operations/utils/jsonParsing";
-import { env } from "~/env";
-import { buildAggregateExpression } from "~/operations/utils/aggregateExpressionBuilder";
-import { applyHavingComparison } from "~/operations/utils/havingComparison";
+} from "../utils/joinDescriptorHelpers";
+import { buildJsonObject } from "../utils/jsonBuilderHelpers";
+import { parseJsonStrings } from "../utils/jsonParsing";
+import { env } from "../../env";
+import { buildAggregateExpression } from "../utils/aggregateExpressionBuilder";
+import { applyHavingComparison } from "../utils/havingComparison";
 
 type Reducer = "sum" | "min" | "max" | "avg";
 
@@ -49,11 +50,11 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
-        columnName,
-        tableName,
+        columnName: columnName!,
+        tableName: tableName!,
         schema,
       });
-      const alias = key.alias ?? `${tableName}.${columnName}`;
+      const alias = key.alias ?? `${tableName!}.${columnName!}`;
       const dialectAlias = getDialectAlias(alias);
       groupByColumns.push(column);
       groupKeyExpressions.set(alias, {
@@ -67,11 +68,11 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
-        columnName,
-        tableName,
+        columnName: columnName!,
+        tableName: tableName!,
         schema,
       });
-      const alias = key.alias ?? `${tableName}.${columnName}|${key.interval}`;
+      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.interval}`;
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
@@ -89,11 +90,11 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       );
       const [tableName, columnName] = key.column.split(".");
       const column = getColumnFromTable({
-        columnName,
-        tableName,
+        columnName: columnName!,
+        tableName: tableName!,
         schema,
       });
-      const alias = key.alias ?? `${tableName}.${columnName}|${key.component}`;
+      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
@@ -230,12 +231,12 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     }
 
     if (havingExpressions.length === 1) {
-      groupQuery = groupQuery.having(havingExpressions[0]);
+      groupQuery = groupQuery.having(havingExpressions[0]!);
     } else if (havingExpressions.length > 1) {
-      let combined = havingExpressions[0];
+      let combined = havingExpressions[0]!;
       for (let i = 1; i < havingExpressions.length; i++) {
         const prev = combined;
-        const next = havingExpressions[i];
+        const next = havingExpressions[i]!;
         combined = sql`(${prev}) AND (${next})`;
       }
       groupQuery = groupQuery.having(combined);

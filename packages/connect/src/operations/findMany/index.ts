@@ -1,22 +1,22 @@
 import { Kysely, sql } from "kysely";
-import { Query } from "~/types/querySchema";
-import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { getColumnFromTable } from "~/operations/utils/computedColumns";
-import { applyLimit } from "~/operations/utils/queryHelpers";
-import { getRelatedTableNameFromPath } from "~/operations/utils/schemaHelpers";
+import type { Query } from "../../types/querySchema";
+import { buildWhereConditions } from "../utils/whereConditionBuilder";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { getColumnFromTable } from "../utils/computedColumns";
+import { applyLimit } from "../utils/queryHelpers";
+import { getRelatedTableNameFromPath } from "../utils/schemaHelpers";
 import {
   buildJsonObjectSelect,
   jsonAggregate,
-} from "~/operations/utils/jsonBuilderHelpers";
-import { env } from "~/env";
+} from "../utils/jsonBuilderHelpers";
+import { env } from "../../env";
 import assert from "assert";
 import {
   resolveJoinDescriptor,
   aliasDepth,
 } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings } from "../utils/jsonParsing";
-import type { SchemaTable } from "~/types/types";
+import type { SchemaTable } from "../../types/types";
 
 export async function findMany(db: Kysely<any>, query: Query) {
   assert(query.operation === "findMany", "Invalid operation");
@@ -289,9 +289,9 @@ export async function findMany(db: Kysely<any>, query: Query) {
             jsonCtes.push({ name: groupedCteName, query: groupedCteQuery });
           }
         } else {
-          const previousTableLinks = tableLinks[index - 1];
-          const previousCteName = jsonCtes[jsonCtes.length - 1].name;
-          const previousTableName = tablePath.slice().reverse()[index - 1];
+          const previousTableLinks = tableLinks[index - 1]!;
+          const previousCteName = jsonCtes[jsonCtes.length - 1]!.name;
+          const previousTableName = tablePath.slice().reverse()[index - 1]!;
 
           const extendedJsonFields = jsonFields.concat([
             [previousTableName, sql.ref(`${previousCteName}.json_data`)],
@@ -311,9 +311,9 @@ export async function findMany(db: Kysely<any>, query: Query) {
             .selectFrom(tableSource)
             .leftJoin(previousCteName, (join: any) =>
               join.onRef(
-                `${tableSource}.${previousTableLinks[1]}`,
+                `${tableSource}.${previousTableLinks[1]!}`,
                 "=",
-                `${previousCteName}.${previousTableLinks[0]}`,
+                `${previousCteName}.${previousTableLinks[0]!}`,
               ),
             );
 
@@ -452,13 +452,13 @@ export async function findMany(db: Kysely<any>, query: Query) {
         return;
       }
       const finalLink =
-        outerTableLinks[pathIndex][outerTableLinks[pathIndex].length - 1];
+        outerTableLinks[pathIndex]![outerTableLinks[pathIndex]!.length - 1]!;
 
       selectQuery = selectQuery.leftJoin(tableCte.name, (join: any) =>
         join.onRef(
-          `${tableSource}.${finalLink[1]}`,
+          `${tableSource}.${finalLink[1]!}`,
           "=",
-          `${tableCte.name}.${finalLink[0]}`,
+          `${tableCte.name}.${finalLink[0]!}`,
         ),
       );
     });

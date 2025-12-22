@@ -1,8 +1,9 @@
-import { sql, Expression, SqlBool } from "kysely";
-import { WhereConditions } from "~/types/querySchema";
+import { sql } from "kysely";
+import type { Expression, SqlBool } from "kysely";
+import type { WhereConditions } from "../../types/querySchema";
 import { getColumnFromTable } from "./computedColumns";
-import { env } from "~/env";
-import type { SchemaResponse } from "~/types/types";
+import { env } from "../../env";
+import type { SchemaResponse } from "../../types/types";
 
 type _FilterObject = Record<string, unknown>;
 
@@ -16,13 +17,13 @@ function combineSqlExpressions(
     throw new Error("Cannot combine empty array of expressions");
   }
   if (expressions.length === 1) {
-    return expressions[0];
+    return expressions[0]!;
   }
 
-  let result = expressions[0];
+  let result = expressions[0]!;
   for (let i = 1; i < expressions.length; i++) {
     const prevResult = result;
-    const nextExpr = expressions[i];
+    const nextExpr = expressions[i]!;
     if (operator === "AND") {
       result = sql`(${prevResult}) AND (${nextExpr})`;
     } else {
@@ -59,14 +60,14 @@ export function buildWhereConditions(
   }
 
   if (topLevelConditions.length === 1) {
-    return topLevelConditions[0];
+    return topLevelConditions[0]!;
   }
 
   // Build AND expression without using reduce to avoid RawBuilder await issues
-  let result = topLevelConditions[0];
+  let result = topLevelConditions[0]!;
   for (let i = 1; i < topLevelConditions.length; i++) {
     const prevResult = result;
-    const nextCond = topLevelConditions[i];
+    const nextCond = topLevelConditions[i]!;
     result = sql`(${prevResult}) AND (${nextCond})`;
   }
   return result;
@@ -93,12 +94,12 @@ function parseConditionObject(
     }
 
     if (andConditions.length === 0) return undefined;
-    if (andConditions.length === 1) return andConditions[0];
+    if (andConditions.length === 1) return andConditions[0]!;
 
-    let result = andConditions[0];
+    let result = andConditions[0]!;
     for (let i = 1; i < andConditions.length; i++) {
       const prevResult = result;
-      const nextCond = andConditions[i];
+      const nextCond = andConditions[i]!;
       result = sql`(${prevResult}) AND (${nextCond})`;
     }
     return result;
@@ -116,12 +117,12 @@ function parseConditionObject(
     }
 
     if (orConditions.length === 0) return undefined;
-    if (orConditions.length === 1) return orConditions[0];
+    if (orConditions.length === 1) return orConditions[0]!;
 
-    let result = orConditions[0];
+    let result = orConditions[0]!;
     for (let i = 1; i < orConditions.length; i++) {
       const prevResult = result;
-      const nextCond = orConditions[i];
+      const nextCond = orConditions[i]!;
       result = sql`(${prevResult}) OR (${nextCond})`;
     }
     return sql`(${result})`;
@@ -142,12 +143,12 @@ function parseConditionObject(
 
     let combined: Expression<SqlBool>;
     if (notConditions.length === 1) {
-      combined = notConditions[0];
+      combined = notConditions[0]!;
     } else {
-      let result = notConditions[0];
+      let result = notConditions[0]!;
       for (let i = 1; i < notConditions.length; i++) {
         const prevResult = result;
-        const nextCond = notConditions[i];
+        const nextCond = notConditions[i]!;
         result = sql`(${prevResult}) AND (${nextCond})`;
       }
       combined = result;
@@ -229,12 +230,12 @@ function parseConditionObject(
   }
 
   if (columnConditions.length === 0) return undefined;
-  if (columnConditions.length === 1) return columnConditions[0];
+  if (columnConditions.length === 1) return columnConditions[0]!;
 
-  let result = columnConditions[0];
+  let result = columnConditions[0]!;
   for (let i = 1; i < columnConditions.length; i++) {
     const prevResult = result;
-    const nextCond = columnConditions[i];
+    const nextCond = columnConditions[i]!;
     result = sql`(${prevResult}) AND (${nextCond})`;
   }
   return result;
@@ -274,7 +275,7 @@ function buildRelationFilter(
   }
 
   // Get the operator and nested condition
-  const [[operator, nestedCondition]] = Object.entries(filterObj);
+  const [[operator, nestedCondition]] = Object.entries(filterObj) as [[string, any]];
 
   // Build the subquery
   const targetTableRef = sql.table(targetTable);
@@ -288,16 +289,16 @@ function buildRelationFilter(
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
         sql<SqlBool>`${sql.ref(
-          `${targetTable}.${targetColumns[i]}`,
+          `${targetTable}.${targetColumns[i]!}`,
         )} = ${sql.ref(`${currentTableName}.${sourceCol}`)}`,
     );
     if (conditions.length === 1) {
-      joinCondition = conditions[0];
+      joinCondition = conditions[0]!;
     } else {
-      let result = conditions[0];
+      let result = conditions[0]!;
       for (let i = 1; i < conditions.length; i++) {
         const prevResult = result;
-        const nextCond = conditions[i];
+        const nextCond = conditions[i]!;
         result = sql`(${prevResult}) AND (${nextCond})`;
       }
       joinCondition = result;
@@ -308,16 +309,16 @@ function buildRelationFilter(
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
         sql<SqlBool>`${sql.ref(`${currentTableName}.${sourceCol}`)} = ${sql.ref(
-          `${targetTable}.${targetColumns[i]}`,
+          `${targetTable}.${targetColumns[i]!}`,
         )}`,
     );
     if (conditions.length === 1) {
-      joinCondition = conditions[0];
+      joinCondition = conditions[0]!;
     } else {
-      let result = conditions[0];
+      let result = conditions[0]!;
       for (let i = 1; i < conditions.length; i++) {
         const prevResult = result;
-        const nextCond = conditions[i];
+        const nextCond = conditions[i]!;
         result = sql`(${prevResult}) AND (${nextCond})`;
       }
       joinCondition = result;

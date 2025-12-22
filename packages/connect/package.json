@@ -28,6 +28,11 @@
   "peerDependencies": {
     "express": "^4.21.1"
   },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
     "@repo/types": "workspace:*",

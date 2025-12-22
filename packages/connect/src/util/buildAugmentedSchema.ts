@@ -2,19 +2,19 @@ import type {
   SchemaResponse,
   SchemaRelation,
   SchemaTable,
-} from "~/types/types";
+} from "../types/types";
 import { getCachedSchema } from "./schemaCache";
 import {
   readCustomRelationsAugmentation,
   readComputedColumnsAugmentation,
   readColumnConversionsAugmentation,
 } from "./schemaAugmentationStore";
-import { logger } from "~/util/logger";
+import { logger } from "./logger";
 import {
   SQLCastExpressionAstSchema,
   SQLComputedColumnAstSchema,
   type SQLCastExpressionAst,
-} from "~/types/querySchema";
+} from "../types/querySchema";
 
 type RelationNameRegistry = Map<string, Map<string, number>>;
 

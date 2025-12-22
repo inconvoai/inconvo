@@ -1,0 +1,125 @@
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+
+// Dynamic import to defer connect package loading until runtime
+// This prevents env validation from running during build
+async function getConnectModule() {
+  return await import("@repo/connect");
+}
+
+// GET /api/connect - Return database schema
+export async function GET() {
+  try {
+    const { buildSchema } = await getConnectModule();
+    const schema = await buildSchema();
+    return NextResponse.json(schema);
+  } catch (error) {
+    console.error("[/api/connect GET] Schema introspection failed:", error);
+    return NextResponse.json(
+      { error: "Failed to introspect schema" },
+      { status: 500 },
+    );
+  }
+}
+
+// Helper to safely stringify JSON with bigint support
+function safeJsonStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, val: unknown) => {
+    if (typeof val === "bigint") {
+      return val.toString();
+    }
+    return val;
+  });
+}
+
+// POST /api/connect - Execute query
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+
+    const connect = await getConnectModule();
+    const {
+      QuerySchema,
+      getDb,
+      findMany,
+      aggregate,
+      count,
+      countRelations,
+      groupBy,
+      aggregateGroups,
+      findDistinct,
+      findDistinctByEditDistance,
+    } = connect;
+
+    const parsedQuery = QuerySchema.parse(body);
+    const { operation } = parsedQuery;
+
+    console.log(`[/api/connect POST] Executing operation: ${operation}`);
+
+    const db = await getDb();
+
+    let response;
+    switch (operation) {
+      case "aggregate":
+        response = await aggregate(db, parsedQuery);
+        break;
+      case "count":
+        response = await count(db, parsedQuery);
+        break;
+      case "countRelations":
+        response = await countRelations(db, parsedQuery);
+        break;
+      case "findDistinct":
+        response = await findDistinct(db, parsedQuery);
+        break;
+      case "findDistinctByEditDistance":
+        response = await findDistinctByEditDistance(db, parsedQuery);
+        break;
+      case "findMany":
+        response = await findMany(db, parsedQuery);
+        break;
+      case "aggregateGroups":
+        response = await aggregateGroups(db, parsedQuery);
+        break;
+      case "groupBy":
+        response = await groupBy(db, parsedQuery);
+        break;
+      default: {
+        const _exhaustiveCheck: never = operation;
+        throw new Error(`Invalid operation: ${String(_exhaustiveCheck)}`);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[/api/connect POST] Operation completed in ${duration}ms`);
+
+    return new NextResponse(safeJsonStringify(response), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    if (error instanceof ZodError) {
+      console.error(
+        `[/api/connect POST] Validation error after ${duration}ms:`,
+        error.issues,
+      );
+      return NextResponse.json(
+        { error: "Invalid query", issues: error.issues },
+        { status: 400 },
+      );
+    }
+
+    console.error(
+      `[/api/connect POST] Operation failed after ${duration}ms:`,
+      error,
+    );
+    return NextResponse.json(
+      { error: "Failed to execute query" },
+      { status: 500 },
+    );
+  }
+}

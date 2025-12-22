@@ -1,5 +1,5 @@
-import { SelectQueryBuilder } from "kysely";
-import { env } from "~/env";
+import type { SelectQueryBuilder } from "kysely";
+import { env } from "../../env";
 
 export function applyLimit<DB, TB extends keyof DB, O>(
   query: SelectQueryBuilder<DB, TB, O>,

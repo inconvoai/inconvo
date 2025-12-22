@@ -1,8 +1,8 @@
 import crypto from "crypto";
-import { NextFunction, Request, Response } from "express";
-import { generateHmac, generateMessage } from "~/util/hmac";
-import { logger } from "~/util/logger";
-import { registerNonce } from "~/util/replayProtection";
+import type { NextFunction, Request, Response } from "express";
+import { generateHmac, generateMessage } from "../util/hmac";
+import { logger } from "../util/logger";
+import { registerNonce } from "../util/replayProtection";
 
 export function authenticated(req: Request, res: Response, next: NextFunction) {
   const signature = req.headers["inconvo-signature"] as string | undefined;

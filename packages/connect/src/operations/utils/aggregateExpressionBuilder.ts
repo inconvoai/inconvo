@@ -1,7 +1,7 @@
 import assert from "assert";
 import { sql, type Expression } from "kysely";
 import { getColumnFromTable } from "./computedColumns";
-import type { SchemaResponse } from "~/types/types";
+import type { SchemaResponse } from "../../types/types";
 
 export type AggregateFn =
   | "count"
@@ -20,7 +20,7 @@ export function buildAggregateExpression(
     columnRef.split(".").length === 2,
     "Aggregate column must be in the format table.column",
   );
-  const [tableName, columnName] = columnRef.split(".");
+  const [tableName, columnName] = columnRef.split(".") as [string, string];
   const column = getColumnFromTable({
     columnName,
     tableName,

@@ -3,17 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit"
   },
@@ -25,14 +18,6 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "25.0.3",
     "eslint": "9.39.2",
-    "tsup": "^8.5.0",
     "typescript": "5.9.3"
-  },
-  "tsup": {
-    "entry": ["src/index.ts"],
-    "format": ["esm"],
-    "dts": true,
-    "clean": true,
-    "outDir": "dist"
   }
 }

@@ -1,4 +1,4 @@
-import { SchemaResponse } from "~/types/types";
+import type { SchemaResponse } from "../types/types";
 import { buildSchema } from "./buildSchema";
 import { logSchemaPreloadFailureHint } from "./databaseDiagnostics";
 

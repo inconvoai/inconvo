@@ -1,10 +1,10 @@
 import { Kysely, sql } from "kysely";
-import { Query } from "~/types/querySchema";
-import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
-import { getColumnFromTable } from "~/operations/utils/computedColumns";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { buildJsonObject } from "~/operations/utils/jsonBuilderHelpers";
-import { env } from "~/env";
+import type { Query } from "../../types/querySchema";
+import { buildWhereConditions } from "../utils/whereConditionBuilder";
+import { getColumnFromTable } from "../utils/computedColumns";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { buildJsonObject } from "../utils/jsonBuilderHelpers";
+import { env } from "../../env";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -188,7 +188,7 @@ function resolveColumnReference({
 }: {
   columnName: string;
   baseTable: string;
-  schema: import("~/types/types").SchemaResponse;
+  schema: import("../../types/types").SchemaResponse;
   aliasToTable: Map<string, string>;
 }) {
   const { alias, column } = splitColumnReference(columnName);

@@ -19,9 +19,8 @@ WORKDIR /app
 COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-# Copy source and build
+# Copy source
 COPY --from=pruner /app/out/full/ .
-RUN pnpm --filter @ten-dev/inconvo build
 
 ###################
 # PRODUCTION STAGE
@@ -37,12 +36,12 @@ COPY --from=builder /app/pnpm-lock.yaml .
 COPY --from=builder /app/pnpm-workspace.yaml .
 COPY --from=builder /app/.npmrc .
 
-# Copy workspace package.json files
+# Copy workspace package.json files and source
 COPY --from=builder /app/packages/connect/package.json packages/connect/
+COPY --from=builder /app/packages/connect/src packages/connect/src
+COPY --from=builder /app/packages/types/package.json packages/types/
+COPY --from=builder /app/packages/types/src packages/types/src
 COPY --from=builder /app/apps/connect-server/package.json apps/connect-server/
-
-# Copy built dist and source
-COPY --from=builder /app/packages/connect/dist packages/connect/dist
 COPY --from=builder /app/apps/connect-server/src apps/connect-server/src
 
 # Install production dependencies only

@@ -7,8 +7,8 @@ import {
   type ComputedColumnsAugmentation,
   columnConversionsAugmentationSchema,
   type ColumnConversionsAugmentation,
-} from "~/types/customSchema";
-import { logger } from "~/util/logger";
+} from "../types/customSchema";
+import { logger } from "./logger";
 
 const schemaAugmentationsRoot =
   process.env.SCHEMA_AUGMENTATIONS_DIR ||

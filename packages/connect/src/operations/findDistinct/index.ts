@@ -1,10 +1,10 @@
 import { Kysely } from "kysely";
-import { Query } from "~/types/querySchema";
-import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { getColumnFromTable } from "~/operations/utils/computedColumns";
-import { applyLimit } from "~/operations/utils/queryHelpers";
-import { getSchemaBoundDb } from "~/operations/utils/schemaHelpers";
+import type { Query } from "../../types/querySchema";
+import { buildWhereConditions } from "../utils/whereConditionBuilder";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { getColumnFromTable } from "../utils/computedColumns";
+import { applyLimit } from "../utils/queryHelpers";
+import { getSchemaBoundDb } from "../utils/schemaHelpers";
 import assert from "assert";
 
 export async function findDistinct(db: Kysely<any>, query: Query) {

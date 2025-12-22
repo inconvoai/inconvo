@@ -1,9 +1,9 @@
 import { Kysely, sql } from "kysely";
-import { Query } from "~/types/querySchema";
-import { buildWhereConditions } from "~/operations/utils/whereConditionBuilder";
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
-import { getColumnFromTable } from "~/operations/utils/computedColumns";
-import { applyLimit } from "~/operations/utils/queryHelpers";
+import type { Query } from "../../types/querySchema";
+import { buildWhereConditions } from "../utils/whereConditionBuilder";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import { getColumnFromTable } from "../utils/computedColumns";
+import { applyLimit } from "../utils/queryHelpers";
 import assert from "assert";
 import {
   normaliseJoinHop,
@@ -52,7 +52,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
       );
     }
 
-    const hopMetadata = normaliseJoinHop(joinDescriptor.path[0]);
+    const hopMetadata = normaliseJoinHop(joinDescriptor.path[0]!);
     const sourceColumns = hopMetadata.source;
     const targetColumns = hopMetadata.target;
 
@@ -106,7 +106,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
           `${distinctColumnQualified.tableName}.${distinctColumnQualified.columnName}`,
         )})`
       : sql`COUNT(${sql.ref(
-          `${targetTableName}.${targetColumns[0].columnName}`,
+          `${targetTableName}.${targetColumns[0]!.columnName}`,
         )})`;
 
     cte = cte
@@ -164,15 +164,15 @@ export async function countRelations(db: Kysely<any>, query: Query) {
   for (const plan of plans) {
     selectBuilder = selectBuilder.leftJoin(plan.cteName, (join: any) => {
       let joinBuilder = join.onRef(
-        `${table}.${plan.sourceColumns[0].columnName}`,
+        `${table}.${plan.sourceColumns[0]!.columnName}`,
         "=",
-        `${plan.cteName}.${plan.targetColumns[0].columnName}`,
+        `${plan.cteName}.${plan.targetColumns[0]!.columnName}`,
       );
       for (let index = 1; index < plan.sourceColumns.length; index++) {
         joinBuilder = joinBuilder.onRef(
-          `${table}.${plan.sourceColumns[index].columnName}`,
+          `${table}.${plan.sourceColumns[index]!.columnName}`,
           "=",
-          `${plan.cteName}.${plan.targetColumns[index].columnName}`,
+          `${plan.cteName}.${plan.targetColumns[index]!.columnName}`,
         );
       }
       return joinBuilder;

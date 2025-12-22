@@ -1,0 +1,48 @@
+{
+  "name": "@repo/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./chat": "./src/chat/index.ts",
+    "./request-context": "./src/request-context/index.ts",
+    "./semantic-model": "./src/semantic-model/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint --color .",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mantine/core": "^8.0.0",
+    "@mantine/charts": "^8.0.0",
+    "@mantine/form": "^8.0.0",
+    "@mantine/hooks": "^8.0.0",
+    "@monaco-editor/react": "^4.0.0",
+    "monaco-editor": "^0.50.0",
+    "@tabler/icons-react": "^3.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@mantine/charts": "8.3.10",
+    "@mantine/core": "8.3.10",
+    "@mantine/form": "8.3.10",
+    "@mantine/hooks": "8.3.10",
+    "@monaco-editor/react": "4.7.0",
+    "monaco-editor": "0.52.2",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@tabler/icons-react": "3.34.0",
+    "@types/node": "25.0.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "9.39.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "5.9.3"
+  }
+}

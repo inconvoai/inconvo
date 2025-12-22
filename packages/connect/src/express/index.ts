@@ -1,36 +1,37 @@
-import { Request, Response, Router } from "express";
-import { authenticated } from "~/express/middlewares";
-import { QuerySchema } from "~/types/querySchema";
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { authenticated } from "./middlewares";
+import { QuerySchema } from "../types/querySchema";
 import { ZodError } from "zod";
 import {
   clearSchemaCache,
   getCachedSchema,
   preloadSchema,
-} from "~/util/schemaCache";
-import { clearAugmentedSchemaCache } from "~/util/augmentedSchemaCache";
-import { getDb } from "~/dbConnection";
-import packageJson from "~/../../package.json";
-import { logger } from "~/util/logger";
-import { aggregate } from "~/operations/aggregate";
-import { aggregateGroups } from "~/operations/aggregateGroups";
-import { findMany } from "~/operations/findMany";
-import { count } from "~/operations/count";
-import { countRelations } from "~/operations/countRelations";
-import { groupBy } from "~/operations/groupBy";
-import { findDistinct } from "~/operations/findDistinct";
-import { findDistinctByEditDistance } from "~/operations/findDistinctByEditDistance";
+} from "../util/schemaCache";
+import { clearAugmentedSchemaCache } from "../util/augmentedSchemaCache";
+import { getDb } from "../dbConnection";
+import packageJson from "../../package.json" with { type: "json" };
+import { logger } from "../util/logger";
+import { aggregate } from "../operations/aggregate";
+import { aggregateGroups } from "../operations/aggregateGroups";
+import { findMany } from "../operations/findMany";
+import { count } from "../operations/count";
+import { countRelations } from "../operations/countRelations";
+import { groupBy } from "../operations/groupBy";
+import { findDistinct } from "../operations/findDistinct";
+import { findDistinctByEditDistance } from "../operations/findDistinctByEditDistance";
 import {
   writeCustomRelationsAugmentation,
   writeComputedColumnsAugmentation,
   writeColumnConversionsAugmentation,
-} from "~/util/schemaAugmentationStore";
+} from "../util/schemaAugmentationStore";
 import {
   customRelationsAugmentationSchema,
   computedColumnsAugmentationSchema,
   columnConversionsAugmentationSchema,
-} from "~/types/customSchema";
-import { checkDatabaseHealth } from "~/util/healthCheck";
-import { logDatabaseHealthCheckHint } from "~/util/databaseDiagnostics";
+} from "../types/customSchema";
+import { checkDatabaseHealth } from "../util/healthCheck";
+import { logDatabaseHealthCheckHint } from "../util/databaseDiagnostics";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {

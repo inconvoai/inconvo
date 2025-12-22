@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { inconvo } from "@ten-dev/inconvo/express";
+import { inconvo } from "@repo/connect/express";
 import pino from "pino";
 
 dotenv.config();

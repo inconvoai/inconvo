@@ -7,7 +7,7 @@ import {
   type GroupByQuery,
   type JoinPathHop,
 } from "@repo/types";
-import { stringArrayToZodEnum } from "~/utils/zodHelpers";
+import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
 
 export interface GroupByJoinOption {
   name: string;

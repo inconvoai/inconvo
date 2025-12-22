@@ -1,4 +1,4 @@
-import { getAugmentedSchema } from "~/util/augmentedSchemaCache";
+import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 
 export async function findRelationsBetweenTables(
   sourceTableName: string,
@@ -31,8 +31,8 @@ export async function findRelationsBetweenTables(
       sourceRelation.targetColumns?.length
     ) {
       return [
-        sourceRelation.sourceColumns[0],
-        sourceRelation.targetColumns[0],
+        sourceRelation.sourceColumns[0]!,
+        sourceRelation.targetColumns[0]!,
         false, // No grouping needed for direct reference
       ];
     }
@@ -49,8 +49,8 @@ export async function findRelationsBetweenTables(
       targetRelation.targetColumns?.length
     ) {
       return [
-        targetRelation.targetColumns[0],
-        targetRelation.sourceColumns[0],
+        targetRelation.targetColumns[0]!,
+        targetRelation.sourceColumns[0]!,
         true, // Group by is needed for reverse relation (one-to-many)
       ];
     }

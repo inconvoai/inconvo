@@ -1,6 +1,6 @@
 import { sql } from "kysely";
-import { getDb } from "~/dbConnection";
-import { env } from "~/env";
+import { getDb } from "../dbConnection";
+import { env } from "../env";
 import { logger } from "./logger";
 
 const HEALTHCHECK_TIMEOUT_MS = 5_000;

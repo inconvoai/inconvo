@@ -3,6 +3,8 @@
 # dependencies
 node_modules
 
+docs/
+
 # testing
 coverage
 
@@ -61,3 +63,5 @@ yarn-error.log*
 
 # idea files
 .idea
+apps/dev-server/prisma/.inconvo.db
+apps/dev-server/.inconvo.env

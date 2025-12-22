@@ -1,4 +1,5 @@
-import { Expression, SqlBool, sql } from "kysely";
+import { sql } from "kysely";
+import type { Expression, SqlBool } from "kysely";
 import assert from "assert";
 
 const SUPPORTED_OPERATORS = new Set([

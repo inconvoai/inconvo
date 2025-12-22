@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { env } from "~/env";
+import { env } from "../env";
 
 interface MessageInput {
   method: string;

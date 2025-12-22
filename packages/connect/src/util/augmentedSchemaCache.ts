@@ -1,4 +1,4 @@
-import type { SchemaResponse } from "~/types/types";
+import type { SchemaResponse } from "../types/types";
 import { buildAugmentedSchema } from "./buildAugmentedSchema";
 
 let augmentedSchemaCache: SchemaResponse | null = null;

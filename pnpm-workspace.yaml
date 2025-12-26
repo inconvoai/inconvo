@@ -18,4 +18,4 @@ onlyBuiltDependencies:
 patchedDependencies:
   '@cloudflare/workers-oauth-provider@0.2.2': patches/@cloudflare__workers-oauth-provider@0.2.2.patch
   '@langchain/openai@1.2.0': patches/@langchain__openai@1.2.0.patch
-  langsmith@0.4.0: patches/langsmith@0.4.0.patch
+  langsmith@0.4.2: patches/langsmith@0.4.2.patch

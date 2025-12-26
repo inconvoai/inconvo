@@ -14,14 +14,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@langchain/core": "1.1.6",
+    "@langchain/core": "1.1.8",
     "@langchain/langgraph": "1.0.7",
     "@langchain/langgraph-checkpoint-postgres": "1.0.0",
     "@langchain/openai": "1.2.0",
     "@repo/types": "workspace:*",
     "@repo/connect": "workspace:*",
-    "langchain": "1.2.1",
-    "langsmith": "0.4.0",
+    "langchain": "1.2.3",
+    "langsmith": "0.4.2",
     "yaml": "2.8.2",
     "zod": "4.2.1"
   },

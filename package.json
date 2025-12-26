@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "dev:all": "turbo watch dev",
     "dev": "turbo watch dev --filter=platform... --filter=dev-server... --filter=connect-server... --filter=sandbox...",
     "dev:local": "turbo watch dev --filter=dev-server...",
     "dev:run": "turbo run dev --filter=platform... --filter=dev-server... --filter=connect-server... --filter=sandbox...",

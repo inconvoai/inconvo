@@ -1,9 +1,4 @@
-import { config } from "@repo/eslint-config/base";
+import { workersConfig } from "@repo/eslint-config/workers";
 
 /** @type {import("eslint").Linter.Config[]} */
-export default [
-  ...config,
-  {
-    ignores: ["worker-configuration.d.ts"],
-  },
-];
+export default [...workersConfig];

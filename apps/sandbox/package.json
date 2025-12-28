@@ -15,7 +15,7 @@
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
     "hono": "^4.10.8",
-    "zod": "^4.1.13"
+    "zod": "4.2.1"
   },
   "devDependencies": {
     "@cloudflare/sandbox": "^0.6.3",

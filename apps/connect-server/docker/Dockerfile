@@ -21,8 +21,9 @@ WORKDIR /app
 COPY --from=pruner /app/out/json/ .
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy source and build
 COPY --from=pruner /app/out/full/ .
+RUN pnpm --filter connect-server run build
 
 ###################
 # PRODUCTION STAGE
@@ -44,11 +45,11 @@ COPY --from=builder /app/packages/connect/src packages/connect/src
 COPY --from=builder /app/packages/types/package.json packages/types/
 COPY --from=builder /app/packages/types/src packages/types/src
 COPY --from=builder /app/apps/connect-server/package.json apps/connect-server/
-COPY --from=builder /app/apps/connect-server/src apps/connect-server/src
+COPY --from=builder /app/apps/connect-server/dist apps/connect-server/dist
 
 # Install production dependencies only
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 WORKDIR /app/apps/connect-server
-CMD ["pnpm", "run", "start"]
+CMD ["pnpm", "run", "start:prod"]
 EXPOSE 3006

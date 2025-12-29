@@ -1,12 +1,20 @@
 import * as esbuild from "esbuild";
-import { readFileSync } from "fs";
 
-const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
-
-// Get all non-workspace dependencies to externalize
-const external = Object.keys(pkg.dependencies || {}).filter(
-  (dep) => !dep.startsWith("@repo/")
-);
+// Plugin to externalize all packages except workspace packages
+const externalizeNonWorkspace = {
+  name: "externalize-non-workspace",
+  setup(build) {
+    // Externalize all bare imports that aren't workspace packages
+    build.onResolve({ filter: /^[^./]/ }, (args) => {
+      // Keep workspace packages to be bundled
+      if (args.path.startsWith("@repo/")) {
+        return null; // Let esbuild resolve normally
+      }
+      // Externalize everything else
+      return { path: args.path, external: true };
+    });
+  },
+};
 
 await esbuild.build({
   entryPoints: ["src/index.ts"],
@@ -15,7 +23,7 @@ await esbuild.build({
   target: "node22",
   format: "esm",
   outfile: "dist/index.js",
-  external,
+  plugins: [externalizeNonWorkspace],
 });
 
 console.log("Build complete");

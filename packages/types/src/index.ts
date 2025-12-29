@@ -52,6 +52,7 @@ export const InconvoOptionsSchema = z
   .object({
     baseURL: z.string().url(),
     signingSecret: z.string(),
+    augmentationsHash: z.string().optional(),
   })
   .strict();
 
@@ -276,7 +277,7 @@ export const tableConditionsSchema = z
   .nullable();
 export type TableConditions = z.infer<typeof tableConditionsSchema>;
 
-const manualRelationSyncSchemaItem = z
+export const manualRelationSyncSchemaItem = z
   .object({
     name: z.string(),
     relationId: z.string().optional(),
@@ -291,6 +292,8 @@ const manualRelationSyncSchemaItem = z
   })
   .strict();
 
+export type ManualRelationSyncItem = z.infer<typeof manualRelationSyncSchemaItem>;
+
 export const manualRelationsSyncSchema = z
   .object({
     updatedAt: z.string().datetime().optional(),
@@ -300,7 +303,7 @@ export const manualRelationsSyncSchema = z
 
 export type ManualRelationsSync = z.infer<typeof manualRelationsSyncSchema>;
 
-const computedColumnSyncItemSchema = z
+export const computedColumnSyncItemSchema = z
   .object({
     name: z.string(),
     table: z.string(),
@@ -312,6 +315,8 @@ const computedColumnSyncItemSchema = z
   })
   .strict();
 
+export type ComputedColumnSyncItem = z.infer<typeof computedColumnSyncItemSchema>;
+
 export const computedColumnsSyncSchema = z
   .object({
     updatedAt: z.string().datetime().optional(),
@@ -321,7 +326,7 @@ export const computedColumnsSyncSchema = z
 
 export type ComputedColumnsSync = z.infer<typeof computedColumnsSyncSchema>;
 
-const columnConversionSyncItemSchema = z
+export const columnConversionSyncItemSchema = z
   .object({
     column: z.string(),
     table: z.string(),
@@ -331,6 +336,8 @@ const columnConversionSyncItemSchema = z
   })
   .strict();
 
+export type ColumnConversionSyncItem = z.infer<typeof columnConversionSyncItemSchema>;
+
 export const columnConversionsSyncSchema = z
   .object({
     updatedAt: z.string().datetime().optional(),
@@ -339,6 +346,21 @@ export const columnConversionsSyncSchema = z
   .strict();
 
 export type ColumnConversionsSync = z.infer<typeof columnConversionsSyncSchema>;
+
+// Unified augmentations schema - combines all three augmentation types
+export const unifiedAugmentationsSyncSchema = z
+  .object({
+    updatedAt: z.string().datetime(),
+    hash: z.string(),
+    relations: z.array(manualRelationSyncSchemaItem),
+    computedColumns: z.array(computedColumnSyncItemSchema),
+    columnConversions: z.array(columnConversionSyncItemSchema),
+  })
+  .strict();
+
+export type UnifiedAugmentationsSync = z.infer<
+  typeof unifiedAugmentationsSyncSchema
+>;
 
 export const dateConditionSchema = z
   .object({

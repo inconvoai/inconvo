@@ -13,6 +13,10 @@ type ColumnRelationEntry = {
   targetColumn: { name: string | null };
 };
 import type { SchemaResponse } from "@repo/connect";
+import {
+  writeUnifiedAugmentation,
+  computeAugmentationsHash,
+} from "@repo/connect";
 import { prisma } from "./prisma";
 
 /**
@@ -513,6 +517,9 @@ export async function syncSchema(): Promise<{
     }
   }
 
+  // Sync augmentations to file after schema sync
+  await syncAugmentationsToFile();
+
   return { added, updated };
 }
 
@@ -611,4 +618,90 @@ export async function getTableCount(params: {
   }
 
   return prisma.table.count({ where });
+}
+
+/**
+ * Sync augmentations from SQLite to augmentations.json file.
+ * This exports manual relations, computed columns, and column conversions
+ * to the file format that the connect package reads.
+ */
+export async function syncAugmentationsToFile(): Promise<void> {
+  // Fetch manual relations with their column mappings
+  const manualRelations = await prisma.relation.findMany({
+    where: { source: "MANUAL" },
+    include: {
+      sourceTable: { select: { name: true } },
+      targetTable: { select: { name: true } },
+      columnMappings: {
+        select: {
+          sourceColumnName: true,
+          targetColumnName: true,
+        },
+        orderBy: { position: "asc" },
+      },
+    },
+  });
+
+  // Fetch computed columns
+  const computedColumns = await prisma.computedColumn.findMany({
+    include: {
+      table: { select: { name: true } },
+    },
+  });
+
+  // Fetch column conversions
+  const columnConversions = await prisma.columnConversion.findMany({
+    include: {
+      column: { select: { name: true } },
+      table: { select: { name: true } },
+    },
+  });
+
+  // Transform to unified augmentation format
+  const relations = manualRelations.map((rel) => ({
+    name: rel.name,
+    isList: rel.isList,
+    sourceTable: rel.sourceTable.name,
+    targetTable: rel.targetTable.name,
+    sourceColumns: rel.columnMappings.map((m) => m.sourceColumnName),
+    targetColumns: rel.columnMappings.map((m) => m.targetColumnName),
+    selected: rel.selected,
+    status: rel.status as "VALID" | "BROKEN",
+    errorTag: rel.errorTag,
+  }));
+
+  const computedColumnsPayload = computedColumns.map((cc) => ({
+    name: cc.name,
+    table: cc.table.name,
+    ast: JSON.parse(cc.ast),
+    type: cc.type,
+    unit: cc.unit,
+    notes: cc.notes,
+    selected: cc.selected,
+  }));
+
+  const columnConversionsPayload = columnConversions.map((conv) => ({
+    column: conv.column.name,
+    table: conv.table.name,
+    ast: JSON.parse(conv.ast),
+    type: conv.type ?? undefined,
+    selected: conv.selected,
+  }));
+
+  const payload = {
+    relations,
+    computedColumns: computedColumnsPayload,
+    columnConversions: columnConversionsPayload,
+  };
+
+  // Compute hash and write to file
+  const hash = computeAugmentationsHash(payload);
+
+  await writeUnifiedAugmentation({
+    updatedAt: new Date().toISOString(),
+    hash,
+    relations,
+    computedColumns: computedColumnsPayload,
+    columnConversions: columnConversionsPayload,
+  });
 }

@@ -20,16 +20,8 @@ import { countRelations } from "../operations/countRelations";
 import { groupBy } from "../operations/groupBy";
 import { findDistinct } from "../operations/findDistinct";
 import { findDistinctByEditDistance } from "../operations/findDistinctByEditDistance";
-import {
-  writeCustomRelationsAugmentation,
-  writeComputedColumnsAugmentation,
-  writeColumnConversionsAugmentation,
-} from "../util/schemaAugmentationStore";
-import {
-  customRelationsAugmentationSchema,
-  computedColumnsAugmentationSchema,
-  columnConversionsAugmentationSchema,
-} from "../types/customSchema";
+import { writeUnifiedAugmentation } from "../util/schemaAugmentationStore";
+import { unifiedAugmentationSchema } from "../types/customSchema";
 import { checkDatabaseHealth } from "../util/healthCheck";
 import { logDatabaseHealthCheckHint } from "../util/databaseDiagnostics";
 
@@ -137,10 +129,11 @@ export async function inconvo(): Promise<Router> {
     res.send(safeJsonStringify({ version: packageJson.version }));
   });
 
-  router.post("/sync/custom-relations", async (req: Request, res: Response) => {
+  // Unified sync endpoint for all augmentations (push from platform)
+  router.post("/sync/augmentations", async (req: Request, res: Response) => {
     try {
-      const payload = customRelationsAugmentationSchema.parse(req.body);
-      await writeCustomRelationsAugmentation({
+      const payload = unifiedAugmentationSchema.parse(req.body);
+      await writeUnifiedAugmentation({
         ...payload,
         updatedAt: payload.updatedAt ?? new Date().toISOString(),
       });
@@ -153,96 +146,26 @@ export async function inconvo(): Promise<Router> {
       if (error instanceof ZodError) {
         logger.warn(
           { issues: error.issues },
-          "POST /sync/custom-relations - invalid payload",
+          "POST /sync/augmentations - invalid payload",
         );
         return res
           .status(400)
           .setHeader("Content-Type", "application/json")
           .send(safeJsonStringify({ error: "Invalid payload" }));
       }
-      logger.error({ error }, "POST /sync/custom-relations - failed");
+      logger.error({ error }, "POST /sync/augmentations - failed");
       res
         .status(500)
         .setHeader("Content-Type", "application/json")
         .send(
-          safeJsonStringify({ error: "Failed to persist custom relations" }),
+          safeJsonStringify({ error: "Failed to persist augmentations" }),
         );
     }
   });
-
-  router.post("/sync/computed-columns", async (req: Request, res: Response) => {
-    try {
-      const payload = computedColumnsAugmentationSchema.parse(req.body);
-      await writeComputedColumnsAugmentation({
-        ...payload,
-        updatedAt: payload.updatedAt ?? new Date().toISOString(),
-      });
-      clearAugmentedSchemaCache();
-      res
-        .status(200)
-        .setHeader("Content-Type", "application/json")
-        .send(safeJsonStringify({ ok: true }));
-    } catch (error) {
-      if (error instanceof ZodError) {
-        logger.warn(
-          { issues: error.issues },
-          "POST /sync/computed-columns - invalid payload",
-        );
-        return res
-          .status(400)
-          .setHeader("Content-Type", "application/json")
-          .send(safeJsonStringify({ error: "Invalid payload" }));
-      }
-      logger.error({ error }, "POST /sync/computed-columns - failed");
-      res
-        .status(500)
-        .setHeader("Content-Type", "application/json")
-        .send(
-          safeJsonStringify({ error: "Failed to persist computed columns" }),
-        );
-    }
-  });
-
-  router.post(
-    "/sync/column-conversions",
-    async (req: Request, res: Response) => {
-      try {
-        const payload = columnConversionsAugmentationSchema.parse(req.body);
-        await writeColumnConversionsAugmentation({
-          ...payload,
-          updatedAt: payload.updatedAt ?? new Date().toISOString(),
-        });
-        clearAugmentedSchemaCache();
-        res
-          .status(200)
-          .setHeader("Content-Type", "application/json")
-          .send(safeJsonStringify({ ok: true }));
-      } catch (error) {
-        if (error instanceof ZodError) {
-          logger.warn(
-            { issues: error.issues },
-            "POST /sync/column-conversions - invalid payload",
-          );
-          return res
-            .status(400)
-            .setHeader("Content-Type", "application/json")
-            .send(safeJsonStringify({ error: "Invalid payload" }));
-        }
-        logger.error({ error }, "POST /sync/column-conversions - failed");
-        res
-          .status(500)
-          .setHeader("Content-Type", "application/json")
-          .send(
-            safeJsonStringify({
-              error: "Failed to persist column conversions",
-            }),
-          );
-      }
-    },
-  );
 
   router.post("/", async (req: Request, res: Response) => {
     const startTime = Date.now();
+
     try {
       const parsedQuery = QuerySchema.parse(req.body);
       const { operation } = parsedQuery;

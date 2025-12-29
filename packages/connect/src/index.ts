@@ -1,5 +1,11 @@
 export { buildSchema } from "./util/buildSchema";
 export { getDb } from "./dbConnection";
+export {
+  readUnifiedAugmentation,
+  writeUnifiedAugmentation,
+  computeAugmentationsHash,
+} from "./util/schemaAugmentationStore";
+export { clearAugmentedSchemaCache } from "./util/augmentedSchemaCache";
 // Note: Express middleware exported separately from "@repo/connect/express"
 export { BigQueryDialect } from "./dialects/bigquery";
 export type { BigQueryDialectConfig } from "./dialects/bigquery";

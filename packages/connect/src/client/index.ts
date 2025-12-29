@@ -11,17 +11,14 @@ import {
   type Query,
   type QueryResponse,
   queryResponseSchema,
-  manualRelationsSyncSchema,
-  computedColumnsSyncSchema,
-  type ManualRelationsSync,
-  type ComputedColumnsSync,
-  columnConversionsSyncSchema,
-  type ColumnConversionsSync,
+  unifiedAugmentationsSyncSchema,
+  type UnifiedAugmentationsSync,
 } from "@repo/types";
 
 export class UserDatabaseConnector {
   private client: AxiosInstance;
   private signingSecret: string;
+  private augmentationsHash?: string;
 
   constructor(options: InconvoOptions) {
     const parsedOptions = InconvoOptionsSchema.parse(options);
@@ -32,6 +29,7 @@ export class UserDatabaseConnector {
       },
     });
     this.signingSecret = parsedOptions.signingSecret;
+    this.augmentationsHash = parsedOptions.augmentationsHash;
   }
 
   private generateHeaders(
@@ -49,11 +47,16 @@ export class UserDatabaseConnector {
       body,
     });
     const signature = generateHmac(message, this.signingSecret);
-    return {
+    const headers: Record<string, string> = {
       "inconvo-signature": signature,
       "inconvo-timestamp": timestamp,
       "inconvo-random": random,
     };
+    // Include augmentations hash on POST requests (queries)
+    if (method === "POST" && this.augmentationsHash) {
+      headers["inconvo-augmentations-hash"] = this.augmentationsHash;
+    }
+    return headers;
   }
 
   public async getSchema(): Promise<SchemaResponse> {
@@ -88,29 +91,11 @@ export class UserDatabaseConnector {
     }
   }
 
-  public async syncCustomRelations(
-    payload: ManualRelationsSync,
+  public async syncAugmentations(
+    payload: UnifiedAugmentationsSync,
   ): Promise<void> {
-    const body = manualRelationsSyncSchema.parse(payload);
-    const requestUrl = "/sync/custom-relations";
-    const headers = this.generateHeaders("POST", requestUrl, body);
-    await this.client.post(requestUrl, body, { headers });
-  }
-
-  public async syncComputedColumns(
-    payload: ComputedColumnsSync,
-  ): Promise<void> {
-    const body = computedColumnsSyncSchema.parse(payload);
-    const requestUrl = "/sync/computed-columns";
-    const headers = this.generateHeaders("POST", requestUrl, body);
-    await this.client.post(requestUrl, body, { headers });
-  }
-
-  public async syncColumnConversions(
-    payload: ColumnConversionsSync,
-  ): Promise<void> {
-    const body = columnConversionsSyncSchema.parse(payload);
-    const requestUrl = "/sync/column-conversions";
+    const body = unifiedAugmentationsSyncSchema.parse(payload);
+    const requestUrl = "/sync/augmentations";
     const headers = this.generateHeaders("POST", requestUrl, body);
     await this.client.post(requestUrl, body, { headers });
   }

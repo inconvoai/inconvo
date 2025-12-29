@@ -1,12 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 import {
-  customRelationsAugmentationSchema,
-  computedColumnsAugmentationSchema,
-  type CustomRelationsAugmentation,
-  type ComputedColumnsAugmentation,
-  columnConversionsAugmentationSchema,
-  type ColumnConversionsAugmentation,
+  unifiedAugmentationSchema,
+  type UnifiedAugmentation,
 } from "../types/customSchema";
 import { logger } from "./logger";
 
@@ -15,111 +12,89 @@ const schemaAugmentationsRoot =
   path.resolve(process.cwd(), "schema-augmentations");
 
 const SCHEMA_AUGMENTATIONS_DIR = path.resolve(schemaAugmentationsRoot);
-const CUSTOM_RELATIONS_FILE = path.join(
+
+const AUGMENTATIONS_FILE = path.join(
   SCHEMA_AUGMENTATIONS_DIR,
-  "custom-relations.json",
-);
-const COMPUTED_COLUMNS_FILE = path.join(
-  SCHEMA_AUGMENTATIONS_DIR,
-  "computed-columns.json",
-);
-const COLUMN_CONVERSIONS_FILE = path.join(
-  SCHEMA_AUGMENTATIONS_DIR,
-  "column-conversions.json",
+  "augmentations.json",
 );
 
 async function ensureSchemaAugmentationsDir() {
   await fs.mkdir(SCHEMA_AUGMENTATIONS_DIR, { recursive: true });
 }
 
-async function writeAugmentationFile(filePath: string, payload: unknown) {
-  await ensureSchemaAugmentationsDir();
-  const tmpPath = `${filePath}.tmp`;
-  await fs.writeFile(tmpPath, JSON.stringify(payload, null, 2), "utf8");
-  await fs.rename(tmpPath, filePath);
+/**
+ * Compute a deterministic SHA-256 hash of augmentations.
+ * Arrays are sorted by deterministic keys for consistent hashing.
+ */
+export function computeAugmentationsHash(payload: {
+  relations: unknown[];
+  computedColumns: unknown[];
+  columnConversions: unknown[];
+}): string {
+  const canonical = JSON.stringify({
+    relations: [...payload.relations].sort((a: any, b: any) =>
+      `${a.sourceTable}.${a.name}`.localeCompare(`${b.sourceTable}.${b.name}`),
+    ),
+    computedColumns: [...payload.computedColumns].sort((a: any, b: any) =>
+      `${a.table}.${a.name}`.localeCompare(`${b.table}.${b.name}`),
+    ),
+    columnConversions: [...payload.columnConversions].sort((a: any, b: any) =>
+      `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`),
+    ),
+  });
+  return crypto.createHash("sha256").update(canonical).digest("hex");
 }
 
-async function readAugmentationFile<T>(
-  filePath: string,
-  fallback: T,
-): Promise<T> {
+/**
+ * Write unified augmentations to a single file.
+ */
+export async function writeUnifiedAugmentation(
+  augmentation: UnifiedAugmentation,
+): Promise<void> {
+  const payload = unifiedAugmentationSchema.parse(augmentation);
+  await ensureSchemaAugmentationsDir();
+  const tmpPath = `${AUGMENTATIONS_FILE}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(payload, null, 2), "utf8");
+  await fs.rename(tmpPath, AUGMENTATIONS_FILE);
+}
+
+/**
+ * Read unified augmentations from the single file.
+ * Returns empty augmentations if file doesn't exist.
+ */
+export async function readUnifiedAugmentation(): Promise<UnifiedAugmentation> {
+  const empty: UnifiedAugmentation = {
+    relations: [],
+    computedColumns: [],
+    columnConversions: [],
+  };
+
   try {
-    const contents = await fs.readFile(filePath, "utf8");
-    return JSON.parse(contents) as T;
-  } catch (error: any) {
-    if (error.code === "ENOENT") {
-      return fallback;
+    const contents = await fs.readFile(AUGMENTATIONS_FILE, "utf8");
+    const parsed = unifiedAugmentationSchema.safeParse(JSON.parse(contents));
+    if (parsed.success) {
+      return parsed.data;
     }
     logger.warn(
-      { error, filePath },
-      "Schema augmentation store - failed to read augmentation file",
+      { issues: parsed.error.issues },
+      "Schema augmentation store - invalid unified augmentation file",
     );
-    return fallback;
+    return empty;
+  } catch (error: any) {
+    if (error.code !== "ENOENT") {
+      logger.warn(
+        { error },
+        "Schema augmentation store - failed to read unified augmentation file",
+      );
+    }
+    return empty;
   }
 }
 
-export async function writeCustomRelationsAugmentation(
-  augmentation: CustomRelationsAugmentation,
-) {
-  const payload = customRelationsAugmentationSchema.parse(augmentation);
-  await writeAugmentationFile(CUSTOM_RELATIONS_FILE, payload);
-}
-
-export async function readCustomRelationsAugmentation(): Promise<CustomRelationsAugmentation> {
-  const raw = await readAugmentationFile<unknown>(CUSTOM_RELATIONS_FILE, {
-    relations: [],
-  });
-  const parsed = customRelationsAugmentationSchema.safeParse(raw);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  logger.warn(
-    { issues: parsed.error.issues },
-    "Schema augmentation store - invalid custom relations augmentation, returning empty default",
-  );
-  return { relations: [] };
-}
-
-export async function writeComputedColumnsAugmentation(
-  augmentation: ComputedColumnsAugmentation,
-) {
-  const payload = computedColumnsAugmentationSchema.parse(augmentation);
-  await writeAugmentationFile(COMPUTED_COLUMNS_FILE, payload);
-}
-
-export async function readComputedColumnsAugmentation(): Promise<ComputedColumnsAugmentation> {
-  const raw = await readAugmentationFile<unknown>(COMPUTED_COLUMNS_FILE, {
-    computedColumns: [],
-  });
-  const parsed = computedColumnsAugmentationSchema.safeParse(raw);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  logger.warn(
-    { issues: parsed.error.issues },
-    "Schema augmentation store - invalid computed columns augmentation, returning empty default",
-  );
-  return { computedColumns: [] };
-}
-
-export async function writeColumnConversionsAugmentation(
-  augmentation: ColumnConversionsAugmentation,
-) {
-  const payload = columnConversionsAugmentationSchema.parse(augmentation);
-  await writeAugmentationFile(COLUMN_CONVERSIONS_FILE, payload);
-}
-
-export async function readColumnConversionsAugmentation(): Promise<ColumnConversionsAugmentation> {
-  const raw = await readAugmentationFile<unknown>(COLUMN_CONVERSIONS_FILE, {
-    columnConversions: [],
-  });
-  const parsed = columnConversionsAugmentationSchema.safeParse(raw);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  logger.warn(
-    { issues: parsed.error.issues },
-    "Schema augmentation store - invalid column conversions augmentation, returning empty default",
-  );
-  return { columnConversions: [] };
+/**
+ * Get the hash of the current local augmentations.
+ */
+export async function getLocalAugmentationsHash(): Promise<string> {
+  const augmentation = await readUnifiedAugmentation();
+  return computeAugmentationsHash(augmentation);
 }

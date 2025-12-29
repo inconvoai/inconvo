@@ -3,6 +3,8 @@
 ###################
 FROM node:22-alpine AS pruner
 RUN corepack enable && corepack prepare pnpm@10.26.0 --activate
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="${PNPM_HOME}:${PATH}"
 RUN pnpm add -g turbo
 WORKDIR /app
 COPY . .

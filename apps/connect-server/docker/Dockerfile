@@ -29,27 +29,21 @@ RUN pnpm --filter connect-server run build
 # PRODUCTION STAGE
 ###################
 FROM node:22-alpine AS production
-RUN corepack enable && corepack prepare pnpm@10.26.0 --activate
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy package files
-COPY --from=builder /app/package.json .
-COPY --from=builder /app/pnpm-lock.yaml .
-COPY --from=builder /app/pnpm-workspace.yaml .
-COPY --from=builder /app/.npmrc .
+# Copy the bundle
+COPY --from=builder /app/apps/connect-server/dist/index.cjs .
 
-# Copy workspace package.json files and source
-COPY --from=builder /app/packages/connect/package.json packages/connect/
-COPY --from=builder /app/packages/connect/src packages/connect/src
-COPY --from=builder /app/packages/types/package.json packages/types/
-COPY --from=builder /app/packages/types/src packages/types/src
-COPY --from=builder /app/apps/connect-server/package.json apps/connect-server/
-COPY --from=builder /app/apps/connect-server/dist apps/connect-server/dist
+# Install only the packages that must be external (native/dynamic require)
+# These cannot be bundled by esbuild
+RUN npm init -y && npm install --omit=dev \
+    pino \
+    pino-pretty \
+    pg \
+    mysql2 \
+    tedious \
+    @google-cloud/bigquery
 
-# Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
-
-WORKDIR /app/apps/connect-server
-CMD ["pnpm", "run", "start:prod"]
+CMD ["node", "index.cjs"]
 EXPOSE 3006

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "~/lib/prisma";
+import { syncAugmentationsToFile } from "~/lib/schema";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -24,6 +25,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(selected !== undefined && { selected }),
       },
     });
+
+    // Sync augmentations to file after relation changes
+    await syncAugmentationsToFile();
 
     return NextResponse.json({ relation });
   } catch (error) {

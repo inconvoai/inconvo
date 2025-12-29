@@ -4,11 +4,7 @@ import type {
   SchemaTable,
 } from "../types/types";
 import { getCachedSchema } from "./schemaCache";
-import {
-  readCustomRelationsAugmentation,
-  readComputedColumnsAugmentation,
-  readColumnConversionsAugmentation,
-} from "./schemaAugmentationStore";
+import { readUnifiedAugmentation } from "./schemaAugmentationStore";
 import { logger } from "./logger";
 import {
   SQLCastExpressionAstSchema,
@@ -164,23 +160,16 @@ function deriveSimpleTypeFromCast(
 }
 
 export async function buildAugmentedSchema(): Promise<SchemaResponse> {
-  const [
-    baseSchema,
-    customRelations,
-    computedColumnsAugmentation,
-    columnConversionsAugmentation,
-  ] = await Promise.all([
+  const [baseSchema, augmentations] = await Promise.all([
     getCachedSchema(),
-    readCustomRelationsAugmentation(),
-    readComputedColumnsAugmentation(),
-    readColumnConversionsAugmentation(),
+    readUnifiedAugmentation(),
   ]);
 
   const tables = cloneTables(baseSchema);
   const tableMap = new Map(tables.map((table) => [table.name, table]));
   const relationRegistry = initRelationRegistry(tables);
 
-  for (const relation of customRelations.relations ?? []) {
+  for (const relation of augmentations.relations ?? []) {
     if (relation.selected === false) {
       continue;
     }
@@ -265,7 +254,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     });
   }
 
-  const computedColumns = computedColumnsAugmentation.computedColumns ?? [];
+  const computedColumns = augmentations.computedColumns ?? [];
   let attachedComputedColumns = 0;
 
   for (const computed of computedColumns) {
@@ -331,8 +320,7 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     );
   }
 
-  const columnConversions =
-    columnConversionsAugmentation.columnConversions ?? [];
+  const columnConversions = augmentations.columnConversions ?? [];
   let attachedColumnConversions = 0;
 
   for (const conversion of columnConversions) {

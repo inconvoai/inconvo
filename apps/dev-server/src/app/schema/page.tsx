@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Box,
   Title,
-  Text,
   Group,
   Button,
   Badge,
@@ -19,7 +18,6 @@ import {
   IconRefresh,
   IconAlertCircle,
   IconCheck,
-  IconInfoCircle,
 } from "@tabler/icons-react";
 import type {
   TableSummary,
@@ -532,6 +530,246 @@ function SchemaPageContent() {
     [selectedTable],
   );
 
+  // Computed column callbacks
+  const onCreateComputedColumn = useCallback(
+    async (
+      tableId: string,
+      payload: { name: string; ast: unknown; unit: string | null },
+    ) => {
+      const res = await fetch("/api/schema/computed-columns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId, ...payload }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onUpdateComputedColumn = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: { name?: string; selected?: boolean; notes?: string | null },
+    ) => {
+      const res = await fetch(`/api/schema/computed-columns/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Update local state optimistically
+      if (selectedTable?.id === tableId) {
+        setSelectedTable({
+          ...selectedTable,
+          computedColumns: selectedTable.computedColumns.map((cc) =>
+            cc.id === columnId ? { ...cc, ...payload } : cc,
+          ),
+        });
+      }
+    },
+    [selectedTable],
+  );
+
+  const onDeleteComputedColumn = useCallback(
+    async (tableId: string, columnId: string) => {
+      const res = await fetch(`/api/schema/computed-columns/${columnId}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Update local state optimistically
+      if (selectedTable?.id === tableId) {
+        setSelectedTable({
+          ...selectedTable,
+          computedColumns: selectedTable.computedColumns.filter(
+            (cc) => cc.id !== columnId,
+          ),
+        });
+      }
+    },
+    [selectedTable],
+  );
+
+  // Manual relation callbacks
+  const onCreateManualRelation = useCallback(
+    async (
+      tableId: string,
+      payload: {
+        name: string;
+        isList: boolean;
+        targetTableId: string;
+        columnPairs: Array<{
+          sourceColumnName: string;
+          targetColumnName: string;
+        }>;
+      },
+    ) => {
+      const res = await fetch("/api/schema/manual-relations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceTableId: tableId, ...payload }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onUpdateManualRelation = useCallback(
+    async (
+      tableId: string,
+      relationId: string,
+      payload: {
+        name: string;
+        isList: boolean;
+        targetTableId: string;
+        columnPairs: Array<{
+          sourceColumnName: string;
+          targetColumnName: string;
+        }>;
+      },
+    ) => {
+      const res = await fetch(`/api/schema/manual-relations/${relationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onDeleteManualRelation = useCallback(
+    async (tableId: string, relationId: string) => {
+      const res = await fetch(`/api/schema/manual-relations/${relationId}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Update local state optimistically
+      if (selectedTable?.id === tableId) {
+        setSelectedTable({
+          ...selectedTable,
+          relations: selectedTable.relations.filter(
+            (rel) => rel.id !== relationId,
+          ),
+        });
+      }
+    },
+    [selectedTable],
+  );
+
+  // Column conversion callbacks
+  const onCreateColumnConversion = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: { type: string; ast: unknown; selected: boolean },
+    ) => {
+      const res = await fetch("/api/schema/conversions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columnId, ...payload }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onUpdateColumnConversion = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: { type: string; ast: unknown; selected: boolean },
+    ) => {
+      // Find conversion ID from current state
+      const column = selectedTable?.columns.find((c) => c.id === columnId);
+      if (!column?.conversion?.id) {
+        throw new Error("Conversion not found");
+      }
+
+      const res = await fetch(
+        `/api/schema/conversions/${column.conversion.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [selectedTable, tables, fetchTableDetail],
+  );
+
+  const onDeleteColumnConversion = useCallback(
+    async (tableId: string, columnId: string) => {
+      // Find conversion ID from current state
+      const column = selectedTable?.columns.find((c) => c.id === columnId);
+      if (!column?.conversion?.id) {
+        throw new Error("Conversion not found");
+      }
+
+      const res = await fetch(
+        `/api/schema/conversions/${column.conversion.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Update local state optimistically
+      if (selectedTable?.id === tableId) {
+        setSelectedTable({
+          ...selectedTable,
+          columns: selectedTable.columns.map((c) =>
+            c.id === columnId ? { ...c, conversion: null } : c,
+          ),
+        });
+      }
+    },
+    [selectedTable],
+  );
+
   // Handle search change (TableList handles debouncing, we just update URL)
   const handleSearchChange = useCallback(
     (query: string) => {
@@ -559,8 +797,50 @@ function SchemaPageContent() {
     [updateQueryParams],
   );
 
-  // Available tables for relations (empty for now - manual relations not supported)
-  const availableTables: TableWithColumns[] = useMemo(() => [], []);
+  // Available tables for manual relations - fetch all tables with their columns
+  const [availableTables, setAvailableTables] = useState<TableWithColumns[]>(
+    [],
+  );
+
+  const fetchAvailableTables = useCallback(async () => {
+    try {
+      // Fetch all tables (not filtered)
+      const res = await fetch("/api/schema/tables?access=QUERYABLE,JOINABLE");
+      const data = (await res.json()) as {
+        tables?: ApiTableId[];
+      };
+
+      // Fetch column details for each table
+      const tablesWithColumns: TableWithColumns[] = await Promise.all(
+        (data.tables ?? []).map(async (t) => {
+          const detailRes = await fetch(
+            `/api/schema/tables/${encodeURIComponent(t.name)}`,
+          );
+          const detailData = (await detailRes.json()) as {
+            table?: ApiTableDetail;
+          };
+          return {
+            id: t.id,
+            name: t.name,
+            columns: (detailData.table?.columns ?? []).map((c) => ({
+              id: c.id,
+              name: c.name,
+              type: c.type,
+            })),
+          };
+        }),
+      );
+
+      setAvailableTables(tablesWithColumns);
+    } catch (err) {
+      console.error("Failed to fetch available tables:", err);
+    }
+  }, []);
+
+  // Fetch available tables once on mount
+  useEffect(() => {
+    void fetchAvailableTables();
+  }, [fetchAvailableTables]);
 
   if (loading) {
     return (
@@ -598,20 +878,6 @@ function SchemaPageContent() {
             Sync from Database
           </Button>
         </Group>
-
-        {/* Info about limited features */}
-        <Alert
-          icon={<IconInfoCircle size={14} />}
-          color="blue"
-          variant="light"
-          py="xs"
-        >
-          <Text size="xs">
-            <strong>Dev Server Mode:</strong> Schema augmentation features
-            (computed columns, manual relations, column conversions) are
-            available in the full platform.
-          </Text>
-        </Alert>
 
         {error && (
           <Alert
@@ -663,7 +929,18 @@ function SchemaPageContent() {
           onUpdateTable={onUpdateTable}
           onUpdateColumn={onUpdateColumn}
           onUpdateRelation={onUpdateRelation}
-          // Schema augmentation features not available in dev server
+          // Computed column callbacks
+          onCreateComputedColumn={onCreateComputedColumn}
+          onUpdateComputedColumn={onUpdateComputedColumn}
+          onDeleteComputedColumn={onDeleteComputedColumn}
+          // Manual relation callbacks
+          onCreateManualRelation={onCreateManualRelation}
+          onUpdateManualRelation={onUpdateManualRelation}
+          onDeleteManualRelation={onDeleteManualRelation}
+          // Column conversion callbacks
+          onCreateColumnConversion={onCreateColumnConversion}
+          onUpdateColumnConversion={onUpdateColumnConversion}
+          onDeleteColumnConversion={onDeleteColumnConversion}
         />
       </Box>
     </Box>

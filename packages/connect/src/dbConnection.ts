@@ -86,9 +86,11 @@ export async function getDb(): Promise<Kysely<any>> {
         ? [url.username, url.password]
         : url.pathname.slice(1).split(":");
 
-    // Load tedious and tarn dynamically
-    const tedious = require("tedious");
-    const tarn = require("tarn");
+    // Load tedious and tarn dynamically (ESM dynamic import)
+    const tediousModule = await import("tedious");
+    const tedious = tediousModule.default ?? tediousModule;
+    const tarnModule = await import("tarn");
+    const tarn = tarnModule.default ?? tarnModule;
 
     const dialect = new MssqlDialect({
       tarn: {

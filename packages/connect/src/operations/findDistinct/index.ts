@@ -5,6 +5,7 @@ import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { executeWithLogging } from "../utils/executeWithLogging";
 import assert from "assert";
 
 export async function findDistinct(db: Kysely<any>, query: Query) {
@@ -35,12 +36,12 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
   const limit = 500;
   dbQuery = applyLimit(dbQuery, limit);
 
-  const response = await dbQuery.execute();
+  const { rows: response, compiled } = await executeWithLogging(dbQuery, {
+    operation: "findDistinct",
+  });
   if (response.length >= limit) {
     throw new Error(`Find Distinct limit hit at ${limit}`);
   }
-
-  const compiled = dbQuery.compile();
 
   return {
     query: { sql: compiled.sql, params: compiled.parameters },

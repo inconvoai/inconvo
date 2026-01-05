@@ -16,6 +16,7 @@ import {
   aliasDepth,
 } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings } from "../utils/jsonParsing";
+import { executeWithLogging } from "../utils/executeWithLogging";
 import type { SchemaTable } from "../../types/types";
 
 export async function findMany(db: Kysely<any>, query: Query) {
@@ -495,8 +496,9 @@ export async function findMany(db: Kysely<any>, query: Query) {
   // Handle limit
   selectQuery = applyLimit(selectQuery, limit);
 
-  const compiled = selectQuery.compile();
-  const result = await selectQuery.execute();
+  const { rows: result, compiled } = await executeWithLogging(selectQuery, {
+    operation: "findMany",
+  });
 
   const remappedRows = result.map((row: any) => {
     const output: Record<string, any> = {};

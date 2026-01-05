@@ -11,6 +11,7 @@ import {
   resolveJoinDescriptor,
 } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
+import { executeWithLogging } from "../utils/executeWithLogging";
 
 export async function aggregate(db: Kysely<any>, query: Query) {
   assert(query.operation === "aggregate", "Invalid operation");
@@ -116,8 +117,9 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     dbQuery = dbQuery.where(whereCondition);
   }
 
-  const compiled = dbQuery.compile();
-  const result = await dbQuery.execute();
+  const { rows: result, compiled } = await executeWithLogging(dbQuery, {
+    operation: "aggregate",
+  });
   const firstRow = result[0] as Record<string, unknown> | undefined;
 
   const parsedRow = firstRow

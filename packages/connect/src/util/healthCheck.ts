@@ -6,12 +6,12 @@ import { logger } from "./logger";
 const HEALTHCHECK_TIMEOUT_MS = 5_000;
 
 // Minimal query to make sure the configured database is reachable before we start serving traffic.
-// BigQuery and MSSQL are bypassed because they don't support cheap healthcheck queries like `SELECT 1`.
+// BigQuery is bypassed because it doesn't support cheap healthcheck queries like `SELECT 1`.
 export async function checkDatabaseHealth(
   timeoutMs: number = HEALTHCHECK_TIMEOUT_MS,
 ): Promise<void> {
-  // BigQuery and MSSQL don't support cheap healthcheck queries - bypass entirely
-  if (env.DATABASE_DIALECT === "bigquery" || env.DATABASE_DIALECT === "mssql") {
+  // BigQuery doesn't support cheap healthcheck queries - bypass entirely
+  if (env.DATABASE_DIALECT === "bigquery") {
     logger.info(`Bypassing database health check for ${env.DATABASE_DIALECT}`);
     return;
   }

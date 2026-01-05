@@ -36,7 +36,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       const joinType = join.joinType ?? "left";
       for (const hop of join.path) {
         // Create a unique key for this hop based on source and target
-        const hopKey = `${hop.source.sort().join(",")}|${hop.target.sort().join(",")}`;
+        const hopKey = `${[...hop.source].sort().join(",")}|${[...hop.target].sort().join(",")}`;
         if (appliedHops.has(hopKey)) {
           continue; // Skip duplicate hop
         }

@@ -17,3 +17,4 @@ export {
 } from "./chartUtils";
 
 export { MessageContent, type MessageContentProps } from "./MessageContent";
+export { VegaChart, type VegaChartProps } from "./VegaChart";

@@ -1,6 +1,7 @@
 import {
   AIMessage,
   HumanMessage,
+  SystemMessage,
   ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
@@ -36,19 +37,9 @@ import { databaseRetrieverToolDescription } from "../database/utils/databaseRetr
 import { InconvoSandbox } from "../utils/sandbox";
 import { extractTextFromMessage } from "../utils/langchainMessageUtils";
 
-interface Chart {
-  type: "bar" | "line";
-  data: {
-    labels: string[];
-    datasets: {
-      name: string;
-      values: number[];
-    }[];
-  };
-  title: string;
-  xLabel: string;
-  yLabel: string;
-}
+import type { VegaLiteSpec } from "@repo/types";
+import * as vegaLite from "vega-lite";
+import * as vega from "vega";
 
 type Table = {
   head: string[];
@@ -58,19 +49,8 @@ type Table = {
 interface Answer {
   type: string;
   message: string;
-  chart?: Chart;
+  spec?: VegaLiteSpec;
   table?: Table;
-}
-
-function assertChartDatasetsMatchLabels(chart: Chart) {
-  const labelCount = chart.data.labels.length;
-  chart.data.datasets.forEach((dataset) => {
-    if (dataset.values.length !== labelCount) {
-      throw new Error(
-        `Chart dataset "${dataset.name}" must include ${labelCount} values.`,
-      );
-    }
-  });
 }
 
 interface QuestionAgentParams {
@@ -138,6 +118,37 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
   });
 
   return relatedMessages;
+}
+
+/**
+ * Validates a Vega-Lite spec by compiling it to Vega and parsing.
+ * This catches both structural issues and invalid expression functions.
+ * Returns an array of error messages if validation fails.
+ */
+function validateVegaLiteSpec(
+  response: z.infer<typeof inconvoResponseSchema>,
+): string[] {
+  if (response.type !== "chart") {
+    return [];
+  }
+
+  // First, try to compile the Vega-Lite spec to a Vega spec.
+  let compiled;
+  try {
+    compiled = vegaLite.compile(response.spec as vegaLite.TopLevelSpec);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [`Vega-Lite compilation error: ${message}`];
+  }
+
+  // Then, parse the Vega spec to validate expressions (e.g., invalid functions like dayofweek).
+  try {
+    vega.parse(compiled.spec);
+    return [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [`Vega parsing error: ${message}`];
+  }
 }
 
 /**
@@ -243,6 +254,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => y,
       default: () => undefined,
     }),
+    formatAttempts: Annotation<number>({
+      reducer: (x, y) => x + y,
+      default: () => 0,
+    }),
   });
 
   const tools: (StructuredToolInterface | DynamicTool | RunnableToolLike)[] =
@@ -270,6 +285,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         type: "text",
         message: "",
       },
+      formatAttempts: -_state.formatAttempts, // Reset to 0 via reducer
     };
   }
 
@@ -511,7 +527,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   };
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:1a94dfd9");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:c3dc23fe");
     const tables = params.schema.map((table) => table.name);
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -542,25 +558,56 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // Extract potential JSON responses from the last message
     const potentialJsonResponses = extractTextFromMessage(lastAiMessage);
 
-    // Filter to only valid JSON that matches inconvoResponseSchema
+    // Try to parse and validate JSON responses against inconvoResponseSchema
     type InconvoResponse = z.infer<typeof inconvoResponseSchema>;
-    const validResponses = potentialJsonResponses
-      .map((jsonString: string) => {
-        const { data } = tryCatchSync(
-          () => JSON.parse(jsonString) as unknown,
-        ) as { data: unknown; error: Error | null };
-        return data;
-      })
-      .filter(
-        (data: unknown): data is NonNullable<typeof data> =>
-          data !== null && data !== undefined,
-      )
-      .map((data: unknown) => inconvoResponseSchema.safeParse(data))
-      .filter(
-        (result): result is z.ZodSafeParseSuccess<InconvoResponse> =>
-          result.success,
-      )
-      .map((result) => result.data);
+    const parseResults: {
+      valid: InconvoResponse[];
+      errors: string[];
+    } = { valid: [], errors: [] };
+
+    for (const jsonString of potentialJsonResponses) {
+      const { data: parsed, error: parseError } = tryCatchSync(
+        () => JSON.parse(jsonString) as unknown,
+      ) as { data: unknown; error: Error | null };
+
+      if (parseError) {
+        parseResults.errors.push(`JSON parse error: ${parseError.message}`);
+        continue;
+      }
+
+      // Reject legacy literal to force the model to emit the supported type
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "type" in parsed &&
+        (parsed as Record<string, unknown>).type === "vega"
+      ) {
+        parseResults.errors.push(
+          'Legacy output type "vega" is no longer accepted. Please respond with type "chart" and include the Vega-Lite spec in "spec".',
+        );
+        continue;
+      }
+
+      const zodResult = inconvoResponseSchema.safeParse(parsed);
+      if (zodResult.success) {
+        // Additional validation for vega specs
+        const vegaErrors = validateVegaLiteSpec(zodResult.data);
+        if (vegaErrors.length > 0) {
+          parseResults.errors.push(...vegaErrors);
+        } else {
+          parseResults.valid.push(zodResult.data);
+        }
+      } else {
+        const formattedErrors = zodResult.error.issues
+          .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+          .join("\n");
+        parseResults.errors.push(
+          `Schema validation failed:\n${formattedErrors}`,
+        );
+      }
+    }
+
+    const validResponses = parseResults.valid;
 
     const stateMessages = state.messages ?? [];
     const databaseRelatedMessages = extractToolRelatedMessages(
@@ -585,10 +632,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
       }
 
-      if (selectedResponse.type === "chart" && selectedResponse.chart) {
-        assertChartDatasetsMatchLabels(selectedResponse.chart);
-      }
-
       return {
         answer: selectedResponse,
         chatHistory: [
@@ -600,109 +643,52 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       };
     }
 
-    const outputFormatterPrompt = await getPrompt("format_response:249747a7");
+    // Validation failed - check if we've exceeded retry limit
+    const maxFormatAttempts = 2;
+    if (state.formatAttempts >= maxFormatAttempts) {
+      // Bail out with raw text from the last AI message
+      let fallbackMessage = "Sorry, I was unable to format a response.";
 
-    const variantUnion = z.discriminatedUnion("type", [
-      z.object({
-        type: z.literal("text"),
-        message: z.string().describe("Plain text answer"),
-      }),
-      z.object({
-        type: z.literal("chart"),
-        message: z
-          .string()
-          .describe(
-            "Explanation accompanying the chart highlighting key insights",
-          ),
-        chart: z
-          .object({
-            type: z.enum(["line", "bar"]).describe("Chart type"),
-            data: z
-              .object({
-                labels: z
-                  .array(z.string())
-                  .min(1)
-                  .describe("Ordered labels for the x axis"),
-                datasets: z
-                  .array(
-                    z
-                      .object({
-                        name: z
-                          .string()
-                          .describe(
-                            "Name of the dataset to render in the chart",
-                          ),
-                        values: z
-                          .array(z.number())
-                          .describe(
-                            "Ordered y axis values, each index aligns with the labels array",
-                          ),
-                      })
-                      .strict(),
-                  )
-                  .min(1)
-                  .describe(
-                    "Datasets to plot, aligned by index to the labels array",
-                  ),
-              })
-              .strict(),
-            title: z.string(),
-            xLabel: z.string(),
-            yLabel: z.string(),
-          })
-          .strict(),
-      }),
-      z.object({
-        type: z.literal("table"),
-        message: z.string().describe("Summary of what the table shows"),
-        table: z.object({
-          head: z.array(z.string()).min(1).describe("Column headers"),
-          body: z
-            .array(z.array(z.string()).min(1))
-            .min(1)
-            .describe("Table rows aligned with headers"),
-        }),
-      }),
-    ]);
+      const jsonString = extractTextFromMessage(lastAiMessage).join("\n");
+      const { data: parsed, error: parseError } = tryCatchSync(
+        () => JSON.parse(jsonString) as unknown,
+      ) as { data: unknown; error: Error | null };
 
-    const wrappedSchema = z.object({
-      data: variantUnion.describe(
-        "Discriminated union payload. Use type to decide which shape to return.",
-      ),
-    });
-    const model_4_1 = getAIModel("azure:gpt-4.1");
-    const outputFormatterSchema = model_4_1.withStructuredOutput(
-      wrappedSchema,
-      {
-        strict: true,
-        method: "jsonSchema",
-      },
-    );
+      if (
+        !parseError &&
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "message" in parsed &&
+        typeof parsed.message === "string"
+      ) {
+        fallbackMessage = parsed.message;
+      }
 
-    // Fallback to LLM formatter if no valid responses found
-    const messageToFormat = potentialJsonResponses.join("\n") ?? "";
-
-    const wrapped = await outputFormatterPrompt
-      .pipe(outputFormatterSchema)
-      .invoke({
-        messageToFormat,
-      });
-
-    const response = wrapped.data as z.infer<typeof variantUnion>;
-
-    if (response.type === "chart" && response.chart) {
-      assertChartDatasetsMatchLabels(response.chart);
+      return {
+        answer: {
+          type: "text" as const,
+          message: fallbackMessage,
+        },
+        chatHistory: [
+          new HumanMessage(state.userQuestion),
+          ...getSchemaRelatedMessages,
+          ...databaseRelatedMessages,
+          new AIMessage(fallbackMessage),
+        ],
+      };
     }
 
-    return {
-      answer: response,
-      chatHistory: [
-        new HumanMessage(state.userQuestion),
-        ...getSchemaRelatedMessages,
-        ...databaseRelatedMessages,
-        new AIMessage(JSON.stringify(response, null, 2)),
-      ],
-    };
+    // Route back to agent with error details
+    const validationErrors = parseResults.errors.join("\n");
+    const errorMessage = `Your response could not be parsed. Please fix the following issues and respond with valid JSON:\n\n${validationErrors}`;
+
+    return new Command({
+      goto: "inconvo_agent",
+      update: {
+        messages: [new SystemMessage(errorMessage)],
+        formatAttempts: 1,
+      },
+    });
   }
 
   async function titleConversation(state: typeof AgentState.State) {

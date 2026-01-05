@@ -207,6 +207,7 @@ export interface ComputedColumnUpdatePayload {
   selected?: boolean;
   name?: string;
   notes?: string | null;
+  unit?: string | null;
 }
 
 /**
@@ -244,11 +245,19 @@ export interface ContextFilterPayload {
 }
 
 /**
- * Column unit create payload
+ * Column unit payload (for regular columns)
  */
 export interface ColumnUnitPayload {
   columnName: string;
   unit: string;
+}
+
+/**
+ * Computed column unit payload
+ */
+export interface ComputedColumnUnitPayload {
+  computedColumnId: string;
+  unit: string | null;
 }
 
 /**

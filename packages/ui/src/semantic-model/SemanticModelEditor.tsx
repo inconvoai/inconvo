@@ -19,6 +19,7 @@ import type {
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
   ColumnUnitPayload,
+  ComputedColumnUnitPayload,
 } from "./types";
 import { TableList, type FilterValue } from "./TableList";
 import { TableDetail } from "./TableDetail";
@@ -88,6 +89,8 @@ export interface SemanticModelEditorProps {
   onDeleteColumnConversion?: (tableId: string, columnId: string) => Promise<void>;
   /** Callback when a column unit is added */
   onAddColumnUnit?: (tableId: string, payload: ColumnUnitPayload) => Promise<void>;
+  /** Callback when a computed column unit is updated */
+  onUpdateComputedColumnUnit?: (tableId: string, payload: ComputedColumnUnitPayload) => Promise<void>;
 }
 
 export function SemanticModelEditor({
@@ -123,6 +126,7 @@ export function SemanticModelEditor({
   onUpdateColumnConversion,
   onDeleteColumnConversion,
   onAddColumnUnit,
+  onUpdateComputedColumnUnit,
 }: SemanticModelEditorProps) {
   // Internal state for client-side mode (when server-side callbacks not provided)
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
@@ -276,6 +280,15 @@ export function SemanticModelEditor({
     [selectedTable, onAddColumnUnit]
   );
 
+  const handleUpdateComputedColumnUnit = useCallback(
+    async (payload: ComputedColumnUnitPayload) => {
+      if (selectedTable) {
+        await onUpdateComputedColumnUnit?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onUpdateComputedColumnUnit]
+  );
+
   return (
     <Flex h="100%" gap={0}>
       {/* Left Sidebar - Table List */}
@@ -338,6 +351,7 @@ export function SemanticModelEditor({
             onUpdateColumnConversion={handleUpdateColumnConversion}
             onDeleteColumnConversion={handleDeleteColumnConversion}
             onAddColumnUnit={handleAddColumnUnit}
+            onUpdateComputedColumnUnit={handleUpdateComputedColumnUnit}
           />
         ) : (
           <Center h="100%">

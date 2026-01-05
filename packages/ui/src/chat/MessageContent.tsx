@@ -1,9 +1,14 @@
 "use client";
 
-import { BarChart, LineChart } from "@mantine/charts";
 import { Stack, Table, Text, Box } from "@mantine/core";
+import { BarChart, LineChart } from "@mantine/charts";
 import type { InconvoMessage } from "@repo/types";
-import { buildChartPresentation } from "./chartUtils";
+import {
+  buildChartPresentation,
+  getChartMeta,
+  type ChartAny,
+} from "./chartUtils";
+import { VegaChart } from "./VegaChart";
 
 export interface MessageContentProps {
   /** The message to render */
@@ -35,42 +40,6 @@ export function MessageContent({
     );
   }
 
-  if (message.type === "chart" && message.chart) {
-    const result = buildChartPresentation(message.chart);
-
-    const chartProps = {
-      h: 350,
-      w: "100%" as const,
-      data: result.data,
-      tickLine: "x" as const,
-      xAxisLabel: message.chart.xLabel,
-      yAxisProps: {
-        label: {
-          value: message.chart.yLabel,
-          angle: 0,
-          position: "top" as const,
-          fontSize: 12,
-          offset: 15,
-        },
-      },
-      dataKey: "label",
-      series: result.series,
-      withLegend: true,
-      p: "md" as const,
-    };
-
-    return (
-      <Stack>
-        <Text mb="md">{message.message}</Text>
-        {message.chart.type === "bar" ? (
-          <BarChart {...chartProps} />
-        ) : (
-          <LineChart {...chartProps} />
-        )}
-      </Stack>
-    );
-  }
-
   if (message.type === "table" && message.table) {
     return (
       <Stack>
@@ -97,6 +66,49 @@ export function MessageContent({
         </Box>
       </Stack>
     );
+  }
+
+  if (message.type === "chart") {
+    // Preferred path: Vega-Lite spec
+    if (message.spec) {
+      return (
+        <Stack>
+          <Text mb="md">{message.message}</Text>
+          <Box w="100%" style={{ overflowX: "auto" }}>
+            <VegaChart spec={message.spec} />
+          </Box>
+        </Stack>
+      );
+    }
+
+    // Legacy path: structured bar/line payloads for historical logs
+    const legacyChart = (message as InconvoMessage & {
+      chart?: ChartAny;
+    }).chart;
+
+    if (legacyChart) {
+      const { data, series } = buildChartPresentation(legacyChart);
+      const { type, xLabel, yLabel } = getChartMeta(legacyChart);
+      const ChartComponent = type === "bar" ? BarChart : LineChart;
+
+      return (
+        <Stack>
+          <Text mb="md">{message.message}</Text>
+          <Box style={{ overflowX: "auto" }}>
+            <ChartComponent
+              data={data}
+              dataKey="label"
+              h={300}
+              withLegend
+              xAxisLabel={xLabel}
+              yAxisLabel={yLabel}
+              tooltipAnimationDuration={150}
+              series={series.map((s) => ({ name: s.name, color: s.color }))}
+            />
+          </Box>
+        </Stack>
+      );
+    }
   }
 
   if (message.type === "error") {

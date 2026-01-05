@@ -6,7 +6,7 @@ import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
-import * as levenshtein from "fast-levenshtein";
+import levenshtein from "fast-levenshtein";
 import assert from "assert";
 
 function filterStringByEditDistance(

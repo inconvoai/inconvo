@@ -40,15 +40,18 @@ export function buildDateIntervalExpression(
   } else if (env.DATABASE_DIALECT === "mssql") {
     switch (interval) {
       case "day":
-        return sql`FORMAT(${column}, 'yyyy-MM-dd')`;
+        // Style 23 = yyyy-mm-dd
+        return sql`CONVERT(VARCHAR(10), ${column}, 23)`;
       case "week":
         return sql`CONCAT(YEAR(${column}), '-W', DATEPART(WEEK, ${column}))`;
       case "month":
-        return sql`FORMAT(${column}, 'yyyy-MM')`;
+        // Style 23 = yyyy-mm-dd, take first 7 chars for yyyy-mm
+        return sql`LEFT(CONVERT(VARCHAR(10), ${column}, 23), 7)`;
       case "quarter":
         return sql`CONCAT(YEAR(${column}), '-Q', DATEPART(QUARTER, ${column}))`;
       case "hour":
-        return sql`FORMAT(${column}, 'yyyy-MM-dd HH:00')`;
+        // Style 120 = yyyy-mm-dd hh:mi:ss, take first 13 chars + ':00' for yyyy-mm-dd hh:00
+        return sql`CONCAT(LEFT(CONVERT(VARCHAR(19), ${column}, 120), 13), ':00')`;
       case "year":
         return sql`YEAR(${column})`;
     }

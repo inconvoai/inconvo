@@ -1,15 +1,18 @@
 // @ts-nocheck
-import { getDb } from "~/dbConnection";
-import { findDistinctByEditDistance } from "~/operations/findDistinctByEditDistance";
 import { Kysely } from "kysely";
 import { loadTestEnv } from "../loadTestEnv";
 
 describe("MSSQL findDistinctByEditDistance Operation", () => {
   let db: Kysely<any>;
+  let findDistinctByEditDistance: (typeof import("~/operations/findDistinctByEditDistance"))["findDistinctByEditDistance"];
 
   beforeAll(async () => {
     loadTestEnv("mssql");
 
+    jest.resetModules();
+    delete (globalThis as any).__INCONVO_KYSELY_DB__;
+    findDistinctByEditDistance = (await import("~/operations/findDistinctByEditDistance")).findDistinctByEditDistance;
+    const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });
 

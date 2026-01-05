@@ -65,3 +65,4 @@ yarn-error.log*
 .idea
 apps/dev-server/prisma/.inconvo.db
 apps/dev-server/.inconvo.env
+packages/connect/test-ecommerce-478719-ea5da5df04d2.json

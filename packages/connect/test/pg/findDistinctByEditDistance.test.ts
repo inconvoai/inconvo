@@ -1,15 +1,18 @@
 // @ts-nocheck
-import { getDb } from "~/dbConnection";
-import { findDistinctByEditDistance } from "~/operations/findDistinctByEditDistance";
 import { Kysely } from "kysely";
 import { loadTestEnv } from "../loadTestEnv";
 
 describe("PostgreSQL findDistinctByEditDistance Operation", () => {
   let db: Kysely<any>;
+  let findDistinctByEditDistance: (typeof import("~/operations/findDistinctByEditDistance"))["findDistinctByEditDistance"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
 
+    jest.resetModules();
+    delete (globalThis as any).__INCONVO_KYSELY_DB__;
+    findDistinctByEditDistance = (await import("~/operations/findDistinctByEditDistance")).findDistinctByEditDistance;
+    const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });
 

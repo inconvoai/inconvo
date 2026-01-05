@@ -1,16 +1,17 @@
 // @ts-nocheck
 import { Kysely } from "kysely";
-import { getCachedSchema } from "../../src/util/schemaCache";
 import { loadTestEnv } from "../loadTestEnv";
 
 describe("MySQL Simple Query Test", () => {
   let db: Kysely<any>;
+  let getCachedSchema: (typeof import("../../src/util/schemaCache"))["getCachedSchema"];
 
   beforeAll(async () => {
     loadTestEnv("mysql");
 
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
+    getCachedSchema = (await import("../../src/util/schemaCache")).getCachedSchema;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });

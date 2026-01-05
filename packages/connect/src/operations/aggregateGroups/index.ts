@@ -173,10 +173,18 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
 
   let groupQuery = dbForQuery.selectFrom(table);
 
+  // Handle joins if specified - deduplicate hops to avoid duplicate table joins
   if (joins && joins.length > 0) {
+    const appliedHops = new Set<string>();
     for (const join of joins) {
       const joinType = join.joinType ?? "left";
       for (const hop of join.path) {
+        // Create a unique key for this hop based on source and target
+        const hopKey = `${[...hop.source].sort().join(",")}|${[...hop.target].sort().join(",")}`;
+        if (appliedHops.has(hopKey)) {
+          continue; // Skip duplicate hop
+        }
+        appliedHops.add(hopKey);
         const metadata = normaliseJoinHop(hop);
         groupQuery = applyJoinHop(groupQuery, joinType, metadata);
       }

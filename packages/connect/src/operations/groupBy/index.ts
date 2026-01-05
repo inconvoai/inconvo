@@ -4,7 +4,12 @@ import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
-import { buildJsonObject } from "../utils/jsonBuilderHelpers";
+import {
+  buildJsonObject,
+  shouldUseFlatAggregates,
+  buildFlatAggregateSelections,
+  reconstructNestedFromFlat,
+} from "../utils/jsonBuilderHelpers";
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
@@ -85,24 +90,39 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   );
 
   const selectFields: Record<string, any> = {};
+  const useFlatAggregates = shouldUseFlatAggregates();
+  const flatAggregateSelections: [string, any][] = [];
 
-  if (countJsonFields) {
-    selectFields["_count"] = buildJsonObject(countJsonFields);
-  }
-  if (countDistinctJsonFields) {
-    selectFields["_countDistinct"] = buildJsonObject(countDistinctJsonFields);
-  }
-  if (minJsonFields) {
-    selectFields["_min"] = buildJsonObject(minJsonFields);
-  }
-  if (maxJsonFields) {
-    selectFields["_max"] = buildJsonObject(maxJsonFields);
-  }
-  if (sumJsonFields) {
-    selectFields["_sum"] = buildJsonObject(sumJsonFields);
-  }
-  if (avgJsonFields) {
-    selectFields["_avg"] = buildJsonObject(avgJsonFields);
+  if (useFlatAggregates) {
+    // For MSSQL, use flat columns instead of JSON subqueries
+    flatAggregateSelections.push(
+      ...buildFlatAggregateSelections("_count", countJsonFields),
+      ...buildFlatAggregateSelections("_countDistinct", countDistinctJsonFields),
+      ...buildFlatAggregateSelections("_min", minJsonFields),
+      ...buildFlatAggregateSelections("_max", maxJsonFields),
+      ...buildFlatAggregateSelections("_sum", sumJsonFields),
+      ...buildFlatAggregateSelections("_avg", avgJsonFields),
+    );
+  } else {
+    // For other dialects, use JSON wrapping
+    if (countJsonFields) {
+      selectFields["_count"] = buildJsonObject(countJsonFields);
+    }
+    if (countDistinctJsonFields) {
+      selectFields["_countDistinct"] = buildJsonObject(countDistinctJsonFields);
+    }
+    if (minJsonFields) {
+      selectFields["_min"] = buildJsonObject(minJsonFields);
+    }
+    if (maxJsonFields) {
+      selectFields["_max"] = buildJsonObject(maxJsonFields);
+    }
+    if (sumJsonFields) {
+      selectFields["_sum"] = buildJsonObject(sumJsonFields);
+    }
+    if (avgJsonFields) {
+      selectFields["_avg"] = buildJsonObject(avgJsonFields);
+    }
   }
 
   const aliasRenameMap = new Map<string, string>();
@@ -187,23 +207,31 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   }
 
   // Add aggregation fields to selections
-  if (selectFields._count) {
-    selections.push(selectFields._count.as("_count"));
-  }
-  if (selectFields._countDistinct) {
-    selections.push(selectFields._countDistinct.as("_countDistinct"));
-  }
-  if (selectFields._min) {
-    selections.push(selectFields._min.as("_min"));
-  }
-  if (selectFields._max) {
-    selections.push(selectFields._max.as("_max"));
-  }
-  if (selectFields._sum) {
-    selections.push(selectFields._sum.as("_sum"));
-  }
-  if (selectFields._avg) {
-    selections.push(selectFields._avg.as("_avg"));
+  if (useFlatAggregates) {
+    // For MSSQL, add flat aggregate columns
+    for (const [alias, expr] of flatAggregateSelections) {
+      selections.push(sql`${expr}`.as(alias));
+    }
+  } else {
+    // For other dialects, add JSON-wrapped aggregates
+    if (selectFields._count) {
+      selections.push(selectFields._count.as("_count"));
+    }
+    if (selectFields._countDistinct) {
+      selections.push(selectFields._countDistinct.as("_countDistinct"));
+    }
+    if (selectFields._min) {
+      selections.push(selectFields._min.as("_min"));
+    }
+    if (selectFields._max) {
+      selections.push(selectFields._max.as("_max"));
+    }
+    if (selectFields._sum) {
+      selections.push(selectFields._sum.as("_sum"));
+    }
+    if (selectFields._avg) {
+      selections.push(selectFields._avg.as("_avg"));
+    }
   }
 
   // Apply WHERE conditions before grouping
@@ -319,21 +347,32 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   const { rows: response, compiled } = await executeWithLogging(dbQuery, {
     operation: "groupBy",
   });
+
+  const aggregatePrefixes = [
+    "_avg",
+    "_sum",
+    "_min",
+    "_max",
+    "_count",
+    "_countDistinct",
+  ];
+
   const normalisedRows = response.map((row) => {
-    const parsed = parseJsonStrings(row) as Record<string, unknown>;
-    for (const key of [
-      "_avg",
-      "_sum",
-      "_min",
-      "_max",
-      "_count",
-      "_countDistinct",
-    ]) {
-      const value = parsed[key];
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        parsed[key] = flattenObjectKeys(value as Record<string, unknown>);
+    let parsed = parseJsonStrings(row) as Record<string, unknown>;
+
+    if (useFlatAggregates) {
+      // For MSSQL, reconstruct nested objects from flat column names
+      parsed = reconstructNestedFromFlat(parsed, aggregatePrefixes);
+    } else {
+      // For other dialects, flatten the JSON object keys
+      for (const key of aggregatePrefixes) {
+        const value = parsed[key];
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          parsed[key] = flattenObjectKeys(value as Record<string, unknown>);
+        }
       }
     }
+
     aliasRenameMap.forEach((original, sanitized) => {
       if (sanitized in parsed && original !== sanitized) {
         parsed[original] = parsed[sanitized];

@@ -56,3 +56,65 @@ export function jsonAggregate(jsonObject: any): any {
 export function buildJsonObjectSelect(fields: [string, any][]): any {
   return buildJsonObject(fields);
 }
+
+/**
+ * Check if we should use flat aggregate columns instead of JSON wrapping.
+ * MSSQL needs flat columns because the FOR JSON PATH subquery doesn't work
+ * properly in GROUP BY contexts.
+ */
+export function shouldUseFlatAggregates(): boolean {
+  return getDialect() === "mssql";
+}
+
+/**
+ * Build flat aggregate selections for MSSQL.
+ * Returns an array of [alias, expression] pairs that can be selected directly.
+ * The alias format is "prefix.fieldName" (e.g., "_sum.inconvo_InvoiceItem.Total")
+ */
+export function buildFlatAggregateSelections(
+  prefix: string,
+  fields: [string, any][] | null | undefined,
+): [string, any][] {
+  if (!fields || fields.length === 0) return [];
+  return fields.map(([name, value]) => [`${prefix}.${name}`, value]);
+}
+
+/**
+ * Reconstruct nested objects from flat column names.
+ * Converts { "_sum.col1": 10, "_sum.col2": 20, "other": "x" }
+ * to { "_sum": { "col1": 10, "col2": 20 }, "other": "x" }
+ */
+export function reconstructNestedFromFlat(
+  row: Record<string, unknown>,
+  prefixes: string[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const nestedObjects: Record<string, Record<string, unknown>> = {};
+
+  for (const [key, value] of Object.entries(row)) {
+    let matched = false;
+    for (const prefix of prefixes) {
+      if (key.startsWith(`${prefix}.`)) {
+        const nestedKey = key.slice(prefix.length + 1);
+        if (!nestedObjects[prefix]) {
+          nestedObjects[prefix] = {};
+        }
+        nestedObjects[prefix][nestedKey] = value;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      result[key] = value;
+    }
+  }
+
+  // Add nested objects to result
+  for (const prefix of prefixes) {
+    if (nestedObjects[prefix] && Object.keys(nestedObjects[prefix]).length > 0) {
+      result[prefix] = nestedObjects[prefix];
+    }
+  }
+
+  return result;
+}

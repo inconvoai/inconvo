@@ -130,6 +130,7 @@ export async function getDb(): Promise<Kysely<any>> {
               rowCollectionOnDone: true,
               useColumnNames: false,
               connectTimeout: 30000,
+              requestTimeout: 30000,
             },
           });
 

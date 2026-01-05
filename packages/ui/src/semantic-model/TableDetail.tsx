@@ -42,6 +42,7 @@ import type {
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
   UnitColumnPayload,
+  ComputedColumnUnitPayload,
 } from "./types";
 import { WhereCondition } from "./WhereCondition";
 import { ColumnTable } from "./ColumnTable";
@@ -114,6 +115,8 @@ export interface TableDetailProps {
   onDeleteColumnConversion?: (columnId: string) => Promise<void>;
   /** Callback when a column unit is added */
   onAddColumnUnit?: (payload: UnitColumnPayload) => Promise<void>;
+  /** Callback when a computed column unit is updated */
+  onUpdateComputedColumnUnit?: (payload: ComputedColumnUnitPayload) => Promise<void>;
 }
 
 type ModalState =
@@ -146,6 +149,7 @@ export function TableDetail({
   onUpdateColumnConversion,
   onDeleteColumnConversion,
   onAddColumnUnit,
+  onUpdateComputedColumnUnit,
 }: TableDetailProps) {
   const [modalState, setModalState] = useState<ModalState>({ type: "none" });
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -462,6 +466,10 @@ export function TableDetail({
             onClose={closeModal}
             onSave={async (payload) => {
               await onAddColumnUnit?.(payload);
+              closeModal();
+            }}
+            onSaveComputedColumn={async (payload) => {
+              await onUpdateComputedColumnUnit?.(payload);
               closeModal();
             }}
           />

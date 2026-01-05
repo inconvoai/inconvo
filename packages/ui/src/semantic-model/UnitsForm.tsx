@@ -10,13 +10,15 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconInfoCircle } from "@tabler/icons-react";
-import type { TableSchema, ColumnUnitPayload } from "./types";
+import type { TableSchema, ColumnUnitPayload, ComputedColumnUnitPayload } from "./types";
 
 export interface UnitsFormProps {
   /** The table schema (used to get available columns) */
   table: Pick<TableSchema, "id" | "name" | "columns" | "computedColumns">;
-  /** Callback when a unit is added */
+  /** Callback when a unit is added for a regular column */
   onSave: (payload: ColumnUnitPayload) => Promise<void>;
+  /** Callback when a unit is added for a computed column */
+  onSaveComputedColumn?: (payload: ComputedColumnUnitPayload) => Promise<void>;
   /** Callback when cancel/close is clicked */
   onClose: () => void;
   /** Whether a save is in progress */
@@ -26,10 +28,14 @@ export interface UnitsFormProps {
 export function UnitsForm({
   table,
   onSave,
+  onSaveComputedColumn,
   onClose,
   loading = false,
 }: UnitsFormProps) {
   const [selectedColumnId, setSelectedColumnId] = useState<string>("");
+
+  // Derive isComputedColumn from selectedColumnId
+  const isComputedColumn = selectedColumnId.startsWith("computed:");
 
   const form = useForm<{ unit: string }>({
     initialValues: {
@@ -45,36 +51,55 @@ export function UnitsForm({
     },
   });
 
-  // Get numeric columns without existing units
-  const numericColumns = [
-    ...(table.columns ?? []).filter((col) =>
-      ["number"].some((type) => col.type.toLowerCase().includes(type))
-    ),
-    ...(table.computedColumns ?? []).filter((col) =>
-      ["number"].some((type) => col.type.toLowerCase().includes(type))
-    ),
-  ];
+  // Get numeric columns (regular columns)
+  const numericColumns = (table.columns ?? []).filter((col) =>
+    ["number"].some((type) => col.type.toLowerCase().includes(type))
+  );
 
-  const columnOptions = numericColumns
-    .filter((col) => !col.unit)
-    .map((col) => ({
+  // Get numeric computed columns
+  const numericComputedColumns = (table.computedColumns ?? []).filter((col) =>
+    ["number"].some((type) => col.type.toLowerCase().includes(type))
+  );
+
+  // Build column options with group info
+  const columnOptions = [
+    ...numericColumns.map((col) => ({
       value: col.id,
-      label: col.name,
-    }));
+      label: col.unit ? `${col.name} (${col.unit})` : col.name,
+    })),
+    ...numericComputedColumns.map((col) => ({
+      value: `computed:${col.id}`,
+      label: col.unit ? `${col.name} (${col.unit}) [computed]` : `${col.name} [computed]`,
+    })),
+  ];
 
   const handleSubmit = async () => {
     const validation = form.validate();
     if (validation.hasErrors || !selectedColumnId) return;
 
-    const selectedColumn = numericColumns.find(
-      (col) => col.id === selectedColumnId
-    );
-    if (!selectedColumn) return;
+    const trimmedUnit = form.values.unit.trim();
 
-    await onSave({
-      columnName: selectedColumn.name,
-      unit: form.values.unit.trim(),
-    });
+    if (isComputedColumn) {
+      // Handle computed column
+      const computedColumnId = selectedColumnId.replace("computed:", "");
+      if (onSaveComputedColumn) {
+        await onSaveComputedColumn({
+          computedColumnId,
+          unit: trimmedUnit || null,
+        });
+      }
+    } else {
+      // Handle regular column
+      const selectedColumn = numericColumns.find(
+        (col) => col.id === selectedColumnId
+      );
+      if (!selectedColumn) return;
+
+      await onSave({
+        columnName: selectedColumn.name,
+        unit: trimmedUnit,
+      });
+    }
 
     form.reset();
     setSelectedColumnId("");
@@ -98,19 +123,22 @@ export function UnitsForm({
         label="Select Column"
         placeholder="Choose a numeric column"
         value={selectedColumnId}
-        onChange={(value) => setSelectedColumnId(value ?? "")}
+        onChange={(value) => {
+          setSelectedColumnId(value ?? "");
+
+          if (value?.startsWith("computed:")) {
+            const computedColumnId = value.replace("computed:", "");
+            const computedColumn = numericComputedColumns.find((col) => col.id === computedColumnId);
+            form.setFieldValue("unit", computedColumn?.unit ?? "");
+          } else {
+            const column = numericColumns.find((col) => col.id === value);
+            form.setFieldValue("unit", column?.unit ?? "");
+          }
+        }}
         data={columnOptions}
-        description="Only numeric columns without units are shown"
+        description="Select a numeric column to add or edit its unit"
         disabled={columnOptions.length === 0}
       />
-
-      {columnOptions.length === 0 && (
-        <Alert color="gray" variant="light">
-          <Text size="sm">
-            All numeric columns already have units configured.
-          </Text>
-        </Alert>
-      )}
 
       <TextInput
         label="Unit"
@@ -128,7 +156,7 @@ export function UnitsForm({
           loading={loading}
           disabled={!selectedColumnId}
         >
-          Add Unit
+          Save Unit
         </Button>
       </Group>
     </Stack>

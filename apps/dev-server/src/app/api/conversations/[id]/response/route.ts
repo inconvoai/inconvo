@@ -84,7 +84,7 @@ export async function POST(
         message: response.message,
       };
       if (response.type === "chart") {
-        return { ...base, chart: response.chart };
+        return { ...base, chart: response.spec };
       }
       if (response.type === "table") {
         return { ...base, table: response.table };

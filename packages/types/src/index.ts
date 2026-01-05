@@ -292,7 +292,9 @@ export const manualRelationSyncSchemaItem = z
   })
   .strict();
 
-export type ManualRelationSyncItem = z.infer<typeof manualRelationSyncSchemaItem>;
+export type ManualRelationSyncItem = z.infer<
+  typeof manualRelationSyncSchemaItem
+>;
 
 export const manualRelationsSyncSchema = z
   .object({
@@ -315,7 +317,9 @@ export const computedColumnSyncItemSchema = z
   })
   .strict();
 
-export type ComputedColumnSyncItem = z.infer<typeof computedColumnSyncItemSchema>;
+export type ComputedColumnSyncItem = z.infer<
+  typeof computedColumnSyncItemSchema
+>;
 
 export const computedColumnsSyncSchema = z
   .object({
@@ -336,7 +340,9 @@ export const columnConversionSyncItemSchema = z
   })
   .strict();
 
-export type ColumnConversionSyncItem = z.infer<typeof columnConversionSyncItemSchema>;
+export type ColumnConversionSyncItem = z.infer<
+  typeof columnConversionSyncItemSchema
+>;
 
 export const columnConversionsSyncSchema = z
   .object({
@@ -900,44 +906,6 @@ const baseErrorSchema = z.object({
   message: z.string().describe("The message to display."),
 });
 
-const baseChartSchema = z.object({
-  type: z.literal("chart"),
-  message: z.string().describe("The message to display."),
-  chart: z
-    .object({
-      type: z.enum(["bar", "line"]).describe("The type of the chart"),
-      data: z
-        .object({
-          labels: z
-            .array(z.string())
-            .min(1)
-            .describe("Ordered labels for the x axis"),
-          datasets: z
-            .array(
-              z
-                .object({
-                  name: z
-                    .string()
-                    .describe("Name of the dataset to render in the chart"),
-                  values: z
-                    .array(z.number())
-                    .describe(
-                      "Ordered y axis values, each index aligns with the labels array",
-                    ),
-                })
-                .strict(),
-            )
-            .min(1)
-            .describe("Datasets to plot, aligned by index to the labels array"),
-        })
-        .strict(),
-      title: z.string().describe("The title of the chart"),
-      xLabel: z.string().describe("The label for the x axis"),
-      yLabel: z.string().describe("The label for the y axis"),
-    })
-    .strict(),
-});
-
 const baseTableSchema = z.object({
   type: z.literal("table"),
   message: z.string().describe("The message to display."),
@@ -953,12 +921,92 @@ const baseTableSchema = z.object({
     .strict(),
 });
 
+// Vega-Lite v5 spec schema for rich visualizations
+// Uses passthrough() to allow the full Vega-Lite spec while validating core structure
+export const vegaLiteSpecSchema = z
+  .object({
+    $schema: z
+      .string()
+      .optional()
+      .describe(
+        "Vega-Lite schema URL, e.g. https://vega.github.io/schema/vega-lite/v5.json",
+      ),
+    title: z.union([z.string(), z.object({}).passthrough()]).optional(),
+    description: z.string().optional(),
+    width: z.union([z.number(), z.literal("container")]).optional(),
+    height: z.union([z.number(), z.literal("container")]).optional(),
+    data: z
+      .object({
+        values: z
+          .array(z.record(z.string(), z.unknown()))
+          .describe("Inline data as array of objects"),
+      })
+      .describe(
+        "Data source with inline values only; URL-based or named data sources are not supported",
+      ),
+    mark: z
+      .union([
+        z.enum([
+          "bar",
+          "line",
+          "point",
+          "area",
+          "arc",
+          "rect",
+          "rule",
+          "text",
+          "tick",
+          "circle",
+          "square",
+          "geoshape",
+        ]),
+        z.object({ type: z.string() }).passthrough(),
+      ])
+      .describe("Mark type for the visualization"),
+    encoding: z
+      .object({
+        x: z.object({}).passthrough().optional(),
+        y: z.object({}).passthrough().optional(),
+        color: z.object({}).passthrough().optional(),
+        size: z.object({}).passthrough().optional(),
+        shape: z.object({}).passthrough().optional(),
+        opacity: z.object({}).passthrough().optional(),
+        theta: z.object({}).passthrough().optional(),
+        radius: z.object({}).passthrough().optional(),
+        text: z.object({}).passthrough().optional(),
+        tooltip: z
+          .union([
+            z.object({}).passthrough(),
+            z.array(z.object({}).passthrough()),
+          ])
+          .optional(),
+      })
+      .passthrough()
+      .optional()
+      .describe("Visual encoding channels"),
+    layer: z.array(z.object({}).passthrough()).optional(),
+    config: z.object({}).passthrough().optional(),
+  })
+  .passthrough();
+
+export type VegaLiteSpec = z.infer<typeof vegaLiteSpecSchema>;
+
+const baseChartSchema = z.object({
+  type: z.literal("chart"),
+  message: z
+    .string()
+    .describe("Explanation of the visualization highlighting key insights."),
+  spec: vegaLiteSpecSchema.describe(
+    "Complete Vega-Lite v5 specification for the visualization.",
+  ),
+});
+
 // Base schema for messages (no author field, no id)
 const baseMessageSchema = z.discriminatedUnion("type", [
   baseTextSchema,
   baseErrorSchema,
-  baseChartSchema,
   baseTableSchema,
+  baseChartSchema,
 ]);
 
 // InconvoMessage: Can be from user (no id) or Inconvo (has id)

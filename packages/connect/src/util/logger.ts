@@ -10,6 +10,9 @@ const resolvedLevel: LevelWithSilent =
 
 export const logger = pino({
   level: resolvedLevel,
+  serializers: {
+    error: pino.stdSerializers.err,
+  },
   transport: {
     target: "pino-pretty",
     options: {

@@ -10,12 +10,12 @@
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:mssql": "jest test/mssql",
-    "test:mssql:watch": "jest test/mssql --watch",
-    "test:mysql": "jest test/mysql",
-    "test:mysql:watch": "jest test/mysql --watch",
-    "test:pg": "jest test/pg",
-    "test:pg:watch": "jest test/pg --watch",
+    "test:mssql": "NODE_OPTIONS=--experimental-vm-modules jest test/mssql",
+    "test:mssql:watch": "NODE_OPTIONS=--experimental-vm-modules jest test/mssql --watch",
+    "test:mysql": "NODE_OPTIONS=--experimental-vm-modules jest test/mysql",
+    "test:mysql:watch": "NODE_OPTIONS=--experimental-vm-modules jest test/mysql --watch",
+    "test:pg": "NODE_OPTIONS=--experimental-vm-modules jest test/pg",
+    "test:pg:watch": "NODE_OPTIONS=--experimental-vm-modules jest test/pg --watch",
     "test:bq": "NODE_OPTIONS=--experimental-vm-modules jest test/bigquery"
   },
   "exports": {
@@ -26,13 +26,13 @@
   "author": "",
   "license": "UNLICENSED",
   "dependencies": {
-    "express": "^4.21.1",
     "@google-cloud/bigquery": "^8.1.1",
     "@repo/types": "workspace:*",
     "@t3-oss/env-core": "^0.13.8",
     "axios": "^1.13.2",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
+    "express": "^4.21.1",
     "fast-levenshtein": "^3.0.0",
     "kysely": "^0.27.4",
     "mysql2": "^3.15.1",
@@ -45,6 +45,7 @@
     "zod": "4.2.1"
   },
   "devDependencies": {
+    "@jest/globals": "^30.2.0",
     "@repo/eslint-config": "workspace:*",
     "@types/express": "^4.17.21",
     "@types/fast-levenshtein": "^0.0.4",

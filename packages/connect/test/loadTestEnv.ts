@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { config as loadDotenv } from "dotenv";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type SupportedDialect = "mysql" | "postgresql" | "mssql" | "bigquery";
 

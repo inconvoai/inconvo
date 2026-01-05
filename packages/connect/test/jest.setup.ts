@@ -1,4 +1,9 @@
 // Jest setup file
+import { jest } from "@jest/globals";
+
+// Make jest available globally for ESM compatibility
+(globalThis as any).jest = jest;
+
 jest.setTimeout(30000);
 
 // Set test-scoped schema augmentations directory

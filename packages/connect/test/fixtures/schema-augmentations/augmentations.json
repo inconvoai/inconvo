@@ -1,5 +1,6 @@
 {
-  "updatedAt": "2025-12-16T00:00:00.000Z",
+  "relations": [],
+  "columnConversions": [],
   "computedColumns": [
     {
       "name": "revenue",

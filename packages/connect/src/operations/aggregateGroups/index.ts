@@ -18,6 +18,7 @@ import { parseJsonStrings } from "../utils/jsonParsing";
 import { env } from "../../env";
 import { buildAggregateExpression } from "../utils/aggregateExpressionBuilder";
 import { applyHavingComparison } from "../utils/havingComparison";
+import { executeWithLogging } from "../utils/executeWithLogging";
 
 type Reducer = "sum" | "min" | "max" | "avg";
 
@@ -352,8 +353,10 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
 
   outerQuery = outerQuery.select(selectFields);
 
-  const compiled = outerQuery.compile();
-  const [result] = await outerQuery.execute();
+  const { rows, compiled } = await executeWithLogging(outerQuery, {
+    operation: "aggregateGroups",
+  });
+  const [result] = rows;
 
   const parsed = result
     ? (parseJsonStrings(result) as Record<string, unknown>)

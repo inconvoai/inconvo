@@ -15,6 +15,7 @@ import { applyJoinHop, normaliseJoinHop } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
 import { buildAggregateExpression } from "../utils/aggregateExpressionBuilder";
 import { applyHavingComparison } from "../utils/havingComparison";
+import { executeWithLogging } from "../utils/executeWithLogging";
 import { env } from "../../env";
 
 export async function groupBy(db: Kysely<any>, query: Query) {
@@ -308,7 +309,9 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   // Apply limit
   dbQuery = applyLimit(dbQuery, limit);
 
-  const response = await dbQuery.execute();
+  const { rows: response, compiled } = await executeWithLogging(dbQuery, {
+    operation: "groupBy",
+  });
   const normalisedRows = response.map((row) => {
     const parsed = parseJsonStrings(row) as Record<string, unknown>;
     for (const key of [
@@ -332,7 +335,6 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     });
     return parsed;
   });
-  const compiled = dbQuery.compile();
 
   return {
     query: { sql: compiled.sql, params: compiled.parameters },

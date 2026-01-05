@@ -10,6 +10,7 @@ import {
   applyJoinHop,
   resolveJoinDescriptor,
 } from "../utils/joinDescriptorHelpers";
+import { executeWithLogging } from "../utils/executeWithLogging";
 
 export async function count(db: Kysely<any>, query: Query) {
   assert(query.operation === "count", "Invalid operation");
@@ -149,8 +150,9 @@ export async function count(db: Kysely<any>, query: Query) {
     dbQuery = dbQuery.where(whereCondition);
   }
 
-  const result = await dbQuery.execute();
-  const compiled = dbQuery.compile();
+  const { rows: result, compiled } = await executeWithLogging(dbQuery, {
+    operation: "count",
+  });
 
   let data: any;
   if (env.DATABASE_DIALECT === "mssql") {

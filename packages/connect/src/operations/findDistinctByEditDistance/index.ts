@@ -5,6 +5,7 @@ import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { executeWithLogging } from "../utils/executeWithLogging";
 import * as levenshtein from "fast-levenshtein";
 import assert from "assert";
 
@@ -52,7 +53,9 @@ export async function findDistinctByEditDistance(
     dbQuery = dbQuery.where(whereCondition);
   }
 
-  const response = await dbQuery.execute();
+  const { rows: response, compiled } = await executeWithLogging(dbQuery, {
+    operation: "findDistinctByEditDistance",
+  });
   if (response.length > 4999) {
     throw new Error("Find Distinct limit hit at 5000");
   }
@@ -70,8 +73,6 @@ export async function findDistinctByEditDistance(
     operationParameters.compareString,
     maxResults,
   );
-
-  const compiled = dbQuery.compile();
 
   return {
     query: { sql: compiled.sql, params: compiled.parameters },

@@ -9,6 +9,7 @@ import {
   normaliseJoinHop,
   parseQualifiedColumn,
 } from "../utils/joinDescriptorHelpers";
+import { executeWithLogging } from "../utils/executeWithLogging";
 
 type RelationCountPlan = {
   cteName: string;
@@ -192,10 +193,12 @@ export async function countRelations(db: Kysely<any>, query: Query) {
 
   selectBuilder = applyLimit(selectBuilder, limit);
 
-  const compiled = selectBuilder.compile();
-  const rows = await selectBuilder.execute();
+  const { rows, compiled } = await executeWithLogging<Record<string, unknown>>(
+    selectBuilder,
+    { operation: "countRelations" },
+  );
 
-  const normalized = rows.map((row: Record<string, unknown>) => {
+  const normalized = rows.map((row) => {
     const entry: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(row)) {

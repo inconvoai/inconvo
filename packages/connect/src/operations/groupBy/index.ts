@@ -140,7 +140,10 @@ export async function groupBy(db: Kysely<any>, query: Query) {
 
   // Add group by columns to selection
   const groupByColumns: any[] = [];
-  const groupKeyExpressions = new Map<string, { select: any; order: any }>();
+  const groupKeyExpressions = new Map<
+    string,
+    { select: any; order: any; having: any }
+  >();
 
   for (const key of groupByList) {
     if (key.type === "column") {
@@ -158,7 +161,11 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       const dialectAlias = getDialectAlias(alias);
       selections.push(sql`${column}`.as(dialectAlias));
       groupByColumns.push(column);
-      groupKeyExpressions.set(alias, { select: column, order: column });
+      groupKeyExpressions.set(alias, {
+        select: column,
+        order: column,
+        having: column,
+      });
     } else if (key.type === "dateInterval") {
       assert(
         key.column.split(".").length === 2,
@@ -178,9 +185,15 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       );
       selections.push(intervalExpression.as(dialectAlias));
       groupByColumns.push(intervalExpression);
+      // BigQuery requires using alias in HAVING clause for computed expressions
+      const havingExpr =
+        env.DATABASE_DIALECT === "bigquery"
+          ? sql.ref(dialectAlias)
+          : intervalExpression;
       groupKeyExpressions.set(alias, {
         select: intervalExpression,
         order: intervalExpression,
+        having: havingExpr,
       });
     } else if (key.type === "dateComponent") {
       assert(
@@ -202,7 +215,10 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       selections.push(select.as(dialectAlias));
       groupByColumns.push(select);
       groupByColumns.push(order);
-      groupKeyExpressions.set(alias, { select, order });
+      // BigQuery requires using alias in HAVING clause for computed expressions
+      const havingExpr =
+        env.DATABASE_DIALECT === "bigquery" ? sql.ref(dialectAlias) : order;
+      groupKeyExpressions.set(alias, { select, order, having: havingExpr });
     }
   }
 
@@ -263,7 +279,7 @@ export async function groupBy(db: Kysely<any>, query: Query) {
         );
         havingExpressions.push(
           applyHavingComparison(
-            expression.order,
+            expression.having,
             condition.operator,
             condition.value,
           ),

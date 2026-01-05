@@ -41,7 +41,10 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
   };
 
   const groupByColumns: any[] = [];
-  const groupKeyExpressions = new Map<string, { select: any; order: any }>();
+  const groupKeyExpressions = new Map<
+    string,
+    { select: any; order: any; having: any }
+  >();
 
   for (const key of groupByList) {
     if (key.type === "column") {
@@ -61,6 +64,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       groupKeyExpressions.set(alias, {
         select: sql`${column}`.as(dialectAlias),
         order: column,
+        having: column,
       });
     } else if (key.type === "dateInterval") {
       assert(
@@ -80,9 +84,15 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         key.interval,
       );
       groupByColumns.push(intervalExpression);
+      // BigQuery requires using alias in HAVING clause for computed expressions
+      const havingExpr =
+        env.DATABASE_DIALECT === "bigquery"
+          ? sql.ref(dialectAlias)
+          : intervalExpression;
       groupKeyExpressions.set(alias, {
         select: intervalExpression.as(dialectAlias),
         order: intervalExpression,
+        having: havingExpr,
       });
     } else if (key.type === "dateComponent") {
       assert(
@@ -103,9 +113,13 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       );
       groupByColumns.push(select);
       groupByColumns.push(order);
+      // BigQuery requires using alias in HAVING clause for computed expressions
+      const havingExpr =
+        env.DATABASE_DIALECT === "bigquery" ? sql.ref(dialectAlias) : order;
       groupKeyExpressions.set(alias, {
         select: select.as(dialectAlias),
         order,
+        having: havingExpr,
       });
     }
   }
@@ -218,7 +232,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         );
         havingExpressions.push(
           applyHavingComparison(
-            expression.order,
+            expression.having,
             condition.operator,
             condition.value,
           ),

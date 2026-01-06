@@ -14,7 +14,8 @@
     "check-types": "turbo run check-types",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "cf-typegen": "turbo run cf-typegen",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo"
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo",
+    "clean:ts-cache": "rm -f apps/*/tsconfig.tsbuildinfo apps/*/.next/cache/.tsbuildinfo"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

@@ -3,11 +3,11 @@
 import { Box, Text } from "@mantine/core";
 import type { VegaLiteSpec } from "@repo/types";
 import { memo, useEffect, useMemo, useState } from "react";
-import type { VisualizationSpec } from "react-vega";
-import { VegaLite } from "react-vega";
+import { VegaEmbed } from "react-vega";
+import type { VisualizationSpec } from "vega-embed";
 
 export interface VegaChartProps {
-  /** Vega-Lite v5 specification */
+  /** Vega-Lite specification */
   spec: VegaLiteSpec;
   /** Chart width - defaults to "container" for responsive sizing */
   width?: number | "container";
@@ -52,9 +52,9 @@ export const VegaChart = memo(
       setError(null);
     }, [spec]);
 
-    const handleError = (err: Error) => {
+    const handleError = (err: unknown) => {
       console.error("Vega-Lite render error:", err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     };
 
     if (error) {
@@ -79,7 +79,11 @@ export const VegaChart = memo(
 
     return (
       <Box style={{ width: "100%" }}>
-        <VegaLite spec={fullSpec} actions={false} onError={handleError} />
+        <VegaEmbed
+          spec={fullSpec}
+          options={{ actions: false }}
+          onError={handleError}
+        />
       </Box>
     );
   },

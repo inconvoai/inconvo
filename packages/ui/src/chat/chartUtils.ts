@@ -5,6 +5,8 @@
  * Each version has its own types and presentation builder.
  */
 
+import type { LegacyChart } from "@repo/types";
+
 export const CHART_COLOR_PALETTE = [
   "blue.6",
   "grape.6",
@@ -24,7 +26,7 @@ export const CHART_COLOR_PALETTE = [
  * V1 (Legacy): Simple array of label/value pairs
  * Used in early versions, single dataset only
  */
-export interface ChartV1 {
+interface ChartV1 {
   type: "bar" | "line";
   xLabel?: string;
   yLabel?: string;
@@ -35,7 +37,7 @@ export interface ChartV1 {
  * V2 (Current): Multiple datasets with shared labels
  * Supports multiple series on the same chart
  */
-export interface ChartV2 {
+interface ChartV2 {
   type: "bar" | "line";
   xLabel?: string;
   yLabel?: string;
@@ -45,17 +47,13 @@ export interface ChartV2 {
   };
 }
 
-// Future: V3 could support time series, stacked charts, etc.
-// export interface ChartV3 { ... }
-
-export type ChartAny = ChartV1 | ChartV2;
-export type ChartVersion = 1 | 2;
+type ChartVersion = 1 | 2;
 
 // ============================================================================
 // Version Detection
 // ============================================================================
 
-export function detectChartVersion(chart: ChartAny): ChartVersion {
+function detectChartVersion(chart: LegacyChart): ChartVersion {
   if (Array.isArray(chart.data)) {
     return 1;
   }
@@ -68,14 +66,6 @@ export function detectChartVersion(chart: ChartAny): ChartVersion {
   }
   // Default to latest if unknown structure
   return 2;
-}
-
-export function isChartV1(chart: ChartAny): chart is ChartV1 {
-  return detectChartVersion(chart) === 1;
-}
-
-export function isChartV2(chart: ChartAny): chart is ChartV2 {
-  return detectChartVersion(chart) === 2;
 }
 
 // ============================================================================
@@ -148,7 +138,7 @@ function buildPresentationV2(chart: ChartV2): ChartPresentation {
 
 const presentationBuilders: Record<
   ChartVersion,
-  (chart: ChartAny) => ChartPresentation
+  (chart: LegacyChart) => ChartPresentation
 > = {
   1: (chart) => buildPresentationV1(chart as ChartV1),
   2: (chart) => buildPresentationV2(chart as ChartV2),
@@ -162,7 +152,7 @@ const presentationBuilders: Record<
  * Build chart presentation data for Mantine Charts.
  * Automatically detects chart version and uses appropriate builder.
  */
-export function buildChartPresentation(chart: ChartAny): ChartPresentation {
+export function buildChartPresentation(chart: LegacyChart): ChartPresentation {
   const version = detectChartVersion(chart);
   const builder = presentationBuilders[version];
   return builder(chart);
@@ -171,7 +161,7 @@ export function buildChartPresentation(chart: ChartAny): ChartPresentation {
 /**
  * Get chart metadata (type, labels) regardless of version
  */
-export function getChartMeta(chart: ChartAny): {
+export function getChartMeta(chart: LegacyChart): {
   type: "bar" | "line";
   xLabel?: string;
   yLabel?: string;

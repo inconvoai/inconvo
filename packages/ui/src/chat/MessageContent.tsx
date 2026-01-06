@@ -2,12 +2,8 @@
 
 import { Stack, Table, Text, Box } from "@mantine/core";
 import { BarChart, LineChart } from "@mantine/charts";
-import type { InconvoMessage } from "@repo/types";
-import {
-  buildChartPresentation,
-  getChartMeta,
-  type ChartAny,
-} from "./chartUtils";
+import type { InconvoMessage, LegacyChart } from "@repo/types";
+import { buildChartPresentation, getChartMeta } from "./chartUtils";
 import { VegaChart } from "./VegaChart";
 
 export interface MessageContentProps {
@@ -82,11 +78,8 @@ export function MessageContent({
     }
 
     // Legacy path: structured bar/line payloads for historical logs
-    const legacyChart = (message as InconvoMessage & {
-      chart?: ChartAny;
-    }).chart;
-
-    if (legacyChart) {
+    if (message.chart) {
+      const legacyChart = message.chart as LegacyChart;
       const { data, series } = buildChartPresentation(legacyChart);
       const { type, xLabel, yLabel } = getChartMeta(legacyChart);
       const ChartComponent = type === "bar" ? BarChart : LineChart;

@@ -991,14 +991,48 @@ export const vegaLiteSpecSchema = z
 
 export type VegaLiteSpec = z.infer<typeof vegaLiteSpecSchema>;
 
+/**
+ * Legacy chart data formats (v1 and v2) for backward compatibility.
+ * V1: Simple array of label/value pairs
+ * V2: Multiple datasets with shared labels
+ */
+const legacyChartV1DataSchema = z.array(
+  z.object({
+    label: z.string(),
+    value: z.number(),
+  }),
+);
+
+const legacyChartV2DataSchema = z.object({
+  labels: z.array(z.string()),
+  datasets: z.array(
+    z.object({
+      name: z.string(),
+      values: z.array(z.number()),
+    }),
+  ),
+});
+
+const legacyChartSchema = z.object({
+  type: z.enum(["bar", "line"]),
+  xLabel: z.string().optional(),
+  yLabel: z.string().optional(),
+  data: z.union([legacyChartV1DataSchema, legacyChartV2DataSchema]),
+});
+
+export type LegacyChart = z.infer<typeof legacyChartSchema>;
+
 const baseChartSchema = z.object({
   type: z.literal("chart"),
   message: z
     .string()
     .describe("Explanation of the visualization highlighting key insights."),
-  spec: vegaLiteSpecSchema.describe(
-    "Complete Vega-Lite v5 specification for the visualization.",
-  ),
+  spec: vegaLiteSpecSchema
+    .describe("Complete Vega-Lite v5 specification for the visualization.")
+    .optional(),
+  chart: legacyChartSchema
+    .describe("Legacy chart format (v1/v2) for backward compatibility.")
+    .optional(),
 });
 
 // Base schema for messages (no author field, no id)

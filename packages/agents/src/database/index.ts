@@ -36,6 +36,7 @@ import type { Schema } from "@repo/types";
 import { mapJsonToSchema } from "./utils/jsonColumnSchemaMapper";
 import { buildConditionsForTable } from "./utils/buildConditionsForTable";
 import { whereConditionDocsSummary } from "./utils/whereDocs";
+import { buildPromptCacheKey } from "../utils/promptCacheKey";
 import {
   buildColumnLookup,
   canonicalizeDateCondition,
@@ -50,6 +51,7 @@ interface RequestParams {
   schema: Schema;
   requestContext: Record<string, string | number>;
   connector: DatabaseConnector;
+  agentId: string | number;
 }
 
 export const formatAllConditions = (
@@ -74,6 +76,10 @@ export const formatAllConditions = (
 };
 
 export async function databaseRetrieverAgent(params: RequestParams) {
+  const promptCacheKey = buildPromptCacheKey({
+    agentId: params.agentId,
+    requestContext: params.requestContext,
+  });
   const OverallStateAnnotation = Annotation.Root({
     question: Annotation<string>({
       reducer: (x, y) => y,
@@ -244,7 +250,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
-    const model = getAIModel("azure:gpt-5.1");
+    const model = getAIModel("azure:gpt-5.2", {
+      promptCacheKey,
+    });
     const selectTablePrompt = await getPrompt("select_table:dbe22856");
     const tableNames = state.schema
       .filter((table) => table.access === "QUERYABLE")
@@ -278,7 +286,9 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const selectDatabaseOperation = async (
     state: typeof DatabaseAgentState.State,
   ) => {
-    const model = getAIModel("azure:gpt-5.1");
+    const model = getAIModel("azure:gpt-5.2", {
+      promptCacheKey,
+    });
     const operationSelectorPrompt = await getPrompt(
       "select_operation:e74c537d",
     );
@@ -340,6 +350,8 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       tableSchema: state.tableSchema,
       tableName: state.tableName,
       question: state.question,
+      requestContext: params.requestContext,
+      agentId: params.agentId,
     }).invoke({});
     return { operationParams: operationParamsResponse.operationParameters };
   };
@@ -357,6 +369,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       dateCondition: state.dateCondition,
       tableConditions: state.tableConditions,
       requestContext: params.requestContext,
+      agentId: params.agentId,
     });
     return { questionConditions: questionWhereAgentResponse };
   };

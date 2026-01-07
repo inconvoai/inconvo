@@ -1,8 +1,4 @@
-import {
-  AzureChatOpenAI,
-  ChatOpenAI,
-  type ChatOpenAIFields,
-} from "@langchain/openai";
+import { ChatOpenAI, type ChatOpenAIFields } from "@langchain/openai";
 
 export type AIProvider = "azure" | "openai";
 export type AzureModel =
@@ -12,13 +8,15 @@ export type AzureModel =
   | "gpt-5"
   | "gpt-5-mini"
   | "gpt-5-nano"
-  | "gpt-5.1";
+  | "gpt-5.1"
+  | "gpt-5.2";
 export type OpenAIModel =
   | "gpt-4.1"
   | "gpt-5"
   | "gpt-5-mini"
   | "gpt-5-nano"
-  | "gpt-5.1";
+  | "gpt-5.1"
+  | "gpt-5.2";
 export type ModelString = `azure:${AzureModel}` | `openai:${OpenAIModel}`;
 
 export function getAIModel(
@@ -71,11 +69,13 @@ export function getAIModel(
 
   switch (provider) {
     case "azure":
-      return new AzureChatOpenAI({
-        model: model,
-        deploymentName: model,
-        azureOpenAIEndpoint:
-          "https://inconvo-openai-sweedencentral.openai.azure.com/openai/",
+      return new ChatOpenAI({
+        model,
+        apiKey: process.env.AZURE_OPENAI_API_KEY,
+        configuration: {
+          baseURL:
+            "https://inconvo-openai-sweedencentral.openai.azure.com/openai/v1/",
+        },
         ...mergedOptions,
       });
 

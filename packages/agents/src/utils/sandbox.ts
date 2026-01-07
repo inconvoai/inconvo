@@ -1,57 +1,137 @@
 /**
- * Inconvo Sandbox client SDK for server-side environments.
+ * Inconvo Sandbox SDK - Unified client for all sandbox operations.
+ *
+ * This SDK provides a clean interface for:
+ * - Dataset operations (list, upload, delete)
+ * - Sandbox operations (start, execute, destroy)
+ * - Conversation data operations (upload)
+ *
+ * All operations use X-Org-Id and X-Agent-Id headers for authentication.
+ * The server constructs bucket paths from these headers + request params.
  *
  * Usage:
  * ```ts
- * import { InconvoSandbox } from "./sandbox";
+ * import { SandboxClient } from "./sandbox";
  *
- * const sandbox = new InconvoSandbox({
- *   sandboxId: "conversation-or-message-id",
+ * // Create client with org/agent context
+ * const client = new SandboxClient({
+ *   baseUrl: "https://sandbox.example.com",
+ *   apiKey: "secret",
+ *   orgId: "org-123",
+ *   agentId: "agent-456",
  * });
  *
- * await sandbox.uploadFiles([
- *   { name: "sample.json", content: JSON.stringify({ hello: "world" }) },
- * ]);
+ * // List datasets
+ * const datasets = await client.datasets.list();
+ * const filtered = await client.datasets.list({ context: "organisationId=1" });
  *
- * const description = await sandbox.describeFiles(["sample.json"]);
- * const execution = await sandbox.executeCode("print('hello from sandbox')");
- * await sandbox.destroySandbox();
+ * // Upload datasets
+ * await client.datasets.upload({
+ *   requestContextPath: "organisationId=1",
+ *   files: [{ name: "data.csv", content: base64Content }],
+ * });
+ *
+ * // Start sandbox and execute code
+ * const sandbox = client.sandbox({
+ *   conversationId: "conv-123",
+ *   requestContextPath: "organisationId=1", // optional, for mounting datasets
+ * });
+ *
+ * await sandbox.start();
+ * const result = await sandbox.executeCode("print('hello')");
+ * await sandbox.destroy();
  * ```
  */
 
-export interface SandboxSDKOptions {
-  sandboxId: string;
-  baseUrl?: string;
-  apiKey?: string;
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface SandboxClientOptions {
+  baseUrl: string;
+  apiKey: string;
+  orgId: string;
+  agentId: string;
   timeoutMs?: number;
 }
 
-export type UploadContent = string | ArrayBuffer | ArrayBufferView | Blob;
-
-export interface UploadFile {
+export interface DatasetFile {
   name: string;
-  content: UploadContent;
+  targetPath: string;
+  success: boolean;
+  error?: string;
+  schema?: string[];
+  notes?: string;
 }
 
-export interface UploadedFileMetadata {
+export interface ListDatasetsResponse {
+  files: DatasetFile[];
+  folders: string[];
+}
+
+export interface UploadDatasetFile {
+  name: string;
+  content: string; // base64 encoded
+  contentType?: string;
+  notes?: string;
+}
+
+export interface UploadDatasetsParams {
+  requestContextPath: string;
+  files: UploadDatasetFile[];
+}
+
+export interface UploadedFile {
   name: string;
   path: string;
   size: number;
+  error?: string;
 }
 
-export interface UploadResponse {
-  files: UploadedFileMetadata[];
+export interface UploadDatasetsResponse {
+  files: UploadedFile[];
+}
+
+export interface DeleteDatasetsParams {
+  paths: string[];
+}
+
+export interface DeletedFile {
+  path: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface DeleteDatasetsResponse {
+  deleted: DeletedFile[];
+}
+
+export interface SandboxParams {
+  conversationId: string;
+  /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
+  requestContextPath: string;
+}
+
+export interface ConversationDataUploadParams {
+  conversationId: string;
+  requestContextPath: string;
+  files: {
+    name: string;
+    content: string; // base64 encoded
+    contentType?: string;
+  }[];
 }
 
 export interface DescribeFileResult {
   name: string;
+  targetPath: string;
   sql: string;
   dataSummary: string;
   error: string;
   success: boolean;
 }
 
-export interface DescribeResponse {
+export interface DescribeFilesResponse {
   files: DescribeFileResult[];
 }
 
@@ -74,64 +154,140 @@ export class SandboxSDKError extends Error {
   }
 }
 
-const SANDBOX_ID_HEADER = "x-inconvo-message-id";
+// ============================================================================
+// Dataset Client (for org-level dataset operations)
+// ============================================================================
 
-export class InconvoSandbox {
-  private readonly baseUrl: string;
-  private readonly sandboxId: string;
-  private readonly apiKey?: string;
-  private readonly timeoutMs?: number;
-
-  constructor(options: SandboxSDKOptions) {
-    if (!options.sandboxId) {
-      throw new Error("InconvoSandbox requires a sandboxId.");
-    }
-
-    const baseUrl = options.baseUrl ?? process.env.INCONVO_SANDBOX_BASE_URL;
-    if (!baseUrl) {
-      throw new Error(
-        "InconvoSandbox requires a baseUrl (either via options or INCONVO_SANDBOX_BASE_URL environment variable).",
-      );
-    }
-
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.sandboxId = options.sandboxId;
-    this.apiKey = options.apiKey ?? process.env.INCONVO_SANDBOX_API_KEY;
-    this.timeoutMs = options.timeoutMs;
-  }
+class DatasetClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly headers: Headers,
+    private readonly timeoutMs?: number,
+  ) {}
 
   /**
-   * Uploads one or more JSON files into the sandbox workspace.
+   * List datasets. Optionally filter by request context and navigate folders.
+   * @param options.context - Request context path to filter by (e.g., "organisationId=1")
+   * @param options.path - Subfolder path within the context (e.g., "folder1/folder2")
    */
-
-  async uploadFiles(files: UploadFile[]): Promise<UploadResponse> {
-    if (files.length === 0) {
-      throw new Error("uploadFiles requires at least one file.");
+  async list(options?: {
+    context?: string;
+    path?: string;
+  }): Promise<ListDatasetsResponse> {
+    const url = new URL(`${this.baseUrl}/datasets`);
+    if (options?.context) {
+      url.searchParams.set("context", options.context);
+    }
+    if (options?.path) {
+      url.searchParams.set("path", options.path);
     }
 
-    const form = new FormData();
-    for (const file of files) {
-      form.append("files", this.toBlob(file.content), file.name);
-    }
-
-    return this.request<UploadResponse>("/sandbox/files", {
-      method: "POST",
-      body: form,
+    return this.request<ListDatasetsResponse>(url.toString(), {
+      method: "GET",
     });
   }
 
   /**
-   * Runs the built-in JSON analyzer for the provided file names.
+   * Upload dataset files.
    */
-  async describeFiles(fileNames: string[]): Promise<DescribeResponse> {
-    if (fileNames.length === 0) {
-      throw new Error("describeFiles requires at least one file name.");
-    }
-
-    return this.request<DescribeResponse>("/sandbox/files/describe", {
+  async upload(params: UploadDatasetsParams): Promise<UploadDatasetsResponse> {
+    return this.request<UploadDatasetsResponse>(`${this.baseUrl}/datasets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ files: fileNames }),
+      body: JSON.stringify(params),
+    });
+  }
+
+  /**
+   * Delete dataset files.
+   */
+  async delete(params: DeleteDatasetsParams): Promise<DeleteDatasetsResponse> {
+    return this.request<DeleteDatasetsResponse>(`${this.baseUrl}/datasets`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+  }
+
+  private async request<T>(url: string, init: RequestInit): Promise<T> {
+    const controller =
+      typeof this.timeoutMs === "number" ? new AbortController() : undefined;
+
+    if (controller && this.timeoutMs && this.timeoutMs > 0) {
+      setTimeout(() => controller.abort(), this.timeoutMs).unref?.();
+    }
+
+    const headers = new Headers(this.headers);
+    if (init.headers) {
+      const initHeaders = new Headers(init.headers);
+      initHeaders.forEach((value, key) => headers.set(key, value));
+    }
+
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      signal: controller?.signal,
+    }).catch((error: unknown) => {
+      throw new SandboxSDKError(
+        `Failed to reach sandbox worker: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        0,
+        error,
+      );
+    });
+
+    if (!response.ok) {
+      let details: unknown;
+      try {
+        details = await response.clone().json();
+      } catch {
+        details = await response.text();
+      }
+
+      throw new SandboxSDKError(
+        `Sandbox worker responded with ${response.status}`,
+        response.status,
+        details,
+      );
+    }
+
+    return (await response.json()) as T;
+  }
+}
+
+// ============================================================================
+// Sandbox Session (for sandbox-specific operations)
+// ============================================================================
+
+class SandboxSession {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly headers: Headers,
+    private readonly params: SandboxParams,
+    private readonly timeoutMs?: number,
+  ) {}
+
+  /**
+   * Starts/initializes the sandbox and mounts buckets.
+   */
+  async start(): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`${this.baseUrl}/sandbox`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(this.params),
+    });
+  }
+
+  /**
+   * Analyzes all JSON/CSV files in the mounted buckets.
+   */
+  async describeFiles(): Promise<DescribeFilesResponse> {
+    const url = new URL(`${this.baseUrl}/sandbox/files`);
+    url.searchParams.set("conversationId", this.params.conversationId);
+    url.searchParams.set("requestContextPath", this.params.requestContextPath);
+    return this.request<DescribeFilesResponse>(url.toString(), {
+      method: "GET",
     });
   }
 
@@ -143,51 +299,30 @@ export class InconvoSandbox {
       throw new Error("executeCode requires non-empty code.");
     }
 
-    return this.request<ExecuteResponse>("/sandbox/execute", {
+    return this.request<ExecuteResponse>(`${this.baseUrl}/sandbox/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ ...this.params, code }),
     });
   }
 
   /**
-   * Destroys the sandbox associated with the provided sandbox ID.
+   * Destroys the sandbox.
    */
-  async destroySandbox(): Promise<void> {
-    await this.request("/sandbox", { method: "DELETE" }, { expectJson: false });
-  }
-
-  private toBlob(content: UploadContent): Blob {
-    if (content instanceof Blob) {
-      return content;
-    }
-
-    if (typeof content === "string") {
-      return new Blob([content], { type: "application/json" });
-    }
-
-    if (content instanceof ArrayBuffer) {
-      return new Blob([content]);
-    }
-
-    // ArrayBufferView covers Uint8Array, Buffer (Node.js), etc.
-    // Cast to BlobPart to satisfy TypeScript's strict typing
-    return new Blob([content as BlobPart]);
-  }
-
-  private buildHeaders(initHeaders?: HeadersInit): Headers {
-    const headers = new Headers(initHeaders ?? {});
-    headers.set(SANDBOX_ID_HEADER, this.sandboxId);
-
-    if (this.apiKey) {
-      headers.set("authorization", `Bearer ${this.apiKey}`);
-    }
-
-    return headers;
+  async destroy(): Promise<void> {
+    await this.request(
+      `${this.baseUrl}/sandbox`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this.params),
+      },
+      { expectJson: false },
+    );
   }
 
   private async request<T = unknown>(
-    path: string,
+    url: string,
     init: RequestInit,
     options: { expectJson?: boolean } = { expectJson: true },
   ): Promise<T> {
@@ -198,9 +333,13 @@ export class InconvoSandbox {
       setTimeout(() => controller.abort(), this.timeoutMs).unref?.();
     }
 
-    const headers = this.buildHeaders(init.headers);
+    const headers = new Headers(this.headers);
+    if (init.headers) {
+      const initHeaders = new Headers(init.headers);
+      initHeaders.forEach((value, key) => headers.set(key, value));
+    }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetch(url, {
       ...init,
       headers,
       signal: controller?.signal,
@@ -241,3 +380,174 @@ export class InconvoSandbox {
     return (await response.json()) as T;
   }
 }
+
+// ============================================================================
+// Main Client
+// ============================================================================
+
+export class SandboxClient {
+  private readonly baseUrl: string;
+  private readonly headers: Headers;
+  private readonly timeoutMs?: number;
+
+  /**
+   * Dataset operations (list, upload, delete).
+   * Uses X-Org-Id and X-Agent-Id headers for authentication.
+   */
+  readonly datasets: DatasetClient;
+
+  constructor(options: SandboxClientOptions) {
+    if (!options.baseUrl) {
+      throw new Error("SandboxClient requires a baseUrl.");
+    }
+    if (!options.apiKey) {
+      throw new Error("SandboxClient requires an apiKey.");
+    }
+    if (!options.orgId) {
+      throw new Error("SandboxClient requires an orgId.");
+    }
+    if (!options.agentId) {
+      throw new Error("SandboxClient requires an agentId.");
+    }
+
+    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.timeoutMs = options.timeoutMs;
+
+    // Build headers with auth
+    this.headers = new Headers({
+      authorization: `Bearer ${options.apiKey}`,
+      "x-org-id": options.orgId,
+      "x-agent-id": options.agentId,
+    });
+
+    // Initialize dataset client
+    this.datasets = new DatasetClient(
+      this.baseUrl,
+      this.headers,
+      this.timeoutMs,
+    );
+  }
+
+  /**
+   * Create a sandbox session for a specific conversation.
+   * Returns a SandboxSession that can start, execute code, and destroy.
+   *
+   * @param params.conversationId - The conversation ID (required)
+   * @param params.requestContextPath - Request context for mounting datasets (optional)
+   */
+  sandbox(params: SandboxParams): SandboxSession {
+    if (!params.conversationId) {
+      throw new Error("sandbox() requires a conversationId.");
+    }
+
+    return new SandboxSession(
+      this.baseUrl,
+      this.headers,
+      params,
+      this.timeoutMs,
+    );
+  }
+
+  /**
+   * Upload files to conversation data bucket.
+   * This is a standalone operation not tied to a sandbox session.
+   */
+  async uploadConversationData(
+    params: ConversationDataUploadParams,
+  ): Promise<UploadDatasetsResponse> {
+    if (params.files.length === 0) {
+      throw new Error("uploadConversationData requires at least one file.");
+    }
+
+    return this.request<UploadDatasetsResponse>(
+      `${this.baseUrl}/conversation-data`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      },
+    );
+  }
+
+  private async request<T>(url: string, init: RequestInit): Promise<T> {
+    const controller =
+      typeof this.timeoutMs === "number" ? new AbortController() : undefined;
+
+    if (controller && this.timeoutMs && this.timeoutMs > 0) {
+      setTimeout(() => controller.abort(), this.timeoutMs).unref?.();
+    }
+
+    const headers = new Headers(this.headers);
+    if (init.headers) {
+      const initHeaders = new Headers(init.headers);
+      initHeaders.forEach((value, key) => headers.set(key, value));
+    }
+
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      signal: controller?.signal,
+    }).catch((error: unknown) => {
+      throw new SandboxSDKError(
+        `Failed to reach sandbox worker: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        0,
+        error,
+      );
+    });
+
+    if (!response.ok) {
+      let details: unknown;
+      try {
+        details = await response.clone().json();
+      } catch {
+        details = await response.text();
+      }
+
+      throw new SandboxSDKError(
+        `Sandbox worker responded with ${response.status}`,
+        response.status,
+        details,
+      );
+    }
+
+    return (await response.json()) as T;
+  }
+}
+
+// ============================================================================
+// Factory functions
+// ============================================================================
+
+/**
+ * Create a SandboxClient using environment variables for baseUrl and apiKey.
+ * Useful for server-side code where env vars are available.
+ */
+export function createSandboxClientFromEnv(options: {
+  orgId: string;
+  agentId: string;
+  timeoutMs?: number;
+}): SandboxClient {
+  const baseUrl = process.env.INCONVO_SANDBOX_BASE_URL;
+  const apiKey = process.env.INCONVO_SANDBOX_API_KEY;
+
+  if (!baseUrl) {
+    throw new Error(
+      "INCONVO_SANDBOX_BASE_URL environment variable is required.",
+    );
+  }
+  if (!apiKey) {
+    throw new Error("INCONVO_SANDBOX_API_KEY environment variable is required.");
+  }
+
+  return new SandboxClient({
+    baseUrl,
+    apiKey,
+    orgId: options.orgId,
+    agentId: options.agentId,
+    timeoutMs: options.timeoutMs,
+  });
+}
+
+// Types are already exported via `export interface` declarations above

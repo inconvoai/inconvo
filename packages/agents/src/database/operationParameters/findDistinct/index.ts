@@ -14,6 +14,7 @@ import {
   buildOperationParametersPromptMessages,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineFindDistinctOperationParametersParams {
   schema: Schema;
@@ -21,6 +22,8 @@ export interface DefineFindDistinctOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findDistinct";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineFindDistinctOperationParameters(
@@ -81,6 +84,10 @@ export async function defineFindDistinctOperationParameters(
     FindDistinctQuery["operationParameters"],
     FindDistinctValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyFindDistinctOperationParametersTool,
     toolName: "applyFindDistinctOperationParametersTool",
     onComplete: (artifact) => {

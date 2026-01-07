@@ -20,6 +20,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineAggregateOperationParametersParams {
   schema: Schema;
@@ -27,6 +28,8 @@ export interface DefineAggregateOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "aggregate";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineAggregateOperationParameters(
@@ -82,6 +85,10 @@ export async function defineAggregateOperationParameters(
     AggregateQuery["operationParameters"],
     AggregateValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyAggregateOperationParametersTool,
     toolName: "applyAggregateOperationParametersTool",
     onComplete: (artifact) => {

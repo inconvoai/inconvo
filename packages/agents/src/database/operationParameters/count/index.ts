@@ -15,6 +15,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineCountOperationParametersParams {
   schema: Schema;
@@ -22,6 +23,8 @@ export interface DefineCountOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "count";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineCountOperationParameters(
@@ -78,6 +81,10 @@ export async function defineCountOperationParameters(
     CountQuery["operationParameters"],
     CountValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyCountOperationParametersTool,
     toolName: "applyCountOperationParametersTool",
     onComplete: (artifact) => {

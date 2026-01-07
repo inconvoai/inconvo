@@ -27,6 +27,9 @@ Query: ${JSON.stringify(ex.query, null, 2)}`;
 };
 
 export const databaseRetrieverToolDescription = `Call this tool to retrieve data from the database. This tool provides access to various database operations for querying, aggregating, and analyzing data.
+
+**IMPORTANT:** This tool operates in complete isolation with no access to conversation history or previous results. Your question must be fully self-contained with all necessary values explicitly included.
+
 ## Available Operations:
 ${formatOperationExamples()}
 
@@ -38,6 +41,12 @@ ${whereConditionDocsSummary}
 - Always specify the table name you want to query
 - Choose the appropriate operation based on what data you need
 - Use where conditions to filter results when needed
+- **Prefer aggregation over findMany for counts and summaries:**
+  - When you need counts, totals, averages, or distributions, use \`groupBy\`, \`count\`, or \`aggregate\` operations
+  - Do NOT use \`findMany\` to fetch all records and count them later — this is inefficient and may hit row limits
+  - For time-based distributions, use \`groupBy\` with dateInterval or dateComponent keys
+  - dateComponent options: hour, dayOfWeek, dayOfMonth, month, year (for recurring patterns)
+  - dateInterval options: hour, day, week, month, quarter, year (for timeline grouping)
 - For time-based grouping, use dateInterval keys for timelines ({ type: "dateInterval", column: "table.dateColumn", interval: "month" }) or dateComponent keys for recurring cycles ({ type: "dateComponent", column: "table.dateColumn", component: "dayOfWeek" })
 - In HAVING clauses, use { type: "groupKey", key: <groupBy alias>, ... } for group-key filters (not { type: "key" }); use { type: "aggregate", function: <count|sum...>, column: <table.column>, ... } for aggregate filters. For aggregateGroups, you can omit unused aggregate families entirely (no need to send nulls/empties).
 - Provide aggregate lists (count, sum, min, max, avg) as arrays of fully-qualified column names, or null when not needed

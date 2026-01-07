@@ -22,6 +22,7 @@ import { operationDocs } from "../../utils/operationDocs";
 interface CreateOperationParametersAgentOptions<Result, Artifact> {
   tool: StructuredTool;
   toolName: string;
+  promptCacheKey: string;
   isValidArtifact?: (artifact: Artifact | undefined) => boolean;
   onComplete: (artifact: Artifact | undefined) => Result | Promise<Result>;
   jsonDetectedMessage?: string;
@@ -43,8 +44,9 @@ export function createOperationParametersAgent<Result, Artifact>(
       return status === "valid";
     });
 
-  const modelWithTools = getAIModel("azure:gpt-5.1", {
+  const modelWithTools = getAIModel("azure:gpt-5.2", {
     reasoning: { effort: "low", summary: "detailed" },
+    promptCacheKey: options.promptCacheKey,
   }).bindTools([options.tool]);
   type MsgState = typeof MessagesAnnotation.State;
 
@@ -135,10 +137,11 @@ export async function buildOperationParametersPromptMessages(
     operation: keyof typeof operationDocs;
     tableName: string;
     question: string;
+    requestContext: Record<string, string | number>;
   },
   tableSchema: string,
 ): Promise<BaseMessage[]> {
-  const prompt = await getPrompt("extend_query:1dce872d");
+  const prompt = await getPrompt("extend_query:4836f794");
   const formatted = (await prompt.invoke({
     operation: params.operation,
     table: params.tableName,
@@ -146,6 +149,7 @@ export async function buildOperationParametersPromptMessages(
     queryCurrentState: "no operation parameters defined",
     tableSchema,
     question: params.question,
+    requestContext: JSON.stringify(params.requestContext, null, 2),
   })) as Record<"messages", BaseMessage[]>;
   return formatted.messages;
 }

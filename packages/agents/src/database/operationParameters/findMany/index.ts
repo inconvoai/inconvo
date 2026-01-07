@@ -8,6 +8,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 import {
   validateFindManyCandidate,
   type FindManyValidationResult,
@@ -26,6 +27,8 @@ export interface DefineFindManyOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findMany";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineFindManyOperationParameters(
@@ -165,6 +168,10 @@ export async function defineFindManyOperationParameters(
     FindManyQuery["operationParameters"] | null,
     FindManyValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyFindManyOperationParametersTool,
     toolName: "applyFindManyOperationParametersTool",
     jsonDetectedMessage,

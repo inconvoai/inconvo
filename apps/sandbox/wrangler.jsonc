@@ -9,7 +9,7 @@
   "compatibility_date": "2025-05-06",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   /**
    * Smart Placement
@@ -26,7 +26,10 @@
    * Environment Variables
    * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
    */
-  // "vars": { "MY_VARIABLE": "production_value" }
+  "vars": {
+    "DATASETS_BUCKET": "customer-datasets",
+    "CONVERSATION_DATA_BUCKET": "customer-conversation-data",
+  },
   /**
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/
@@ -45,24 +48,77 @@
     {
       "class_name": "Sandbox",
       "image": "./Dockerfile",
-      "instance_type": "basic"
-    }
+      "instance_type": "basic",
+      "max_instances": 50,
+    },
   ],
   "durable_objects": {
     "bindings": [
       {
         "class_name": "Sandbox",
-        "name": "Sandbox"
-      }
-    ]
+        "name": "Sandbox",
+      },
+    ],
   },
   "migrations": [
     {
       "new_sqlite_classes": ["Sandbox"],
-      "tag": "v1"
-    }
+      "tag": "v1",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CUSTOMER_DATASETS",
+      "bucket_name": "customer-datasets",
+    },
+    {
+      "binding": "CUSTOMER_CONVERSATION_DATA",
+      "bucket_name": "customer-conversation-data",
+    },
   ],
   "dev": {
-    "port": 8787
-  }
+    "port": 8787,
+  },
+  "env": {
+    "dev": {
+      "name": "inconvo-sandbox-dev",
+      "workers_dev": true,
+      "vars": {
+        "DATASETS_BUCKET": "customer-datasets-dev",
+        "CONVERSATION_DATA_BUCKET": "customer-conversation-data-dev",
+      },
+      "containers": [
+        {
+          "class_name": "Sandbox",
+          "image": "./Dockerfile",
+          "instance_type": "basic",
+          "max_instances": 10,
+        },
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "class_name": "Sandbox",
+            "name": "Sandbox",
+          },
+        ],
+      },
+      "migrations": [
+        {
+          "new_sqlite_classes": ["Sandbox"],
+          "tag": "v1",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "CUSTOMER_DATASETS",
+          "bucket_name": "customer-datasets-dev",
+        },
+        {
+          "binding": "CUSTOMER_CONVERSATION_DATA",
+          "bucket_name": "customer-conversation-data-dev",
+        },
+      ],
+    },
+  },
 }

@@ -19,6 +19,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineAggregateGroupsOperationParametersParams {
   schema: Schema;
@@ -26,6 +27,8 @@ export interface DefineAggregateGroupsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "aggregateGroups";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineAggregateGroupsOperationParameters(
@@ -295,6 +298,10 @@ export async function defineAggregateGroupsOperationParameters(
     AggregateGroupsQuery["operationParameters"] | null,
     AggregateGroupsValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyAggregateGroupsOperationParametersTool,
     toolName: "applyAggregateGroupsOperationParametersTool",
     jsonDetectedMessage,

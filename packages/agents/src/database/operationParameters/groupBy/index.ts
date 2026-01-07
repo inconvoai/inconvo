@@ -19,6 +19,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineGroupByOperationParametersParams {
   schema: Schema;
@@ -26,6 +27,8 @@ export interface DefineGroupByOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "groupBy";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineGroupByOperationParameters(
@@ -274,6 +277,10 @@ export async function defineGroupByOperationParameters(
     GroupByQuery["operationParameters"] | null,
     GroupByValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyGroupByOperationParametersTool,
     toolName: "applyGroupByOperationParametersTool",
     jsonDetectedMessage,

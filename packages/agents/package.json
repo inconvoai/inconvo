@@ -6,12 +6,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./database": "./src/database/index.ts",
-    "./inconvo": "./src/inconvo/index.ts"
+    "./inconvo": "./src/inconvo/index.ts",
+    "./utils/sandbox": "./src/utils/sandbox.ts"
   },
   "scripts": {
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "debug:prompt": "npx tsx scripts/debugPrompt.ts"
   },
   "dependencies": {
     "@langchain/core": "1.1.9",
@@ -21,6 +23,7 @@
     "@repo/connect": "workspace:*",
     "@repo/types": "workspace:*",
     "langchain": "1.2.4",
+    "uuid": "13.0.0",
     "vega": "6.2.0",
     "vega-lite": "6.4.1",
     "yaml": "2.8.2",
@@ -31,6 +34,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "25.0.3",
     "eslint": "9.39.2",
+    "tsx": "^4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.0.16"
   }

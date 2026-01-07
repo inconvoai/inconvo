@@ -11,6 +11,7 @@ import { getAIModel } from "../../utils/getAIModel";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
 import { generateJoinGraph } from "../utils/tableRelations";
 import { getPrompt } from "../../utils/getPrompt";
+import { buildPromptCacheKey } from "../../utils/promptCacheKey";
 import {
   type AIMessage,
   HumanMessage,
@@ -46,10 +47,16 @@ interface RequestParams {
   dateCondition: DateCondition;
   tableConditions: TableConditions;
   requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel("azure:gpt-5.1");
+  const llm = getAIModel("azure:gpt-5.2", {
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
+  });
 
   const relatedTables = generateJoinGraph(
     params.schema,
@@ -116,7 +123,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     },
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:38907ba5");
+  const agentPrompt = await getPrompt("where_condition_agent_5:dded782c");
   const agentPromptFormatted = (await agentPrompt.invoke({
     tableName: params.tableName,
     operation: params.operation,

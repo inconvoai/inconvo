@@ -15,8 +15,13 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
   const schema = await getAugmentedSchema();
   const dbForQuery = getSchemaBoundDb(db, schema);
 
+  // Handle qualified column name (table.column format)
+  const columnParts = operationParameters.column.split(".");
+  const columnName =
+    columnParts.length === 2 ? columnParts[1]! : operationParameters.column;
+
   const distinctColumn = getColumnFromTable({
-    columnName: operationParameters.column,
+    columnName,
     tableName: table,
     schema,
   });

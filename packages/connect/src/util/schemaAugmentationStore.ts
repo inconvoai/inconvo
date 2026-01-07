@@ -23,25 +23,52 @@ async function ensureSchemaAugmentationsDir() {
 }
 
 /**
+ * Normalize an object to have consistent key ordering.
+ * This ensures the same data produces the same JSON regardless of original key order.
+ */
+function normalizeObject(obj: unknown): unknown {
+  if (obj === null || typeof obj !== "object") {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(normalizeObject);
+  }
+  // Sort keys alphabetically and recursively normalize values
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = normalizeObject((obj as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
+/**
  * Compute a deterministic SHA-256 hash of augmentations.
  * Arrays are sorted by deterministic keys for consistent hashing.
+ * Objects are normalized to have consistent key ordering.
  */
 export function computeAugmentationsHash(payload: {
   relations: unknown[];
   computedColumns: unknown[];
   columnConversions: unknown[];
 }): string {
-  const canonical = JSON.stringify({
-    relations: [...payload.relations].sort((a: any, b: any) =>
-      `${a.sourceTable}.${a.name}`.localeCompare(`${b.sourceTable}.${b.name}`),
-    ),
-    computedColumns: [...payload.computedColumns].sort((a: any, b: any) =>
-      `${a.table}.${a.name}`.localeCompare(`${b.table}.${b.name}`),
-    ),
-    columnConversions: [...payload.columnConversions].sort((a: any, b: any) =>
-      `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`),
-    ),
-  });
+  const sorted = {
+    relations: [...payload.relations]
+      .sort((a: any, b: any) =>
+        `${a.sourceTable}.${a.name}`.localeCompare(`${b.sourceTable}.${b.name}`),
+      )
+      .map(normalizeObject),
+    computedColumns: [...payload.computedColumns]
+      .sort((a: any, b: any) =>
+        `${a.table}.${a.name}`.localeCompare(`${b.table}.${b.name}`),
+      )
+      .map(normalizeObject),
+    columnConversions: [...payload.columnConversions]
+      .sort((a: any, b: any) =>
+        `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`),
+      )
+      .map(normalizeObject),
+  };
+  const canonical = JSON.stringify(sorted);
   return crypto.createHash("sha256").update(canonical).digest("hex");
 }
 

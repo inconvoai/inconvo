@@ -22,6 +22,7 @@ import {
   type ToolRunnableConfig,
 } from "@langchain/core/tools";
 import { z } from "zod";
+import { v4 as uuidv4 } from "uuid";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { Schema, DatabaseConnector } from "@repo/types";
 import { getPrompt } from "../utils/getPrompt";
@@ -30,11 +31,12 @@ import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import { getAIModel } from "../utils/getAIModel";
+import { buildPromptCacheKey } from "../utils/promptCacheKey";
 import { inconvoResponseSchema } from "@repo/types";
 import { tryCatchSync } from "../utils/tryCatch";
 import type { Conversation } from "@repo/types";
 import { databaseRetrieverToolDescription } from "../database/utils/databaseRetrieverToolDescription";
-import { InconvoSandbox } from "../utils/sandbox";
+import { createSandboxClientFromEnv } from "../utils/sandbox";
 import { extractTextFromMessage } from "../utils/langchainMessageUtils";
 
 import type { VegaLiteSpec } from "@repo/types";
@@ -53,11 +55,24 @@ interface Answer {
   table?: Table;
 }
 
+interface AvailableDataset {
+  name: string;
+  targetPath: string;
+  schema?: string[];
+  notes?: string;
+}
+
 interface QuestionAgentParams {
   schema: Schema;
   connector: DatabaseConnector;
   checkpointer: PostgresSaver | MemorySaver;
   conversation: Conversation;
+  orgId: string;
+  agentId: string;
+  /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
+  requestContextPath: string;
+  /** Available dataset files with metadata for agent context */
+  availableDatasets?: AvailableDataset[];
   /** Optional callback to trigger conversation titling (e.g., via Inngest in platform) */
   onTitleConversation?: (
     conversationId: string,
@@ -175,10 +190,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => y,
       default: () => "",
     }),
-    sandboxUsed: Annotation<boolean>({
-      reducer: (x, y) => x || y,
-      default: () => false,
-    }),
     // Messages in the current run
     messages: Annotation<BaseMessage[] | null>({
       reducer: (x, y) => messageReducer(x, y),
@@ -264,8 +275,17 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     [];
   const toolNode = new ToolNode(tools);
 
-  const model = getAIModel("azure:gpt-5.1", {
-    reasoning: { effort: "low", summary: "detailed" },
+  const promptCacheKey = buildPromptCacheKey({
+    agentId: params.agentId,
+    requestContext: params.conversation.requestContext as Record<
+      string,
+      string | number
+    >,
+  });
+
+  const model = getAIModel("azure:gpt-5.2", {
+    promptCacheKey,
+    // reasoning: { effort: "low", summary: "detailed" },
   });
 
   const tableContext = params.schema
@@ -300,42 +320,95 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               userQuestion: input.question,
               schema: params.schema,
               requestContext: state.requestContext,
+              agentId: params.agentId,
               connector: params.connector,
             })
           ).invoke({});
+
+          // Start sandbox and upload results
+          const sandboxClient = createSandboxClientFromEnv({
+            orgId: params.orgId,
+            agentId: params.agentId,
+          });
+          const sandboxSession = sandboxClient.sandbox({
+            conversationId: params.conversation.id,
+            requestContextPath: params.requestContextPath,
+          });
+          await sandboxSession.start();
+
+          const fullData = databaseRetrieverResponse.databaseResponse.response;
+          const query = databaseRetrieverResponse.databaseResponse.query;
+
+          // Upload full data to sandbox s3 storage
+          const resultData = { query, data: fullData };
+          const sandboxFileName = `${uuidv4()}.json`;
+          const jsonString = JSON.stringify(resultData, null, 2);
+          const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
+          await sandboxClient.uploadConversationData({
+            conversationId: params.conversation.id,
+            requestContextPath: params.requestContextPath,
+            files: [
+              {
+                name: sandboxFileName,
+                content: base64Content,
+                contentType: "application/json",
+              },
+            ],
+          });
+
+          // Truncate data for LLM response (50 rows max)
+          const DATA_PREVIEW_LIMIT = 50;
+          const isArray = Array.isArray(fullData);
+          const totalRows = isArray ? fullData.length : 1;
+          const wasTruncated = isArray && totalRows > DATA_PREVIEW_LIMIT;
+          const truncatedData = isArray
+            ? fullData.slice(0, DATA_PREVIEW_LIMIT)
+            : fullData;
+
+          // Build note if data was truncated or hit 1000-row DB limit
+          const hit1000Limit =
+            !!databaseRetrieverResponse.databaseResponse.warning;
+          let note: string | undefined;
+          if (wasTruncated || hit1000Limit) {
+            const parts: string[] = [];
+            if (wasTruncated) {
+              parts.push(
+                `Showing ${DATA_PREVIEW_LIMIT} of ${totalRows} rows. Full results available in sandbox file: ${sandboxFileName}`,
+              );
+            }
+            if (hit1000Limit) {
+              parts.push(
+                `Query hit the 1,000-row database limit. The sandbox file contains up to 1,000 rows.`,
+              );
+            }
+            note = parts.join(" ");
+          }
+
           const toolCallId = config.toolCall?.id;
           if (!toolCallId) {
             throw new Error(
               "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
             );
           }
+
+          // Build LLM response with truncated data
+          const llmResponse: Record<string, unknown> = {
+            query,
+            data: truncatedData,
+            sandboxFile: sandboxFileName,
+          };
+          if (note) {
+            llmResponse.note = note;
+          }
+
           return new Command({
             update: {
-              databaseRetrieverResults: [
-                {
-                  query: databaseRetrieverResponse.databaseResponse.query,
-                  data: databaseRetrieverResponse.databaseResponse.response,
-                },
-              ],
+              databaseRetrieverResults: [resultData],
               messages: [
                 new ToolMessage({
                   status: "success",
                   name: "databaseRetriever",
-                  content: JSON.stringify(
-                    {
-                      query: databaseRetrieverResponse.databaseResponse.query,
-                      data: databaseRetrieverResponse.databaseResponse.response,
-                      ...(databaseRetrieverResponse.databaseResponse.warning
-                        ? {
-                            warning:
-                              databaseRetrieverResponse.databaseResponse
-                                .warning,
-                          }
-                        : {}),
-                    },
-                    null,
-                    2,
-                  ),
+                  content: JSON.stringify(llmResponse, null, 2),
                   tool_call_id: toolCallId,
                 }),
               ],
@@ -384,72 +457,18 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     );
     tools.push(getSchemasForTables);
 
-    const uploadDataToPythonSandbox = tool(
-      async (_input, config: ToolRunnableConfig) => {
-        const currentState = getCurrentTaskInput<typeof AgentState.State>();
-        const jsonResultsToUploadToSandbox =
-          currentState.databaseRetrieverResults ?? [];
-        if (
-          !jsonResultsToUploadToSandbox ||
-          !Array.isArray(jsonResultsToUploadToSandbox) ||
-          jsonResultsToUploadToSandbox.length === 0
-        ) {
-          return "No database retriever results available to upload to the Python sandbox. Please run a database retrieval first.";
-        }
-        const sandbox = new InconvoSandbox({
-          sandboxId: currentState.runId,
-        });
-
-        const uploadResult = await sandbox.uploadFiles(
-          jsonResultsToUploadToSandbox.map((result, index) => ({
-            name: `retriever_result_${index + 1}.json`,
-            content: JSON.stringify(result, null, 2),
-          })),
-        );
-
-        const describeResult = await sandbox.describeFiles(
-          uploadResult.files.map((file) => file.name),
-        );
-        const toolCallId = config.toolCall?.id;
-        if (!toolCallId) {
-          throw new Error(
-            "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
-          );
-        }
-        return new Command({
-          update: {
-            sandboxUsed: true,
-            messages: [
-              new ToolMessage({
-                status: "success",
-                name: "uploadDataToPythonSandbox",
-                content: JSON.stringify(describeResult),
-                tool_call_id: toolCallId,
-              }),
-            ],
-          },
-        });
-      },
-      {
-        name: "uploadDataToPythonSandbox",
-        description:
-          "Uploads database retriever results from this conversation to a Python sandbox environment. " +
-          "Returns a summary of the uploaded data including DataFrame descriptions and filenames. " +
-          "This tool MUST be called at least once before using 'executePythonCode' to ensure data is available in the sandbox. " +
-          "No input parameters required - automatically uses data from current conversation state.",
-        schema: z.object({}),
-      },
-    );
-    tools.push(uploadDataToPythonSandbox);
-
     const executePythonCode = tool(
       async (input: { code: string }, config: ToolRunnableConfig) => {
         try {
-          const currentState = getCurrentTaskInput<typeof AgentState.State>();
-          const sandbox = new InconvoSandbox({
-            sandboxId: currentState.runId,
+          const sandboxClient = createSandboxClientFromEnv({
+            orgId: params.orgId,
+            agentId: params.agentId,
           });
-          const executionResult = await sandbox.executeCode(input.code);
+          const sandboxSession = sandboxClient.sandbox({
+            conversationId: params.conversation.id,
+            requestContextPath: params.requestContextPath,
+          });
+          const executionResult = await sandboxSession.executeCode(input.code);
           const toolCallId = config.toolCall?.id;
           if (!toolCallId) {
             throw new Error(
@@ -458,7 +477,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           }
           return new Command({
             update: {
-              sandboxUsed: true,
               messages: [
                 new ToolMessage({
                   status: "success",
@@ -480,24 +498,21 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       {
         name: "executePythonCode",
         description:
-          "Executes Python 3 code in a sandboxed environment for calculations and data analysis.\n\n" +
-          "IMPORTANT: You must call 'uploadDataToPythonSandbox' tool first to make data available.\n\n" +
+          "Executes Python 3 code in a sandboxed environment for intermediate calculations and data analysis.\n\n" +
+          "**Use this for intermediate analysis.** For final responses to the user, use `generateResponse` instead.\n\n" +
+          "**File paths (IMPORTANT - always use full paths):**\n" +
+          "- Database results: `/conversation_data/{sandboxFile}`\n" +
+          "- Static datasets: `/datasets/{filename}`\n\n" +
           "Only printed output is returned, so print any data you need to inspect.\n\n" +
-          "Available libraries: pandas, numpy, json\n\n" +
-          "Data files uploaded via 'uploadDataToPythonSandbox' are available as 'retriever_result_N.json'.\n\n" +
-          "Example code to load and analyze data:\n" +
+          "**Available libraries:** pandas, numpy, json, altair\n\n" +
+          "**Example:**\n" +
           "```python\n" +
           "import pandas as pd\n" +
           "import json\n\n" +
-          "# Load JSON file\n" +
-          "with open('retriever_result_1.json', 'r') as f:\n" +
+          "# IMPORTANT: Use full path /conversation_data/ + sandboxFile\n" +
+          "with open('/conversation_data/{sandboxFile}', 'r') as f:\n" +
           "    data = json.load(f)\n\n" +
-          "# Normalize to DataFrame\n" +
-          "if 'data' in data:\n" +
-          "    df = pd.json_normalize(data['data'])\n" +
-          "else:\n" +
-          "    df = pd.json_normalize(data if isinstance(data, list) else [data])\n\n" +
-          "# Analyze\n" +
+          "df = pd.DataFrame(data['data'])\n" +
           "print(df.head())\n" +
           "print(df.describe())\n" +
           "```",
@@ -509,6 +524,158 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       },
     );
     tools.push(executePythonCode);
+
+    const generateResponse = tool(
+      async (input: { code: string }, config: ToolRunnableConfig) => {
+        try {
+          const sandboxClient = createSandboxClientFromEnv({
+            orgId: params.orgId,
+            agentId: params.agentId,
+          });
+          const sandboxSession = sandboxClient.sandbox({
+            conversationId: params.conversation.id,
+            requestContextPath: params.requestContextPath,
+          });
+
+          const executionResult = await sandboxSession.executeCode(input.code);
+
+          if (!executionResult.success) {
+            return `Code execution failed:\n${executionResult.error}\n\nOutput:\n${executionResult.output}`;
+          }
+
+          // Parse stdout as JSON response
+          const outputText = executionResult.output.trim();
+          let parsedResponse: unknown;
+          try {
+            parsedResponse = JSON.parse(outputText);
+          } catch {
+            return `Failed to parse output as JSON. Make sure your code prints valid JSON.\n\nOutput received:\n${outputText}`;
+          }
+
+          // Validate against inconvoResponseSchema
+          const validated = inconvoResponseSchema.safeParse(parsedResponse);
+          if (!validated.success) {
+            const errors = validated.error.issues
+              .map((i) => `- ${i.path.join(".")}: ${i.message}`)
+              .join("\n");
+            return `Response validation failed:\n${errors}\n\nReceived:\n${JSON.stringify(parsedResponse, null, 2)}`;
+          }
+
+          const toolCallId = config.toolCall?.id;
+          if (!toolCallId) {
+            throw new Error(
+              "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
+            );
+          }
+
+          // Get database-related messages for chat history
+          const stateMessages =
+            (getCurrentTaskInput() as typeof AgentState.State)?.messages ?? [];
+          const databaseRelatedMessages = extractToolRelatedMessages(
+            stateMessages,
+            "databaseRetriever",
+          );
+          const getSchemaRelatedMessages = extractToolRelatedMessages(
+            stateMessages,
+            "getSchemasForTables",
+          );
+          const userQuestion =
+            (getCurrentTaskInput() as typeof AgentState.State)?.userQuestion ??
+            "";
+
+          // Return Command that sets answer - conditional edge will route to format_response
+          return new Command({
+            update: {
+              answer: validated.data,
+              chatHistory: [
+                new HumanMessage(userQuestion),
+                ...getSchemaRelatedMessages,
+                ...databaseRelatedMessages,
+                new AIMessage(JSON.stringify(validated.data, null, 2)),
+              ],
+              messages: [
+                new ToolMessage({
+                  status: "success",
+                  name: "generateResponse",
+                  content: JSON.stringify(validated.data, null, 2),
+                  tool_call_id: toolCallId,
+                }),
+              ],
+            },
+          });
+        } catch (e) {
+          return `Calling tool with arguments:\n\n${JSON.stringify(
+            input,
+          )}\n\nraised the following error:\n\n${
+            e instanceof Error ? e.message : String(e)
+          }`;
+        }
+      },
+      {
+        name: "generateResponse",
+        description:
+          "Generate a final response to the user by executing Python code that prints JSON.\n\n" +
+          "**Use this for data-driven responses** (tables, charts). For simple text responses, output JSON directly.\n\n" +
+          "**Helper module:** `from inconvo import text, table, chart`\n\n" +
+          "**Available libraries:** pandas, numpy, json, altair\n\n" +
+          "---\n\n" +
+          "## IMPORTANT: File paths\n\n" +
+          "Always use the FULL PATH when opening files:\n" +
+          "- Database results: `/conversation_data/{sandboxFile}`\n" +
+          "- Static datasets: `/datasets/{filename}`\n\n" +
+          "✅ CORRECT: `open('/conversation_data/abc-123.json')`\n" +
+          "❌ WRONG: `open('abc-123.json')` - File not found!\n\n" +
+          "---\n\n" +
+          "## IMPORTANT: How to use `chart()`\n\n" +
+          "The `chart()` function ONLY accepts **Altair Chart objects**. Do NOT pass dictionaries or raw Vega-Lite specs.\n\n" +
+          "✅ CORRECT: `chart(alt.Chart(df).mark_bar().encode(...), 'message')`\n" +
+          "❌ WRONG: `chart({'mark': 'bar', ...}, 'message')` - This will fail!\n\n" +
+          "The function signature is: `chart(altair_chart_object, message_string)`\n\n" +
+          "---\n\n" +
+          "## Examples\n\n" +
+          "### Table response\n" +
+          "```python\n" +
+          "from inconvo import table\n" +
+          "import pandas as pd\n" +
+          "import json\n\n" +
+          "# IMPORTANT: Use full path /conversation_data/ + sandboxFile\n" +
+          "with open('/conversation_data/{sandboxFile}') as f:\n" +
+          "    data = json.load(f)\n" +
+          "df = pd.DataFrame(data['data'])\n" +
+          "table(df.head(10), 'Top 10 results')\n" +
+          "```\n\n" +
+          "### Chart response (using Altair)\n" +
+          "```python\n" +
+          "from inconvo import chart\n" +
+          "import altair as alt\n" +
+          "import pandas as pd\n" +
+          "import json\n\n" +
+          "# IMPORTANT: Use full path /conversation_data/ + sandboxFile\n" +
+          "with open('/conversation_data/{sandboxFile}') as f:\n" +
+          "    data = json.load(f)\n" +
+          "df = pd.DataFrame(data['data'])\n\n" +
+          "# Create Altair Chart object - pass this to chart()\n" +
+          "c = alt.Chart(df).mark_bar().encode(\n" +
+          "    x=alt.X('category:N', title='Category'),\n" +
+          "    y=alt.Y('value:Q', title='Value')\n" +
+          ")\n" +
+          "chart(c, 'Sales by category shows X leading at Y%')\n" +
+          "```\n\n" +
+          "### Text response\n" +
+          "```python\n" +
+          "from inconvo import text\n" +
+          "text('The analysis shows a 15% increase year-over-year.')\n" +
+          "```",
+        schema: z.object({
+          code: z
+            .string()
+            .describe(
+              "Python code using inconvo helpers that prints JSON response to stdout",
+            ),
+        }),
+      },
+    );
+    tools.push(generateResponse);
 
     return {};
   }
@@ -526,9 +693,34 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }
   };
 
+  // After tools run, check if generateResponse already set the answer
+  const shouldContinueAfterTools = (state: typeof AgentState.State) => {
+    // If answer is already set (by generateResponse), go directly to format_response
+    if (state.answer && state.answer.message) {
+      return "formatResponse";
+    }
+    // Otherwise, go back to the agent for another turn
+    return "continue";
+  };
+
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:c3dc23fe");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:480f3449");
     const tables = params.schema.map((table) => table.name);
+
+    // Format available datasets for agent context
+    const availableDatasets =
+      params.availableDatasets && params.availableDatasets.length > 0
+        ? params.availableDatasets
+            .map((ds) => {
+              const schemaInfo = ds.schema
+                ? `columns: [${ds.schema.join(", ")}]`
+                : "schema: unknown";
+              const notesInfo = ds.notes ? ` Notes: "${ds.notes}"` : "";
+              return `- ${ds.targetPath}: ${schemaInfo}${notesInfo}`;
+            })
+            .join("\n")
+        : "No datasets available";
+
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
       tableContext: tableContext,
@@ -537,16 +729,16 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       requestContext: JSON.stringify(state.requestContext),
       userQuestion: new HumanMessage(state.userQuestion),
       messages: state.messages,
+      availableDatasets,
     });
     return { messages: [response] };
   }
 
   async function formatResponse(state: typeof AgentState.State) {
-    if (state.sandboxUsed) {
-      const sandbox = new InconvoSandbox({
-        sandboxId: state.runId,
-      });
-      await sandbox.destroySandbox();
+    // If answer is already set (e.g., from generateResponse tool), return it
+    // so streaming can detect the completed response
+    if (state.answer && state.answer.message) {
+      return { answer: state.answer };
     }
 
     const lastAiMessage =
@@ -720,7 +912,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       continue: "inconvo_agent_tools",
       formatResponse: "format_response",
     })
-    .addEdge("inconvo_agent_tools", "inconvo_agent")
+    .addConditionalEdges("inconvo_agent_tools", shouldContinueAfterTools, {
+      continue: "inconvo_agent",
+      formatResponse: "format_response",
+    })
     .addEdge("format_response", END);
 
   const graph = workflow.compile({ checkpointer: params.checkpointer });

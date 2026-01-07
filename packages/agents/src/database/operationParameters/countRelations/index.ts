@@ -16,6 +16,7 @@ import {
   buildOperationParametersPromptMessages,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 
 export interface DefineCountRelationsOperationParametersParams {
   schema: Schema;
@@ -23,6 +24,8 @@ export interface DefineCountRelationsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "countRelations";
+  requestContext: Record<string, string | number>;
+  agentId: string | number;
 }
 
 export async function defineCountRelationsOperationParameters(
@@ -140,6 +143,10 @@ export async function defineCountRelationsOperationParameters(
     CountRelationsQuery["operationParameters"] | undefined,
     CountRelationsValidationResult
   >({
+    promptCacheKey: buildPromptCacheKey({
+      agentId: params.agentId,
+      requestContext: params.requestContext,
+    }),
     tool: applyCountRelationsOperationParametersTool,
     toolName: "applyCountRelationsOperationParametersTool",
     jsonDetectedMessage:

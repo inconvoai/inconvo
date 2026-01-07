@@ -6,6 +6,10 @@ import { getCheckpointer } from "~/lib/checkpointer";
 import { getSchema } from "~/lib/schema";
 import { getConversation, updateConversation } from "~/lib/conversations";
 import type { InconvoResponse } from "@repo/types";
+import { buildRequestContextPath } from "~/lib/bucketPaths";
+
+const DEV_ORGANISATION_ID = "dev-org";
+const DEV_AGENT_ID = "dev-agent";
 
 interface ResponseCreateParams {
   message: string;
@@ -53,19 +57,19 @@ export async function POST(
     // Get existing conversation
     const conversation = getConversation(conversationId);
     if (!conversation) {
-      return new Response(
-        JSON.stringify({ error: "Conversation not found" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Conversation not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const runId = uuidv4();
     const schema = await getSchema();
     const connector = getConnector();
     const checkpointer = getCheckpointer();
+    const requestContextFlatString = buildRequestContextPath(
+      conversation.requestContext,
+    );
 
     // Create the agent graph
     const { graph } = await inconvoAgent({
@@ -73,6 +77,9 @@ export async function POST(
       connector,
       checkpointer,
       conversation,
+      orgId: DEV_ORGANISATION_ID,
+      agentId: DEV_AGENT_ID,
+      requestContextPath: requestContextFlatString,
     });
 
     // Helper to format response for SDK
@@ -113,7 +120,10 @@ export async function POST(
         let lastResponse: InconvoResponse | undefined;
 
         for await (const event of eventStream) {
-          if (event.event === "on_chain_end" && event.name === "format_response") {
+          if (
+            event.event === "on_chain_end" &&
+            event.name === "format_response"
+          ) {
             const output = event.data?.output as
               | { answer?: InconvoResponse }
               | undefined;
@@ -131,9 +141,12 @@ export async function POST(
             });
           }
 
-          return new Response(JSON.stringify(formatResponseForSDK(lastResponse)), {
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify(formatResponseForSDK(lastResponse)),
+            {
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
 
         return new Response(
@@ -147,7 +160,8 @@ export async function POST(
         console.error("[/api/conversations/[id]/response] Agent error:", error);
         return new Response(
           JSON.stringify({
-            error: error instanceof Error ? error.message : "Agent execution failed",
+            error:
+              error instanceof Error ? error.message : "Agent execution failed",
           }),
           {
             status: 500,
@@ -270,7 +284,10 @@ export async function POST(
             });
           }
         } catch (error) {
-          console.error("[/api/conversations/[id]/response] Agent error:", error);
+          console.error(
+            "[/api/conversations/[id]/response] Agent error:",
+            error,
+          );
           sendEvent({
             type: "response.error",
             id: runId,

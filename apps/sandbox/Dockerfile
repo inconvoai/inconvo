@@ -5,5 +5,5 @@ FROM docker.io/cloudflare/sandbox:0.6.9-python
 
 # Install altair for chart generation (outputs Vega-Lite specs)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --no-cache-dir altair
+    pip3 install --no-cache-dir altair==6.0.0
 

@@ -121,4 +121,11 @@
       ],
     },
   },
+  "routes": [
+    {
+      "pattern": "sandbox.tryinconvo.com",
+      "zone_name": "tryinconvo.com",
+      "custom_domain": true,
+    },
+  ],
 }

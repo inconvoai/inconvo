@@ -23,13 +23,6 @@
    * https://developers.cloudflare.com/workers/runtime-apis/bindings/
    */
   /**
-   * Environment Variables
-   * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-   */
-  "vars": {
-    "DATASETS_BUCKET": "customer-datasets",
-    "CONVERSATION_DATA_BUCKET": "customer-conversation-data",
-  },
   /**
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/
@@ -68,14 +61,18 @@
   ],
   "r2_buckets": [
     {
-      "binding": "CUSTOMER_DATASETS",
-      "bucket_name": "customer-datasets",
-    },
-    {
       "binding": "CUSTOMER_CONVERSATION_DATA",
       "bucket_name": "customer-conversation-data",
     },
+    {
+      "binding": "CUSTOMER_DATASETS",
+      "bucket_name": "customer-datasets",
+    },
   ],
+  "vars": {
+    "DATASETS_BUCKET": "customer-datasets",
+    "CONVERSATION_DATA_BUCKET": "customer-conversation-data",
+  },
   "dev": {
     "port": 8787,
   },
@@ -111,12 +108,12 @@
       ],
       "r2_buckets": [
         {
-          "binding": "CUSTOMER_DATASETS",
-          "bucket_name": "customer-datasets-dev",
-        },
-        {
           "binding": "CUSTOMER_CONVERSATION_DATA",
           "bucket_name": "customer-conversation-data-dev",
+        },
+        {
+          "binding": "CUSTOMER_DATASETS",
+          "bucket_name": "customer-datasets-dev",
         },
       ],
     },

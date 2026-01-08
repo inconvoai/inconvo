@@ -255,18 +255,18 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => (x ? x.concat(y ?? []) : y),
       default: () => undefined,
     }),
-    // Pending database response to be processed by process_database_results node
+    // Pending database responses to be processed by process_database_results node
+    // Supports parallel databaseRetriever calls - empty array clears the state
     pendingDatabaseResponse: Annotation<
-      | {
-          toolCallId: string;
-          query: string;
-          data: unknown;
-          warning?: string;
-        }
-      | undefined
+      Array<{
+        toolCallId: string;
+        query: string;
+        data: unknown;
+        warning?: string;
+      }>
     >({
-      reducer: (x, y) => y,
-      default: () => undefined,
+      reducer: (x, y) => (y.length === 0 ? [] : x.concat(y)),
+      default: () => [],
     }),
     // Context about the request to pass to the database retriever
     requestContext: Annotation<Record<string, string | number>>({
@@ -348,12 +348,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           // Store raw response in state for process_database_results node
           return new Command({
             update: {
-              pendingDatabaseResponse: {
-                toolCallId,
-                query: databaseRetrieverResponse.databaseResponse.query,
-                data: databaseRetrieverResponse.databaseResponse.response,
-                warning: databaseRetrieverResponse.databaseResponse.warning,
-              },
+              pendingDatabaseResponse: [
+                {
+                  toolCallId,
+                  query: databaseRetrieverResponse.databaseResponse.query,
+                  data: databaseRetrieverResponse.databaseResponse.response,
+                  warning: databaseRetrieverResponse.databaseResponse.warning,
+                },
+              ],
             },
           });
         } catch (e) {
@@ -638,7 +640,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   // After tools run, check if we need to process database results or if answer is set
   const routeAfterTools = (state: typeof AgentState.State) => {
     // Check for pending database results first
-    if (state.pendingDatabaseResponse) {
+    if (state.pendingDatabaseResponse.length > 0) {
       return "processDatabaseResults";
     }
     // If answer is already set (by generateResponse), go directly to format_response
@@ -649,10 +651,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     return "continue";
   };
 
-  // Process database results: upload to S3, truncate for LLM, build ToolMessage
+  // Process database results: upload to S3, truncate for LLM, build ToolMessages
   async function processDatabaseResults(state: typeof AgentState.State) {
-    const pending = state.pendingDatabaseResponse;
-    if (!pending) {
+    const pendingItems = state.pendingDatabaseResponse;
+    if (pendingItems.length === 0) {
       return {};
     }
 
@@ -661,79 +663,88 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       agentId: params.agentId,
     });
 
-    // Pre-warm sandbox in background for later code execution
+    // Pre-warm sandbox in background for later code execution (once)
     const sandboxSession = sandboxClient.sandbox({
       conversationId: params.conversation.id,
       requestContextPath: params.requestContextPath,
     });
     void sandboxSession.start();
 
-    // Upload full data to sandbox S3 storage
-    const resultData = { query: pending.query, data: pending.data };
-    const sandboxFileName = `${uuidv4()}.json`;
-    const jsonString = JSON.stringify(resultData);
-    const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
-    await sandboxClient.uploadConversationData({
-      conversationId: params.conversation.id,
-      requestContextPath: params.requestContextPath,
-      files: [
-        {
-          name: sandboxFileName,
-          content: base64Content,
-          contentType: "application/json",
-        },
-      ],
-    });
-
-    // Truncate data for LLM response (50 rows max)
     const DATA_PREVIEW_LIMIT = 50;
-    const fullData = pending.data;
-    const isArray = Array.isArray(fullData);
-    const totalRows = isArray ? fullData.length : 1;
-    const wasTruncated = isArray && totalRows > DATA_PREVIEW_LIMIT;
-    const truncatedData = isArray
-      ? (fullData as unknown[]).slice(0, DATA_PREVIEW_LIMIT)
-      : fullData;
+    const allResults: { query: string; data: unknown }[] = [];
+    const allMessages: ToolMessage[] = [];
 
-    // Build note if data was truncated or hit 1000-row DB limit
-    const hit1000Limit = !!pending.warning;
-    let note: string | undefined;
-    if (wasTruncated || hit1000Limit) {
-      const parts: string[] = [];
-      if (wasTruncated) {
-        parts.push(
-          `Showing ${DATA_PREVIEW_LIMIT} of ${totalRows} rows. Full results available in sandbox file: ${sandboxFileName}`,
-        );
+    // Process all pending database results (supports parallel tool calls)
+    for (const pending of pendingItems) {
+      // Upload full data to sandbox S3 storage
+      const resultData = { query: pending.query, data: pending.data };
+      const sandboxFileName = `${uuidv4()}.json`;
+      const jsonString = JSON.stringify(resultData);
+      const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
+      await sandboxClient.uploadConversationData({
+        conversationId: params.conversation.id,
+        requestContextPath: params.requestContextPath,
+        files: [
+          {
+            name: sandboxFileName,
+            content: base64Content,
+            contentType: "application/json",
+          },
+        ],
+      });
+
+      // Truncate data for LLM response (50 rows max)
+      const fullData = pending.data;
+      const isArray = Array.isArray(fullData);
+      const totalRows = isArray ? fullData.length : 1;
+      const wasTruncated = isArray && totalRows > DATA_PREVIEW_LIMIT;
+      const truncatedData = isArray
+        ? (fullData as unknown[]).slice(0, DATA_PREVIEW_LIMIT)
+        : fullData;
+
+      // Build note if data was truncated or hit 1000-row DB limit
+      const hit1000Limit = !!pending.warning;
+      let note: string | undefined;
+      if (wasTruncated || hit1000Limit) {
+        const parts: string[] = [];
+        if (wasTruncated) {
+          parts.push(
+            `Showing ${DATA_PREVIEW_LIMIT} of ${totalRows} rows. Full results available in sandbox file: ${sandboxFileName}`,
+          );
+        }
+        if (hit1000Limit) {
+          parts.push(
+            `Query hit the 1,000-row database limit. The sandbox file contains up to 1,000 rows.`,
+          );
+        }
+        note = parts.join(" ");
       }
-      if (hit1000Limit) {
-        parts.push(
-          `Query hit the 1,000-row database limit. The sandbox file contains up to 1,000 rows.`,
-        );
+
+      // Build LLM response with truncated data
+      const llmResponse: Record<string, unknown> = {
+        query: pending.query,
+        data: truncatedData,
+        sandboxFile: sandboxFileName,
+      };
+      if (note) {
+        llmResponse.note = note;
       }
-      note = parts.join(" ");
-    }
 
-    // Build LLM response with truncated data
-    const llmResponse: Record<string, unknown> = {
-      query: pending.query,
-      data: truncatedData,
-      sandboxFile: sandboxFileName,
-    };
-    if (note) {
-      llmResponse.note = note;
-    }
-
-    return {
-      pendingDatabaseResponse: undefined,
-      databaseRetrieverResults: [resultData],
-      messages: [
+      allResults.push(resultData);
+      allMessages.push(
         new ToolMessage({
           status: "success",
           name: "databaseRetriever",
           content: JSON.stringify(llmResponse),
           tool_call_id: pending.toolCallId,
         }),
-      ],
+      );
+    }
+
+    return {
+      pendingDatabaseResponse: [], // Clear the array
+      databaseRetrieverResults: allResults,
+      messages: allMessages,
     };
   }
 

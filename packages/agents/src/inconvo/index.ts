@@ -255,6 +255,19 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => (x ? x.concat(y ?? []) : y),
       default: () => undefined,
     }),
+    // Pending database response to be processed by process_database_results node
+    pendingDatabaseResponse: Annotation<
+      | {
+          toolCallId: string;
+          query: string;
+          data: unknown;
+          warning?: string;
+        }
+      | undefined
+    >({
+      reducer: (x, y) => y,
+      default: () => undefined,
+    }),
     // Context about the request to pass to the database retriever
     requestContext: Annotation<Record<string, string | number>>({
       reducer: (x, y) => y,
@@ -314,6 +327,13 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
     const databaseRetriever = tool(
       async (input: { question: string }, config: ToolRunnableConfig) => {
+        const toolCallId = config.toolCall?.id;
+        if (!toolCallId) {
+          throw new Error(
+            "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
+          );
+        }
+
         try {
           const databaseRetrieverResponse = await (
             await databaseRetrieverAgent({
@@ -325,93 +345,15 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             })
           ).invoke({});
 
-          // Start sandbox and upload results
-          const sandboxClient = createSandboxClientFromEnv({
-            orgId: params.orgId,
-            agentId: params.agentId,
-          });
-          const sandboxSession = sandboxClient.sandbox({
-            conversationId: params.conversation.id,
-            requestContextPath: params.requestContextPath,
-          });
-          await sandboxSession.start();
-
-          const fullData = databaseRetrieverResponse.databaseResponse.response;
-          const query = databaseRetrieverResponse.databaseResponse.query;
-
-          // Upload full data to sandbox s3 storage
-          const resultData = { query, data: fullData };
-          const sandboxFileName = `${uuidv4()}.json`;
-          const jsonString = JSON.stringify(resultData, null, 2);
-          const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
-          await sandboxClient.uploadConversationData({
-            conversationId: params.conversation.id,
-            requestContextPath: params.requestContextPath,
-            files: [
-              {
-                name: sandboxFileName,
-                content: base64Content,
-                contentType: "application/json",
-              },
-            ],
-          });
-
-          // Truncate data for LLM response (50 rows max)
-          const DATA_PREVIEW_LIMIT = 50;
-          const isArray = Array.isArray(fullData);
-          const totalRows = isArray ? fullData.length : 1;
-          const wasTruncated = isArray && totalRows > DATA_PREVIEW_LIMIT;
-          const truncatedData = isArray
-            ? fullData.slice(0, DATA_PREVIEW_LIMIT)
-            : fullData;
-
-          // Build note if data was truncated or hit 1000-row DB limit
-          const hit1000Limit =
-            !!databaseRetrieverResponse.databaseResponse.warning;
-          let note: string | undefined;
-          if (wasTruncated || hit1000Limit) {
-            const parts: string[] = [];
-            if (wasTruncated) {
-              parts.push(
-                `Showing ${DATA_PREVIEW_LIMIT} of ${totalRows} rows. Full results available in sandbox file: ${sandboxFileName}`,
-              );
-            }
-            if (hit1000Limit) {
-              parts.push(
-                `Query hit the 1,000-row database limit. The sandbox file contains up to 1,000 rows.`,
-              );
-            }
-            note = parts.join(" ");
-          }
-
-          const toolCallId = config.toolCall?.id;
-          if (!toolCallId) {
-            throw new Error(
-              "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
-            );
-          }
-
-          // Build LLM response with truncated data
-          const llmResponse: Record<string, unknown> = {
-            query,
-            data: truncatedData,
-            sandboxFile: sandboxFileName,
-          };
-          if (note) {
-            llmResponse.note = note;
-          }
-
+          // Store raw response in state for process_database_results node
           return new Command({
             update: {
-              databaseRetrieverResults: [resultData],
-              messages: [
-                new ToolMessage({
-                  status: "success",
-                  name: "databaseRetriever",
-                  content: JSON.stringify(llmResponse, null, 2),
-                  tool_call_id: toolCallId,
-                }),
-              ],
+              pendingDatabaseResponse: {
+                toolCallId,
+                query: databaseRetrieverResponse.databaseResponse.query,
+                data: databaseRetrieverResponse.databaseResponse.response,
+                warning: databaseRetrieverResponse.databaseResponse.warning,
+              },
             },
           });
         } catch (e) {
@@ -693,8 +635,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }
   };
 
-  // After tools run, check if generateResponse already set the answer
-  const shouldContinueAfterTools = (state: typeof AgentState.State) => {
+  // After tools run, check if we need to process database results or if answer is set
+  const routeAfterTools = (state: typeof AgentState.State) => {
+    // Check for pending database results first
+    if (state.pendingDatabaseResponse) {
+      return "processDatabaseResults";
+    }
     // If answer is already set (by generateResponse), go directly to format_response
     if (state.answer && state.answer.message) {
       return "formatResponse";
@@ -702,6 +648,94 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // Otherwise, go back to the agent for another turn
     return "continue";
   };
+
+  // Process database results: upload to S3, truncate for LLM, build ToolMessage
+  async function processDatabaseResults(state: typeof AgentState.State) {
+    const pending = state.pendingDatabaseResponse;
+    if (!pending) {
+      return {};
+    }
+
+    const sandboxClient = createSandboxClientFromEnv({
+      orgId: params.orgId,
+      agentId: params.agentId,
+    });
+
+    // Pre-warm sandbox in background for later code execution
+    const sandboxSession = sandboxClient.sandbox({
+      conversationId: params.conversation.id,
+      requestContextPath: params.requestContextPath,
+    });
+    void sandboxSession.start();
+
+    // Upload full data to sandbox S3 storage
+    const resultData = { query: pending.query, data: pending.data };
+    const sandboxFileName = `${uuidv4()}.json`;
+    const jsonString = JSON.stringify(resultData);
+    const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
+    await sandboxClient.uploadConversationData({
+      conversationId: params.conversation.id,
+      requestContextPath: params.requestContextPath,
+      files: [
+        {
+          name: sandboxFileName,
+          content: base64Content,
+          contentType: "application/json",
+        },
+      ],
+    });
+
+    // Truncate data for LLM response (50 rows max)
+    const DATA_PREVIEW_LIMIT = 50;
+    const fullData = pending.data;
+    const isArray = Array.isArray(fullData);
+    const totalRows = isArray ? fullData.length : 1;
+    const wasTruncated = isArray && totalRows > DATA_PREVIEW_LIMIT;
+    const truncatedData = isArray
+      ? (fullData as unknown[]).slice(0, DATA_PREVIEW_LIMIT)
+      : fullData;
+
+    // Build note if data was truncated or hit 1000-row DB limit
+    const hit1000Limit = !!pending.warning;
+    let note: string | undefined;
+    if (wasTruncated || hit1000Limit) {
+      const parts: string[] = [];
+      if (wasTruncated) {
+        parts.push(
+          `Showing ${DATA_PREVIEW_LIMIT} of ${totalRows} rows. Full results available in sandbox file: ${sandboxFileName}`,
+        );
+      }
+      if (hit1000Limit) {
+        parts.push(
+          `Query hit the 1,000-row database limit. The sandbox file contains up to 1,000 rows.`,
+        );
+      }
+      note = parts.join(" ");
+    }
+
+    // Build LLM response with truncated data
+    const llmResponse: Record<string, unknown> = {
+      query: pending.query,
+      data: truncatedData,
+      sandboxFile: sandboxFileName,
+    };
+    if (note) {
+      llmResponse.note = note;
+    }
+
+    return {
+      pendingDatabaseResponse: undefined,
+      databaseRetrieverResults: [resultData],
+      messages: [
+        new ToolMessage({
+          status: "success",
+          name: "databaseRetriever",
+          content: JSON.stringify(llmResponse),
+          tool_call_id: pending.toolCallId,
+        }),
+      ],
+    };
+  }
 
   async function callModel(state: typeof AgentState.State) {
     const prompt = await getPrompt("inconvo_agent_gpt5_dev:480f3449");
@@ -903,6 +937,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     .addNode("build_tools", buildTools)
     .addNode("inconvo_agent", callModel)
     .addNode("inconvo_agent_tools", toolNode)
+    .addNode("process_database_results", processDatabaseResults)
     .addNode("format_response", formatResponse)
     .addEdge(START, "reset_state")
     .addEdge("reset_state", "build_tools")
@@ -912,10 +947,12 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       continue: "inconvo_agent_tools",
       formatResponse: "format_response",
     })
-    .addConditionalEdges("inconvo_agent_tools", shouldContinueAfterTools, {
+    .addConditionalEdges("inconvo_agent_tools", routeAfterTools, {
       continue: "inconvo_agent",
       formatResponse: "format_response",
+      processDatabaseResults: "process_database_results",
     })
+    .addEdge("process_database_results", "inconvo_agent")
     .addEdge("format_response", END);
 
   const graph = workflow.compile({ checkpointer: params.checkpointer });

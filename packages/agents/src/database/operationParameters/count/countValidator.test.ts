@@ -107,7 +107,7 @@ describe("count validator", () => {
         result.issues.some(
           (issue) =>
             issue.code === "invalid_column" ||
-            issue.code === "invalid_enum_value",
+            issue.code === "invalid_value",
         ),
       ).toBe(true);
     }
@@ -124,7 +124,7 @@ describe("count validator", () => {
     if (result.status === "invalid") {
       expect(
         result.issues.some((issue) =>
-          ["invalid_format", "invalid_enum_value"].includes(issue.code),
+          ["invalid_format", "invalid_value"].includes(issue.code),
         ),
       ).toBe(true);
     }

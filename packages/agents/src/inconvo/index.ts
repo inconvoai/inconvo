@@ -323,7 +323,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     >,
   });
 
-  const model = getAIModel("azure:gpt-5.1", {
+  const model = getAIModel("azure:gpt-5.2", {
     promptCacheKey,
     // reasoning: { effort: "low", summary: "detailed" },
   });
@@ -552,7 +552,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             );
           }
 
-          // Get database-related messages for chat history
+          // Get tool-related messages for chat history
           const stateMessages =
             (getCurrentTaskInput() as typeof AgentState.State)?.messages ?? [];
           const databaseRelatedMessages = extractToolRelatedMessages(
@@ -563,9 +563,23 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             stateMessages,
             "getSchemasForTables",
           );
+          const getCurrentTimeRelatedMessages = extractToolRelatedMessages(
+            stateMessages,
+            "getCurrentTime",
+          );
           const userQuestion =
             (getCurrentTaskInput() as typeof AgentState.State)?.userQuestion ??
             "";
+
+          // Combine and deduplicate messages (AI messages may appear in multiple extractions)
+          const allToolMessages = [
+            ...getSchemaRelatedMessages,
+            ...getCurrentTimeRelatedMessages,
+            ...databaseRelatedMessages,
+          ];
+          const uniqueToolMessages = allToolMessages.filter(
+            (msg, index, self) => self.indexOf(msg) === index,
+          );
 
           // Return Command that sets answer - conditional edge will route to format_response
           return new Command({
@@ -573,8 +587,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               answer: validated.data,
               chatHistory: [
                 new HumanMessage(userQuestion),
-                ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
-                ...databaseRelatedMessages.map(sanitizeMessageForHistory),
+                ...uniqueToolMessages.map(sanitizeMessageForHistory),
                 new AIMessage(JSON.stringify(validated.data, null, 2)),
               ],
               messages: [
@@ -895,6 +908,20 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       stateMessages,
       "getSchemasForTables",
     );
+    const getCurrentTimeRelatedMessages = extractToolRelatedMessages(
+      stateMessages,
+      "getCurrentTime",
+    );
+
+    // Combine and deduplicate messages (AI messages may appear in multiple extractions)
+    const allToolMessages = [
+      ...getSchemaRelatedMessages,
+      ...getCurrentTimeRelatedMessages,
+      ...databaseRelatedMessages,
+    ];
+    const uniqueToolMessages = allToolMessages.filter(
+      (msg, index, self) => self.indexOf(msg) === index,
+    );
 
     if (validResponses.length > 0) {
       // Prioritize by type: chart > table > text
@@ -913,8 +940,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         answer: selectedResponse,
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
-          ...databaseRelatedMessages.map(sanitizeMessageForHistory),
+          ...uniqueToolMessages.map(sanitizeMessageForHistory),
           new AIMessage(JSON.stringify(selectedResponse, null, 2)),
         ],
       };
@@ -948,8 +974,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         },
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
-          ...databaseRelatedMessages.map(sanitizeMessageForHistory),
+          ...uniqueToolMessages.map(sanitizeMessageForHistory),
           new AIMessage(fallbackMessage),
         ],
       };

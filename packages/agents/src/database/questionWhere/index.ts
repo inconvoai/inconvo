@@ -51,7 +51,7 @@ interface RequestParams {
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel("azure:gpt-5.2", {
+  const llm = getAIModel("azure:gpt-5.1", {
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
       requestContext: params.requestContext,

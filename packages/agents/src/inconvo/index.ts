@@ -296,7 +296,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     >,
   });
 
-  const model = getAIModel("azure:gpt-5.2", {
+  const model = getAIModel("azure:gpt-5.1", {
     promptCacheKey,
     // reasoning: { effort: "low", summary: "detailed" },
   });
@@ -400,6 +400,19 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       },
     );
     tools.push(getSchemasForTables);
+
+    const getCurrentTime = tool(
+      async () => {
+        return new Date().toISOString();
+      },
+      {
+        name: "getCurrentTime",
+        description:
+          "Get the current date and time. Use this when you need the precise current time for time-sensitive queries or calculations.",
+        schema: z.object({}),
+      },
+    );
+    tools.push(getCurrentTime);
 
     const executePythonCode = tool(
       async (input: { code: string }, config: ToolRunnableConfig) => {
@@ -770,7 +783,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       tables,
       tableContext: tableContext,
       chatHistory: state.chatHistory,
-      date: new Date().toISOString(),
+      date: new Date().toISOString().split("T")[0],
       requestContext: JSON.stringify(state.requestContext),
       userQuestion: new HumanMessage(state.userQuestion),
       messages: state.messages,

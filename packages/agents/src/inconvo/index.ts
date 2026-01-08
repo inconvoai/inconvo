@@ -97,6 +97,33 @@ const messageReducer = (
 };
 
 /**
+ * Strips metadata from messages to ensure consistent serialization for prompt caching.
+ * OpenAI prompt caching requires identical byte-level prefixes, so we remove
+ * response_metadata, additional_kwargs, tool_call_chunks, etc. that vary between requests.
+ */
+function sanitizeMessageForHistory(msg: BaseMessage): BaseMessage {
+  if (HumanMessage.isInstance(msg)) {
+    return new HumanMessage(msg.content);
+  }
+  if (AIMessage.isInstance(msg)) {
+    // Preserve tool_calls as they're needed for conversation context
+    return new AIMessage({
+      content: msg.content,
+      tool_calls: msg.tool_calls,
+    });
+  }
+  if (ToolMessage.isInstance(msg)) {
+    return new ToolMessage({
+      content: msg.content,
+      tool_call_id: msg.tool_call_id,
+      name: msg.name,
+    });
+  }
+  // For any other message type, return as-is
+  return msg;
+}
+
+/**
  * Extracts tool calls (for a specific tool name) and their corresponding tool messages
  * from a list of messages. Returns an ordered list containing each AI message that
  * invoked the tool followed immediately by its matching ToolMessage (if present).
@@ -546,8 +573,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               answer: validated.data,
               chatHistory: [
                 new HumanMessage(userQuestion),
-                ...getSchemaRelatedMessages,
-                ...databaseRelatedMessages,
+                ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
+                ...databaseRelatedMessages.map(sanitizeMessageForHistory),
                 new AIMessage(JSON.stringify(validated.data, null, 2)),
               ],
               messages: [
@@ -886,8 +913,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         answer: selectedResponse,
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...getSchemaRelatedMessages,
-          ...databaseRelatedMessages,
+          ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
+          ...databaseRelatedMessages.map(sanitizeMessageForHistory),
           new AIMessage(JSON.stringify(selectedResponse, null, 2)),
         ],
       };
@@ -921,8 +948,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         },
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...getSchemaRelatedMessages,
-          ...databaseRelatedMessages,
+          ...getSchemaRelatedMessages.map(sanitizeMessageForHistory),
+          ...databaseRelatedMessages.map(sanitizeMessageForHistory),
           new AIMessage(fallbackMessage),
         ],
       };

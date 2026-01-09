@@ -48,6 +48,7 @@ export const conversationDataUploadBodySchema = z.object({
 // Uses X-Org-Id and X-Agent-Id headers for bucket path construction
 export const sandboxParamsSchema = z.object({
   conversationId: z.string().min(1, "conversationId is required"),
+  runId: z.string().min(1, "runId is required"), // Scopes the sandbox instance per run/message
   requestContextPath: z.string(), // For mounting datasets bucket (can be empty string for root)
 });
 

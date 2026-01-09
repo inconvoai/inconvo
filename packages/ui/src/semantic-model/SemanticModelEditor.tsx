@@ -21,7 +21,7 @@ import type {
   ColumnUnitPayload,
   ComputedColumnUnitPayload,
 } from "./types";
-import { TableList, type FilterValue } from "./TableList";
+import { TableList, type FilterValue, type ConnectionOption } from "./TableList";
 import { TableDetail } from "./TableDetail";
 
 export type { FilterValue };
@@ -59,6 +59,14 @@ export interface SemanticModelEditorProps {
   onPageChange?: (page: number) => void;
   /** Items per page */
   perPage?: number;
+
+  // Connection selector props (for multi-database support)
+  /** Available connections */
+  connections?: ConnectionOption[];
+  /** Currently selected connection ID */
+  selectedConnectionId?: string | null;
+  /** Callback when connection changes */
+  onConnectionChange?: (connectionId: string | null) => void;
   /** Callback when table is updated */
   onUpdateTable?: (tableId: string, payload: UpdateTablePayload) => Promise<void>;
   /** Callback when a column is updated */
@@ -110,6 +118,10 @@ export function SemanticModelEditor({
   currentPage,
   onPageChange,
   perPage,
+  // Connection selector props
+  connections,
+  selectedConnectionId,
+  onConnectionChange,
   // Mutation callbacks
   onUpdateTable,
   onUpdateColumn,
@@ -316,6 +328,9 @@ export function SemanticModelEditor({
           currentPage={currentPage}
           onPageChange={onPageChange}
           perPage={perPage}
+          connections={connections}
+          selectedConnectionId={selectedConnectionId}
+          onConnectionChange={onConnectionChange}
         />
       </Box>
 

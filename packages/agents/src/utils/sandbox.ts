@@ -108,6 +108,8 @@ export interface DeleteDatasetsResponse {
 
 export interface SandboxParams {
   conversationId: string;
+  /** Unique identifier for this run/message. Used to scope the sandbox instance. */
+  runId: string;
   /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
   requestContextPath: string;
 }
@@ -433,11 +435,15 @@ export class SandboxClient {
    * Returns a SandboxSession that can start, execute code, and destroy.
    *
    * @param params.conversationId - The conversation ID (required)
+   * @param params.runId - Unique run/message ID (required, scopes the sandbox instance)
    * @param params.requestContextPath - Request context for mounting datasets (optional)
    */
   sandbox(params: SandboxParams): SandboxSession {
     if (!params.conversationId) {
       throw new Error("sandbox() requires a conversationId.");
+    }
+    if (!params.runId) {
+      throw new Error("sandbox() requires a runId.");
     }
 
     return new SandboxSession(
@@ -538,7 +544,9 @@ export function createSandboxClientFromEnv(options: {
     );
   }
   if (!apiKey) {
-    throw new Error("INCONVO_SANDBOX_API_KEY environment variable is required.");
+    throw new Error(
+      "INCONVO_SANDBOX_API_KEY environment variable is required.",
+    );
   }
 
   return new SandboxClient({

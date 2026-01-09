@@ -96,6 +96,7 @@ export function TableConditionsTable({
         <Table striped>
           <Table.Thead>
             <Table.Tr>
+              <Table.Th>Database</Table.Th>
               <Table.Th>Table</Table.Th>
               <Table.Th>Column</Table.Th>
               <Table.Th>=</Table.Th>
@@ -106,6 +107,9 @@ export function TableConditionsTable({
           <Table.Tbody>
             {conditions.map((condition) => (
               <Table.Tr key={condition.id}>
+                <Table.Td>
+                  <Text fw={500}>{condition.table.connection?.name ?? "—"}</Text>
+                </Table.Td>
                 <Table.Td>
                   <Text fw={500}>{condition.table.name}</Text>
                 </Table.Td>

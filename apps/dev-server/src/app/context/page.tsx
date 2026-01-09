@@ -20,6 +20,7 @@ import {
   type ContextField,
   type TableCondition,
   type TableInfo,
+  type ConnectionInfo,
 } from "@repo/ui/request-context";
 
 // API response types (slightly different from component types)
@@ -287,6 +288,7 @@ export default function RequestContextPage() {
           opened={showAddCondition}
           onClose={() => setShowAddCondition(false)}
           onSubmit={handleAddCondition}
+          connections={[{ id: "default", name: "Local Database" }]}
           tables={tables}
           fields={fields}
           loading={addConditionLoading}

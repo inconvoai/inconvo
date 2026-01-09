@@ -62,13 +62,21 @@ interface AvailableDataset {
   notes?: string;
 }
 
-interface QuestionAgentParams {
+interface DatabaseConfig {
+  friendlyName: string;
+  context: string | null;
   schema: Schema;
   connector: DatabaseConnector;
+}
+
+interface QuestionAgentParams {
+  databases: DatabaseConfig[];
   checkpointer: PostgresSaver | MemorySaver;
   conversation: Conversation;
   orgId: string;
   agentId: string;
+  /** Unique identifier for this run/message. Used to scope the sandbox instance. */
+  runId: string;
   /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
   requestContextPath: string;
   /** Available dataset files with metadata for agent context */
@@ -225,12 +233,29 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // The QA message pairs from previous runs
     chatHistory: Annotation<BaseMessage[]>({
       reducer: (x, y) => {
+        const MAX_DB_RETRIEVER_CALLS_TO_KEEP = 5;
+
         // When new messages contain database retriever calls,
-        // we filter out ONLY the tool messages and AI messages associated
-        // with databaseRetriever tool calls (instead of removing every tool message)
+        // we keep only the last N databaseRetriever call pairs
         if (hasDatabaseRetrieverCall(y)) {
-          // 1. Collect all databaseRetriever tool_call ids present in the current history
-          const dbToolCallIds = new Set<string>();
+          // 1. Count how many new db retriever calls are coming in
+          let newDbCallCount = 0;
+          y.forEach((msg) => {
+            if (AIMessage.isInstance(msg)) {
+              const calls = [
+                ...(msg.tool_calls ?? []),
+                ...(msg.invalid_tool_calls ?? []),
+              ];
+              calls.forEach((call) => {
+                if (call.name === "databaseRetriever") {
+                  newDbCallCount++;
+                }
+              });
+            }
+          });
+
+          // 2. Collect all databaseRetriever tool_call ids from history in order
+          const dbToolCallIdsInOrder: string[] = [];
           x.forEach((msg) => {
             if (AIMessage.isInstance(msg)) {
               const calls = [
@@ -239,25 +264,44 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               ];
               calls.forEach((call) => {
                 if (call.name === "databaseRetriever" && call.id) {
-                  dbToolCallIds.add(call.id);
+                  dbToolCallIdsInOrder.push(call.id);
                 }
               });
             }
           });
 
+          // 3. Determine which tool call IDs to remove
+          // Keep enough from history so total (history + new) <= MAX
+          const historyToKeep = Math.max(
+            0,
+            MAX_DB_RETRIEVER_CALLS_TO_KEEP - newDbCallCount,
+          );
+          const idsToRemove = new Set(
+            dbToolCallIdsInOrder.slice(
+              0,
+              Math.max(0, dbToolCallIdsInOrder.length - historyToKeep),
+            ),
+          );
+
+          // 4. Filter out old databaseRetriever messages, keeping the last N
           const filteredHistory = x.filter((msg) => {
-            // Remove only tool messages whose tool_call_id maps to a databaseRetriever call
+            // Remove only tool messages whose tool_call_id is in the removal set
             if (ToolMessage.isInstance(msg) && msg.tool_call_id) {
-              if (dbToolCallIds.has(msg.tool_call_id)) return false;
+              if (idsToRemove.has(msg.tool_call_id)) return false;
             }
-            // Remove AI messages that contain databaseRetriever tool calls
+            // Remove AI messages that contain databaseRetriever tool calls to be removed
             if (AIMessage.isInstance(msg)) {
-              const hasDbCall =
-                msg.tool_calls?.some((c) => c.name === "databaseRetriever") ??
-                msg.invalid_tool_calls?.some(
-                  (c) => c.name === "databaseRetriever",
-                );
-              if (hasDbCall) return false;
+              const dbCalls = [
+                ...(msg.tool_calls ?? []),
+                ...(msg.invalid_tool_calls ?? []),
+              ].filter((c) => c.name === "databaseRetriever" && c.id);
+              // If all db calls in this message are in the removal set, remove the message
+              if (
+                dbCalls.length > 0 &&
+                dbCalls.every((c) => c.id && idsToRemove.has(c.id))
+              ) {
+                return false;
+              }
             }
             return true;
           });
@@ -287,6 +331,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     pendingDatabaseResponse: Annotation<
       Array<{
         toolCallId: string;
+        database: string;
         query: string;
         data: unknown;
         warning?: string;
@@ -309,6 +354,11 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => x + y,
       default: () => 0,
     }),
+    // Track if sandbox was used this run (to avoid unnecessary destroy calls)
+    sandboxUsed: Annotation<boolean>({
+      reducer: (x, y) => y,
+      default: () => false,
+    }),
   });
 
   const tools: (StructuredToolInterface | DynamicTool | RunnableToolLike)[] =
@@ -328,9 +378,28 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // reasoning: { effort: "low", summary: "detailed" },
   });
 
-  const tableContext = params.schema
-    .filter((table) => table.context)
-    .map((table) => `Name: ${table.name},\n Context: ${table.context}`)
+  // Build database names for tool schema validation
+  const databaseNames = params.databases.map((db) => db.friendlyName);
+
+  // Build combined table context from all databases
+  const tableContext = params.databases
+    .flatMap((db) =>
+      db.schema
+        .filter((table) => table.context)
+        .map(
+          (table) =>
+            `Database: ${db.friendlyName}, Table: ${table.name}, Context: ${table.context}`,
+        ),
+    )
+    .join("\n");
+
+  // Build database context for system prompt
+  const databaseContext = params.databases
+    .map((db) => {
+      const tableNames = db.schema.map((t) => t.name).join(", ");
+      const contextInfo = db.context ? ` - ${db.context}` : "";
+      return `- **${db.friendlyName}**${contextInfo}\n  Tables: ${tableNames}`;
+    })
     .join("\n");
 
   function resetState(_state: typeof AgentState.State) {
@@ -346,14 +415,22 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         message: "",
       },
       formatAttempts: -_state.formatAttempts, // Reset to 0 via reducer
+      runId: params.runId, // Use runId from params to scope sandbox instance
+      sandboxUsed: false, // Reset sandbox tracking for new run
     };
   }
 
   function buildTools(state: typeof AgentState.State) {
-    const tables = params.schema.map((table) => table.name);
+    // Build a map for quick database lookup
+    const databaseMap = new Map(
+      params.databases.map((db) => [db.friendlyName, db]),
+    );
 
     const databaseRetriever = tool(
-      async (input: { question: string }, config: ToolRunnableConfig) => {
+      async (
+        input: { question: string; database: string },
+        config: ToolRunnableConfig,
+      ) => {
         const toolCallId = config.toolCall?.id;
         if (!toolCallId) {
           throw new Error(
@@ -362,13 +439,22 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
 
         try {
+          // Look up the database configuration
+          const dbConfig = databaseMap.get(input.database);
+          if (!dbConfig) {
+            return new ToolMessage({
+              content: `Tool error: Please check your input and try again. (Database "${input.database}" not found. Available databases: ${databaseNames.join(", ")})`,
+              tool_call_id: toolCallId,
+            });
+          }
+
           const databaseRetrieverResponse = await (
             await databaseRetrieverAgent({
               userQuestion: input.question,
-              schema: params.schema,
+              schema: dbConfig.schema,
               requestContext: state.requestContext,
               agentId: params.agentId,
-              connector: params.connector,
+              connector: dbConfig.connector,
             })
           ).invoke({});
 
@@ -378,6 +464,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               pendingDatabaseResponse: [
                 {
                   toolCallId,
+                  database: input.database,
                   query: databaseRetrieverResponse.databaseResponse.query,
                   data: databaseRetrieverResponse.databaseResponse.response,
                   warning: databaseRetrieverResponse.databaseResponse.warning,
@@ -386,13 +473,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             },
           });
         } catch (e) {
-          return {
-            error: `Calling tool with arguments:\n\n${JSON.stringify(
-              input,
-            )}\n\nraised the following error:\n\n${
-              e instanceof Error ? e.message : String(e)
-            }`,
-          };
+          return new ToolMessage({
+            content: `Tool error: Please check your input and try again. (${e instanceof Error ? e.message : String(e)})`,
+            tool_call_id: toolCallId,
+          });
         }
       },
       {
@@ -400,29 +484,61 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         description: databaseRetrieverToolDescription,
         schema: z.object({
           question: z.string().describe("The question to ask the database"),
+          database: stringArrayToZodEnum(databaseNames).describe(
+            "The name of the database to query",
+          ),
         }),
       },
     );
     tools.push(databaseRetriever);
 
     const getSchemasForTables = tool(
-      async (input: { tables: string[] }) => {
-        const schemaStrings = input.tables.map((tableName) => {
-          const table = params.schema.find((s) => s.name === tableName);
-          if (!table) {
-            throw new Error(`Table ${tableName} not found`);
+      async (
+        input: { tables: string[]; database: string },
+        config: ToolRunnableConfig,
+      ) => {
+        const toolCallId = config.toolCall?.id;
+        if (!toolCallId) {
+          throw new Error(
+            "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
+          );
+        }
+
+        try {
+          const dbConfig = databaseMap.get(input.database);
+          if (!dbConfig) {
+            return new ToolMessage({
+              content: `Tool error: Please check your input and try again. (Database "${input.database}" not found. Available databases: ${databaseNames.join(", ")})`,
+              tool_call_id: toolCallId,
+            });
           }
-          return buildTableSchemaStringFromTableSchema(table);
-        });
-        return schemaStrings.join("\n\n---\n\n");
+
+          const schemaStrings = input.tables.map((tableName) => {
+            const table = dbConfig.schema.find((s) => s.name === tableName);
+            if (!table) {
+              throw new Error(
+                `Table "${tableName}" not found in database "${input.database}"`,
+              );
+            }
+            return buildTableSchemaStringFromTableSchema(table);
+          });
+          return schemaStrings.join("\n\n---\n\n");
+        } catch (e) {
+          return new ToolMessage({
+            content: `Tool error: Please check your input and try again. (${e instanceof Error ? e.message : String(e)})`,
+            tool_call_id: toolCallId,
+          });
+        }
       },
       {
         name: "getSchemasForTables",
-        description: "Get the schemas for a list of tables (one or more).",
+        description:
+          "Get the schemas for a list of tables (one or more) from a specific database.",
         schema: z.object({
-          tables: z.array(
-            stringArrayToZodEnum(tables).describe("The name of the table"),
+          database: stringArrayToZodEnum(databaseNames).describe(
+            "The name of the database containing the tables",
           ),
+          tables: z.array(z.string().describe("The name of the table")),
         }),
       },
     );
@@ -444,12 +560,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const executePythonCode = tool(
       async (input: { code: string }, config: ToolRunnableConfig) => {
         try {
+          const currentState = getCurrentTaskInput() as typeof AgentState.State;
           const sandboxClient = createSandboxClientFromEnv({
             orgId: params.orgId,
             agentId: params.agentId,
           });
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
+            runId: currentState?.runId ?? "",
             requestContextPath: params.requestContextPath,
           });
           const executionResult = await sandboxSession.executeCode(input.code);
@@ -461,6 +579,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           }
           return new Command({
             update: {
+              sandboxUsed: true,
               messages: [
                 new ToolMessage({
                   status: "success",
@@ -512,12 +631,14 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const generateResponse = tool(
       async (input: { code: string }, config: ToolRunnableConfig) => {
         try {
+          const currentState = getCurrentTaskInput() as typeof AgentState.State;
           const sandboxClient = createSandboxClientFromEnv({
             orgId: params.orgId,
             agentId: params.agentId,
           });
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
+            runId: currentState?.runId ?? "",
             requestContextPath: params.requestContextPath,
           });
 
@@ -584,6 +705,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           // Return Command that sets answer - conditional edge will route to format_response
           return new Command({
             update: {
+              sandboxUsed: true,
               answer: validated.data,
               chatHistory: [
                 new HumanMessage(userQuestion),
@@ -719,6 +841,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // Pre-warm sandbox in background for later code execution (once)
     const sandboxSession = sandboxClient.sandbox({
       conversationId: params.conversation.id,
+      runId: state.runId,
       requestContextPath: params.requestContextPath,
     });
     void sandboxSession.start();
@@ -795,6 +918,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     }
 
     return {
+      sandboxUsed: true, // Sandbox was pre-warmed and data uploaded
       pendingDatabaseResponse: [], // Clear the array
       databaseRetrieverResults: allResults,
       messages: allMessages,
@@ -802,8 +926,17 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:480f3449");
-    const tables = params.schema.map((table) => table.name);
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:89855a60");
+
+    // Format tables as a markdown list grouped by database
+    const tables = params.databases
+      .map((db) => {
+        const tableList = db.schema
+          .map((table) => `  - ${table.name}`)
+          .join("\n");
+        return `- ${db.friendlyName}\n${tableList}`;
+      })
+      .join("\n");
 
     // Format available datasets for agent context
     const availableDatasets =
@@ -822,6 +955,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
       tableContext: tableContext,
+      databaseContext: databaseContext,
       chatHistory: state.chatHistory,
       date: new Date().toISOString().split("T")[0],
       requestContext: JSON.stringify(state.requestContext),
@@ -833,9 +967,32 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function formatResponse(state: typeof AgentState.State) {
+    // Helper to destroy sandbox at end of run (message-scoped cleanup)
+    // Only destroys if sandbox was actually used this run
+    const destroySandbox = async () => {
+      if (!state.sandboxUsed) {
+        return; // Skip destroy if sandbox was never used
+      }
+      try {
+        const sandboxClient = createSandboxClientFromEnv({
+          orgId: params.orgId,
+          agentId: params.agentId,
+        });
+        const sandboxSession = sandboxClient.sandbox({
+          conversationId: params.conversation.id,
+          runId: state.runId,
+          requestContextPath: params.requestContextPath,
+        });
+        await sandboxSession.destroy();
+      } catch {
+        // Ignore errors - sandbox may not have been created
+      }
+    };
+
     // If answer is already set (e.g., from generateResponse tool), return it
     // so streaming can detect the completed response
     if (state.answer && state.answer.message) {
+      await destroySandbox();
       return { answer: state.answer };
     }
 
@@ -936,6 +1093,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
       }
 
+      await destroySandbox();
       return {
         answer: selectedResponse,
         chatHistory: [
@@ -967,6 +1125,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         fallbackMessage = parsed.message;
       }
 
+      await destroySandbox();
       return {
         answer: {
           type: "text" as const,

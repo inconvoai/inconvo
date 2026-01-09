@@ -1,3 +1,8 @@
+export interface ConnectionInfo {
+  id: string;
+  name: string;
+}
+
 export interface TableConditionRef {
   id: string;
   tableName: string;
@@ -13,7 +18,11 @@ export interface ContextField {
 
 export interface TableCondition {
   id: string;
-  table: { id: string; name: string };
+  table: {
+    id: string;
+    name: string;
+    connection?: { id: string; name: string } | null;
+  };
   column: { id: string; name: string };
   requestContextField: { id: string; key: string };
 }

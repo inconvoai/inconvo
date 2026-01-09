@@ -71,14 +71,21 @@ export async function POST(
       conversation.requestContext,
     );
 
-    // Create the agent graph
+    // Create the agent graph with databases array (single database for dev-server)
     const { graph } = await inconvoAgent({
-      schema,
-      connector,
+      databases: [
+        {
+          friendlyName: "Development Database",
+          context: null,
+          schema,
+          connector,
+        },
+      ],
       checkpointer,
       conversation,
       orgId: DEV_ORGANISATION_ID,
       agentId: DEV_AGENT_ID,
+      runId,
       requestContextPath: requestContextFlatString,
     });
 

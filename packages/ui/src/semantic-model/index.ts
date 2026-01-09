@@ -41,7 +41,7 @@ export type { RelationTableProps } from "./RelationTable";
 
 // Main Components
 export { TableList } from "./TableList";
-export type { TableListProps } from "./TableList";
+export type { TableListProps, ConnectionOption } from "./TableList";
 
 export { TableDetail } from "./TableDetail";
 export type { TableDetailProps } from "./TableDetail";

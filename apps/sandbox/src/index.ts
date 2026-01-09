@@ -214,7 +214,9 @@ const getSandboxWithContext = async (
   const orgId = c.get("orgId");
   const agentId = c.get("agentId");
 
-  const sandbox = getSandbox(c.env.Sandbox, params.conversationId, {
+  // Use runId for sandbox identification (message-scoped)
+  // Data paths still use conversationId for persistence across runs
+  const sandbox = getSandbox(c.env.Sandbox, params.runId, {
     sleepAfter: "5m",
     keepAlive: false,
   });

@@ -44,8 +44,8 @@ export function createOperationParametersAgent<Result, Artifact>(
       return status === "valid";
     });
 
-  const modelWithTools = getAIModel("azure:gpt-5.1", {
-    reasoning: { effort: "low", summary: "detailed" },
+  const modelWithTools = getAIModel("azure:gpt-5.2", {
+    // reasoning: { effort: "low", summary: "detailed" },
     promptCacheKey: options.promptCacheKey,
   }).bindTools([options.tool]);
   type MsgState = typeof MessagesAnnotation.State;

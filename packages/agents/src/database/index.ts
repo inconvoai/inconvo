@@ -286,7 +286,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const selectDatabaseOperation = async (
     state: typeof DatabaseAgentState.State,
   ) => {
-    const model = getAIModel("azure:gpt-5.1", {
+    const model = getAIModel("azure:gpt-5.2", {
       promptCacheKey,
     });
     const operationSelectorPrompt = await getPrompt(

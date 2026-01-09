@@ -14,6 +14,7 @@ import {
   Pagination,
   Center,
   Loader,
+  Select,
   rem,
 } from "@mantine/core";
 import {
@@ -22,12 +23,18 @@ import {
   IconCircleOff,
   IconX,
   IconLock,
+  IconDatabase,
 } from "@tabler/icons-react";
 import { useDebouncedCallback } from "@mantine/hooks";
 import type { TableSummary, TableAccess } from "./types";
 import { AccessControl } from "./AccessControl";
 
 export type FilterValue = "active" | "queryable" | "joinable" | "off" | "all";
+
+export interface ConnectionOption {
+  id: string;
+  name: string;
+}
 
 export interface TableListProps {
   /** List of tables to display */
@@ -56,6 +63,12 @@ export interface TableListProps {
   onPageChange?: (page: number) => void;
   /** Items per page */
   perPage?: number;
+  /** Available connections for multi-database support */
+  connections?: ConnectionOption[];
+  /** Currently selected connection ID */
+  selectedConnectionId?: string | null;
+  /** Callback when connection changes */
+  onConnectionChange?: (connectionId: string | null) => void;
 }
 
 function getAccessColor(access: TableAccess): string {
@@ -98,6 +111,9 @@ export function TableList({
   currentPage = 1,
   onPageChange,
   perPage = 20,
+  connections,
+  selectedConnectionId,
+  onConnectionChange,
 }: TableListProps) {
   // Internal state for uncontrolled mode
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
@@ -172,8 +188,27 @@ export function TableList({
   const totalPages = totalCount ? Math.ceil(totalCount / perPage) : 1;
   const showPagination = isServerSide && totalCount && totalCount > perPage;
 
+  // Connection selector options
+  const connectionOptions = connections?.map((c) => ({
+    value: c.id,
+    label: c.name,
+  }));
+  const showConnectionSelector = connections && connections.length >= 1;
+
   return (
     <Stack gap="sm" h="100%" p="sm">
+      {/* Connection selector */}
+      {showConnectionSelector && (
+        <Select
+          leftSection={<IconDatabase size={16} />}
+          placeholder="Select database"
+          data={connectionOptions}
+          value={selectedConnectionId ?? null}
+          onChange={onConnectionChange}
+          size="sm"
+        />
+      )}
+
       {/* Search */}
       <TextInput
         placeholder="Search tables..."
@@ -267,7 +302,9 @@ export function TableList({
                   {onTableAccessChange ? (
                     <AccessControl
                       value={table.access}
-                      onChange={(access) => onTableAccessChange(table.id, access)}
+                      onChange={(access) =>
+                        onTableAccessChange(table.id, access)
+                      }
                       size="xs"
                       showLabels={false}
                     />

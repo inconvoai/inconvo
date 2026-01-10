@@ -25,10 +25,16 @@
  * const datasets = await client.datasets.list();
  * const filtered = await client.datasets.list({ context: "organisationId=1" });
  *
- * // Upload datasets
+ * // Upload a dataset file
  * await client.datasets.upload({
  *   requestContextPath: "organisationId=1",
- *   files: [{ name: "data.csv", content: base64Content }],
+ *   file: { name: "data.csv", content: base64Content },
+ * });
+ *
+ * // Delete a dataset file
+ * await client.datasets.delete({
+ *   requestContextPath: "organisationId=1",
+ *   file: "data.csv",
  * });
  *
  * // Start sandbox and execute code
@@ -78,7 +84,7 @@ export interface UploadDatasetFile {
 
 export interface UploadDatasetsParams {
   requestContextPath: string;
-  files: UploadDatasetFile[];
+  file: UploadDatasetFile;
 }
 
 export interface UploadedFile {
@@ -89,21 +95,22 @@ export interface UploadedFile {
 }
 
 export interface UploadDatasetsResponse {
-  files: UploadedFile[];
+  file: UploadedFile;
 }
 
 export interface DeleteDatasetsParams {
-  paths: string[];
+  requestContextPath: string;
+  file: string;
 }
 
-export interface DeletedFile {
-  path: string;
-  success: boolean;
-  error?: string;
+export interface DeleteDatasetByPathParams {
+  path: string; // Full path relative to orgId/agentId (e.g., "userId:123/data.csv")
 }
 
 export interface DeleteDatasetsResponse {
-  deleted: DeletedFile[];
+  file: string;
+  success: boolean;
+  error?: string;
 }
 
 export interface SandboxParams {
@@ -201,13 +208,31 @@ class DatasetClient {
   }
 
   /**
-   * Delete dataset files.
+   * Delete a single dataset file (public API - requires context).
    */
   async delete(params: DeleteDatasetsParams): Promise<DeleteDatasetsResponse> {
-    return this.request<DeleteDatasetsResponse>(`${this.baseUrl}/datasets`, {
+    const url = new URL(
+      `${this.baseUrl}/datasets/${encodeURIComponent(params.file)}`,
+    );
+    url.searchParams.set("context", params.requestContextPath);
+
+    return this.request<DeleteDatasetsResponse>(url.toString(), {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+    });
+  }
+
+  /**
+   * Delete a dataset file by full path (admin API - no context validation).
+   * Path is relative to orgId/agentId (e.g., "userId:123/data.csv").
+   */
+  async deleteByPath(
+    params: DeleteDatasetByPathParams,
+  ): Promise<DeleteDatasetsResponse> {
+    const url = new URL(`${this.baseUrl}/datasets`);
+    url.searchParams.set("path", params.path);
+
+    return this.request<DeleteDatasetsResponse>(url.toString(), {
+      method: "DELETE",
     });
   }
 

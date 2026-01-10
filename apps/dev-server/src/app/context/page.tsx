@@ -20,7 +20,6 @@ import {
   type ContextField,
   type TableCondition,
   type TableInfo,
-  type ConnectionInfo,
 } from "@repo/ui/request-context";
 
 // API response types (slightly different from component types)

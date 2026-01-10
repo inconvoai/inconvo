@@ -8,7 +8,8 @@ export { Sandbox } from "@cloudflare/sandbox";
 import { ANALYZE_JSON_SCRIPT, INCONVO_HELPER_MODULE } from "./scripts";
 import {
   datasetsQuerySchema,
-  datasetsDeleteBodySchema,
+  datasetsDeleteQuerySchema,
+  datasetsDeleteByPathQuerySchema,
   datasetsUploadBodySchema,
   conversationDataUploadBodySchema,
   sandboxParamsSchema,
@@ -382,7 +383,7 @@ app.get(
   },
 );
 
-// POST /datasets - Upload datasets
+// POST /datasets - Upload single dataset file
 app.post(
   "/datasets",
   requireOrgAndAgent,
@@ -396,94 +397,112 @@ app.post(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { requestContextPath, files } = c.req.valid("json");
+    const { requestContextPath, file } = c.req.valid("json");
 
     const basePrefix = requestContextPath
       ? `${orgId}/${agentId}/${requestContextPath}`
       : `${orgId}/${agentId}`;
 
-    const storedFiles = await Promise.all(
-      files.map(async (file) => {
-        // Sanitize file name: trim and replace spaces with underscores
-        const fileName = file.name.trim().replace(/ /g, "_");
+    // Sanitize file name: trim and replace spaces with underscores
+    const fileName = file.name.trim().replace(/ /g, "_");
 
-        if (isUnsafeFileName(fileName)) {
-          return {
+    if (isUnsafeFileName(fileName)) {
+      return c.json(
+        {
+          file: {
             name: fileName,
             path: "",
             size: 0,
             error: "File name contains invalid characters",
-          };
-        }
+          },
+        },
+        400,
+      );
+    }
 
-        if (!isSupportedFileExtension(fileName)) {
-          return {
+    if (!isSupportedFileExtension(fileName)) {
+      return c.json(
+        {
+          file: {
             name: fileName,
             path: "",
             size: 0,
             error: "File must be .json or .csv",
-          };
-        }
+          },
+        },
+        400,
+      );
+    }
 
-        try {
-          const content = Uint8Array.from(atob(file.content), (c) =>
-            c.charCodeAt(0),
-          );
+    try {
+      const content = Uint8Array.from(atob(file.content), (c) =>
+        c.charCodeAt(0),
+      );
 
-          if (content.length > MAX_FILE_SIZE_BYTES) {
-            return {
+      if (content.length > MAX_FILE_SIZE_BYTES) {
+        return c.json(
+          {
+            file: {
               name: fileName,
               path: "",
               size: content.length,
               error: `File exceeds ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit`,
-            };
-          }
+            },
+          },
+          400,
+        );
+      }
 
-          const key = `${basePrefix}/${fileName}`;
+      const key = `${basePrefix}/${fileName}`;
 
-          // Extract schema from file content
-          const schema = extractSchema(content, fileName);
+      // Extract schema from file content
+      const schema = extractSchema(content, fileName);
 
-          // Build custom metadata
-          const customMetadata: Record<string, string> = {};
-          if (schema) {
-            customMetadata.schema = JSON.stringify(schema);
-          }
-          if (file.notes) {
-            customMetadata.notes = file.notes;
-          }
+      // Build custom metadata
+      const customMetadata: Record<string, string> = {};
+      if (schema) {
+        customMetadata.schema = JSON.stringify(schema);
+      }
+      if (file.notes) {
+        customMetadata.notes = file.notes;
+      }
 
-          await c.env.CUSTOMER_DATASETS.put(key, content, {
-            httpMetadata: { contentType: file.contentType },
-            customMetadata:
-              Object.keys(customMetadata).length > 0 ? customMetadata : undefined,
-          });
-          return {
-            name: fileName,
-            path: key,
-            size: content.length,
-          };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return {
+      await c.env.CUSTOMER_DATASETS.put(key, content, {
+        httpMetadata: { contentType: file.contentType },
+        customMetadata:
+          Object.keys(customMetadata).length > 0 ? customMetadata : undefined,
+      });
+
+      return c.json({
+        file: {
+          name: fileName,
+          path: key,
+          size: content.length,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        {
+          file: {
             name: fileName,
             path: "",
             size: 0,
             error: message,
-          };
-        }
-      }),
-    );
-
-    return c.json({ files: storedFiles });
+          },
+        },
+        500,
+      );
+    }
   },
 );
 
-// DELETE /datasets - Delete datasets
+// DELETE /datasets/:filename - Delete single dataset file (Public API)
+// Uses ?context=... query param for request context path
 app.delete(
-  "/datasets",
+  "/datasets/:filename",
   requireOrgAndAgent,
-  zValidator("json", datasetsDeleteBodySchema, (result, c) => {
+  zValidator("query", datasetsDeleteQuerySchema, (result, c) => {
     if (!result.success) {
       const message =
         result.error.issues[0]?.message ?? "Invalid delete request.";
@@ -493,30 +512,74 @@ app.delete(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { paths } = c.req.valid("json");
-    const basePrefix = `${orgId}/${agentId}`;
+    const filename = c.req.param("filename");
+    const { context: requestContextPath } = c.req.valid("query");
 
-    const deleted: { path: string; success: boolean; error?: string }[] = [];
-    for (const path of paths) {
-      const normalized = path.replace(/^\/*datasets\/*/, "");
+    const decodedFilename = decodeURIComponent(filename);
+    const trimmedName = decodedFilename.trim();
 
-      // Reject path traversal attempts
-      if (normalized.includes("..")) {
-        deleted.push({ path, success: false, error: "Invalid path" });
-        continue;
-      }
-
-      const key = `${basePrefix}/${normalized}`;
-      try {
-        await c.env.CUSTOMER_DATASETS.delete(key);
-        deleted.push({ path, success: true });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        deleted.push({ path, success: false, error: message });
-      }
+    if (isUnsafeFileName(trimmedName)) {
+      return c.json(
+        { file: decodedFilename, success: false, error: "Invalid filename" },
+        400,
+      );
     }
 
-    return c.json({ deleted });
+    const basePrefix = requestContextPath
+      ? `${orgId}/${agentId}/${requestContextPath}`
+      : `${orgId}/${agentId}`;
+    const key = `${basePrefix}/${trimmedName}`;
+
+    try {
+      await c.env.CUSTOMER_DATASETS.delete(key);
+      return c.json({ file: decodedFilename, success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        { file: decodedFilename, success: false, error: message },
+        500,
+      );
+    }
+  },
+);
+
+// DELETE /datasets - Delete by full path (Admin API)
+// Uses ?path=... query param for full path relative to orgId/agentId
+app.delete(
+  "/datasets",
+  requireOrgAndAgent,
+  zValidator("query", datasetsDeleteByPathQuerySchema, (result, c) => {
+    if (!result.success) {
+      const message =
+        result.error.issues[0]?.message ?? "Path is required.";
+      return c.json({ error: message }, 400);
+    }
+  }),
+  async (c) => {
+    const orgId = c.get("orgId");
+    const agentId = c.get("agentId");
+    const { path: fullPath } = c.req.valid("query");
+
+    const normalizedPath = fullPath.replace(/^\/+|\/+$/g, "");
+    if (normalizedPath.includes("..")) {
+      return c.json(
+        { file: fullPath, success: false, error: "Invalid path" },
+        400,
+      );
+    }
+
+    const key = `${orgId}/${agentId}/${normalizedPath}`;
+
+    try {
+      await c.env.CUSTOMER_DATASETS.delete(key);
+      return c.json({ file: fullPath, success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        { file: fullPath, success: false, error: message },
+        500,
+      );
+    }
   },
 );
 

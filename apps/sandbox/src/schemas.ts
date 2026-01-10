@@ -6,26 +6,25 @@ export const datasetsQuerySchema = z.object({
   path: z.string().optional(), // subfolder path within the context (e.g., "folder1/folder2")
 });
 
-// Body schema for DELETE /datasets
-export const datasetsDeleteBodySchema = z.object({
-  paths: z
-    .array(z.string().trim().min(1))
-    .min(1, "At least one path is required."),
+// Query schema for DELETE /datasets/:filename (Public API)
+export const datasetsDeleteQuerySchema = z.object({
+  context: z.string().min(1, "Context is required"),
 });
 
-// Body schema for POST /datasets (upload)
+// Query schema for DELETE /datasets (Admin API - delete by path)
+export const datasetsDeleteByPathQuerySchema = z.object({
+  path: z.string().min(1, "Path is required"),
+});
+
+// Body schema for POST /datasets (upload single file)
 export const datasetsUploadBodySchema = z.object({
   requestContextPath: z.string(), // Can be empty for root
-  files: z
-    .array(
-      z.object({
-        name: z.string().min(1),
-        content: z.string().min(1), // base64 encoded
-        contentType: z.string().optional(),
-        notes: z.string().optional(),
-      }),
-    )
-    .min(1, "At least one file is required"),
+  file: z.object({
+    name: z.string().min(1),
+    content: z.string().min(1), // base64 encoded
+    contentType: z.string().optional(),
+    notes: z.string().optional(),
+  }),
 });
 
 // Body schema for POST /conversation-data (upload)

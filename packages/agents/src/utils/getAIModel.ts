@@ -39,8 +39,8 @@ export function getAIModel(
       ...(isGPT5
         ? { reasoning: { effort: "none", summary: "detailed" } }
         : { temperature: 0 }),
+      streaming: false,
       timeout: 60000,
-      maxTokens: -1,
       maxRetries: 2,
       zdrEnabled: true,
       useResponsesApi: true,
@@ -49,6 +49,7 @@ export function getAIModel(
       ...(isGPT5
         ? { reasoning: { effort: "none", summary: "detailed" } }
         : { temperature: 0 }),
+      streaming: false,
       timeout: 60000,
       maxRetries: 2,
       zdrEnabled: true,

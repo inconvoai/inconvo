@@ -416,4 +416,195 @@ describe("groupBy validator", () => {
     const result = validateGroupByCandidate(candidate, ctx);
     expect(result.status).toBe("invalid");
   });
+
+  it("rejects HAVING groupKey with invalid monthOfYear value (string month name)", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "monthOfYear" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "equals" as const,
+          value: "April", // Invalid - should be 1-12
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_component_value");
+      expect(result.issues[0]?.message).toContain("month (1-12)");
+    }
+  });
+
+  it("rejects HAVING groupKey with invalid monthOfYear value in array", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "monthOfYear" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "in" as const,
+          value: ["2023", "2024"], // Invalid - should be 1-12
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_component_value");
+    }
+  });
+
+  it("accepts HAVING groupKey with valid monthOfYear numeric values", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "monthOfYear" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "in" as const,
+          value: [4, 5, 6], // Valid - Q2 months
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
+
+  it("accepts HAVING groupKey with valid numeric string values for monthOfYear", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "monthOfYear" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "equals" as const,
+          value: "4", // Valid - numeric string for April
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
+
+  it("rejects HAVING groupKey with out-of-range dayOfWeek value", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateComponent" as const,
+          column: "users.createdAt",
+          component: "dayOfWeek" as const,
+          alias: "dow",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "dow",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "dow",
+          operator: "equals" as const,
+          value: 8, // Invalid - should be 1-7
+        },
+      ],
+      limit: 7,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_component_value");
+      expect(result.issues[0]?.message).toContain("day of week (1-7)");
+    }
+  });
 });

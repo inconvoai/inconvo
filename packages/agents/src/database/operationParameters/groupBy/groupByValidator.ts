@@ -185,6 +185,64 @@ export function buildGroupByZodSchema(ctx: GroupByValidatorContext) {
   });
 }
 
+const DATE_COMPONENT_RANGES: Record<
+  "dayOfWeek" | "monthOfYear" | "quarterOfYear",
+  { min: number; max: number; label: string }
+> = {
+  dayOfWeek: { min: 1, max: 7, label: "day of week (1-7)" },
+  monthOfYear: { min: 1, max: 12, label: "month (1-12)" },
+  quarterOfYear: { min: 1, max: 4, label: "quarter (1-4)" },
+};
+
+function validateDateComponentHavingValue(
+  value: unknown,
+  component: "dayOfWeek" | "monthOfYear" | "quarterOfYear",
+  operator: string,
+): { valid: boolean; message: string } {
+  const range = DATE_COMPONENT_RANGES[component];
+
+  const validateSingleValue = (v: unknown): boolean => {
+    if (typeof v === "number" && Number.isInteger(v)) {
+      return v >= range.min && v <= range.max;
+    }
+    // Also accept numeric strings
+    if (typeof v === "string") {
+      const parsed = parseInt(v, 10);
+      if (!isNaN(parsed) && String(parsed) === v.trim()) {
+        return parsed >= range.min && parsed <= range.max;
+      }
+    }
+    return false;
+  };
+
+  if (operator === "in" || operator === "notIn") {
+    if (!Array.isArray(value)) {
+      return {
+        valid: false,
+        message: `Value for '${operator}' operator must be an array`,
+      };
+    }
+    const invalidValues = value.filter((v) => !validateSingleValue(v));
+    if (invalidValues.length > 0) {
+      return {
+        valid: false,
+        message: `Invalid ${range.label} values: ${JSON.stringify(invalidValues)}. Expected integers from ${range.min} to ${range.max}.`,
+      };
+    }
+    return { valid: true, message: "" };
+  }
+
+  // For equals, not, lt, lte, gt, gte operators
+  if (!validateSingleValue(value)) {
+    return {
+      valid: false,
+      message: `Invalid ${range.label} value: ${JSON.stringify(value)}. Expected integer from ${range.min} to ${range.max}.`,
+    };
+  }
+
+  return { valid: true, message: "" };
+}
+
 export function validateGroupByCandidate(
   candidate: unknown,
   ctx: GroupByValidatorContext,
@@ -364,6 +422,25 @@ export function validateGroupByCandidate(
             message: `HAVING groupKey ${condition.key} must reference a groupBy alias`,
             code: "having_groupkey_missing",
           });
+        } else {
+          // Validate that the value is appropriate for the groupBy type
+          const groupByEntry = resolvedGroupBy.find(
+            (g) => g.alias === condition.key,
+          );
+          if (groupByEntry?.type === "dateComponent") {
+            const valueValidation = validateDateComponentHavingValue(
+              condition.value,
+              groupByEntry.component,
+              condition.operator,
+            );
+            if (!valueValidation.valid) {
+              issues.push({
+                path: `having[${index}].value`,
+                message: valueValidation.message,
+                code: "invalid_date_component_value",
+              });
+            }
+          }
         }
         return;
       }

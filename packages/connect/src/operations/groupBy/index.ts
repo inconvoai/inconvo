@@ -215,9 +215,16 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       selections.push(select.as(dialectAlias));
       groupByColumns.push(select);
       groupByColumns.push(order);
-      // BigQuery requires using alias in HAVING clause for computed expressions
-      const havingExpr =
-        env.DATABASE_DIALECT === "bigquery" ? sql.ref(dialectAlias) : order;
+      // BigQuery requires using alias in HAVING clause for computed expressions.
+      // We add a hidden numeric column for HAVING comparisons to ensure consistency.
+      let havingExpr: any;
+      if (env.DATABASE_DIALECT === "bigquery") {
+        const orderAlias = `${dialectAlias}__order`;
+        selections.push(order.as(orderAlias));
+        havingExpr = sql.ref(orderAlias);
+      } else {
+        havingExpr = order;
+      }
       groupKeyExpressions.set(alias, { select, order, having: havingExpr });
     }
   }
@@ -395,6 +402,14 @@ export async function groupBy(db: Kysely<any>, query: Query) {
         delete parsed[sanitized];
       }
     });
+
+    // Remove hidden __order columns used for BigQuery HAVING comparisons
+    for (const key of Object.keys(parsed)) {
+      if (key.endsWith("__order")) {
+        delete parsed[key];
+      }
+    }
+
     return parsed;
   });
 

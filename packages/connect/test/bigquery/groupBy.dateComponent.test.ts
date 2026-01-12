@@ -187,4 +187,62 @@ describe("BigQuery groupBy dateComponent buckets", () => {
       [...orderIndexes].slice().sort((a, b) => a - b),
     );
   });
+
+  test("filters by monthOfYear using HAVING with numeric value", async () => {
+    const iql = {
+      table: "orders",
+      whereAndArray: [],
+      operation: "groupBy" as const,
+      operationParameters: {
+        joins: null,
+        groupBy: [
+          {
+            type: "dateComponent",
+            column: "orders.created_at",
+            component: "monthOfYear" as const,
+            alias: "month_bucket",
+          },
+        ],
+        count: ["orders.id"],
+        countDistinct: null,
+        sum: null,
+        min: null,
+        max: null,
+        avg: null,
+        orderBy: {
+          type: "groupKey" as const,
+          key: "month_bucket",
+          direction: "asc" as const,
+        },
+        having: [
+          {
+            type: "groupKey" as const,
+            key: "month_bucket",
+            operator: "in" as const,
+            value: [1, 2, 3], // Q1 months (January, February, March)
+          },
+        ],
+        limit: 12,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await groupBy(db, parsed);
+
+    const rows = "data" in response ? response.data : response;
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows.length).toBeLessThanOrEqual(3);
+
+    // All returned months should be Q1 months
+    const seenMonths = rows.map((row: any) => row.month_bucket) as string[];
+    const q1Months = ["January", "February", "March"];
+    seenMonths.forEach((month) => {
+      expect(q1Months).toContain(month);
+    });
+
+    // Ensure hidden __order column is not in results
+    rows.forEach((row: any) => {
+      expect(row).not.toHaveProperty("month_bucket__order");
+    });
+  });
 });

@@ -992,7 +992,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // If answer is already set (e.g., from generateResponse tool), return it
     // so streaming can detect the completed response
     if (state.answer && state.answer.message) {
-      await destroySandbox();
+      void destroySandbox();
       return { answer: state.answer };
     }
 
@@ -1093,7 +1093,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
       }
 
-      await destroySandbox();
+      void destroySandbox();
       return {
         answer: selectedResponse,
         chatHistory: [
@@ -1125,7 +1125,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         fallbackMessage = parsed.message;
       }
 
-      await destroySandbox();
+      void destroySandbox();
       return {
         answer: {
           type: "text" as const,

@@ -28,7 +28,7 @@
  * // Upload a dataset file
  * await client.datasets.upload({
  *   requestContextPath: "organisationId=1",
- *   file: { name: "data.csv", content: base64Content },
+ *   file: { name: "data.csv", content: Buffer.from(fileContent) },
  * });
  *
  * // Delete a dataset file
@@ -77,7 +77,7 @@ export interface ListDatasetsResponse {
 
 export interface UploadDatasetFile {
   name: string;
-  content: string; // base64 encoded
+  content: Buffer | Uint8Array; // raw bytes
   contentType?: string;
   notes?: string;
 }
@@ -197,13 +197,33 @@ class DatasetClient {
   }
 
   /**
-   * Upload dataset files.
+   * Upload dataset files using multipart/form-data.
    */
   async upload(params: UploadDatasetsParams): Promise<UploadDatasetsResponse> {
+    const formData = new FormData();
+
+    // Convert Buffer/Uint8Array to a new Uint8Array with its own ArrayBuffer
+    // This ensures proper BlobPart compatibility (Buffer's underlying buffer is ArrayBufferLike)
+    const bytes = Uint8Array.from(params.file.content);
+
+    // Create a Blob from the raw bytes
+    const blob = new Blob([bytes], {
+      type: params.file.contentType || "application/octet-stream",
+    });
+    formData.append("file", blob, params.file.name);
+    formData.append("requestContextPath", params.requestContextPath);
+
+    if (params.file.contentType) {
+      formData.append("contentType", params.file.contentType);
+    }
+    if (params.file.notes) {
+      formData.append("notes", params.file.notes);
+    }
+
     return this.request<UploadDatasetsResponse>(`${this.baseUrl}/datasets`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      // Don't set Content-Type header - let fetch set multipart boundary automatically
+      body: formData,
     });
   }
 
@@ -245,9 +265,15 @@ class DatasetClient {
     }
 
     const headers = new Headers(this.headers);
+    // Merge custom headers, but skip Content-Type for FormData
+    // (FormData needs fetch to set the Content-Type with correct boundary)
     if (init.headers) {
       const initHeaders = new Headers(init.headers);
-      initHeaders.forEach((value, key) => headers.set(key, value));
+      initHeaders.forEach((value, key) => {
+        if (!(init.body instanceof FormData && key.toLowerCase() === "content-type")) {
+          headers.set(key, value);
+        }
+      });
     }
 
     const response = await fetch(url, {

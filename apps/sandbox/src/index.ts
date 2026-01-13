@@ -10,7 +10,6 @@ import {
   datasetsQuerySchema,
   datasetsDeleteQuerySchema,
   datasetsDeleteByPathQuerySchema,
-  datasetsUploadBodySchema,
   conversationDataUploadBodySchema,
   sandboxParamsSchema,
   executeBodySchema,
@@ -383,119 +382,129 @@ app.get(
   },
 );
 
-// POST /datasets - Upload single dataset file
-app.post(
-  "/datasets",
-  requireOrgAndAgent,
-  zValidator("json", datasetsUploadBodySchema, (result, c) => {
-    if (!result.success) {
-      const message =
-        result.error.issues[0]?.message ?? "Invalid upload request.";
-      return c.json({ error: message }, 400);
-    }
-  }),
-  async (c) => {
-    const orgId = c.get("orgId");
-    const agentId = c.get("agentId");
-    const { requestContextPath, file } = c.req.valid("json");
+// POST /datasets - Upload single dataset file (multipart/form-data)
+app.post("/datasets", requireOrgAndAgent, async (c) => {
+  const orgId = c.get("orgId");
+  const agentId = c.get("agentId");
 
-    const basePrefix = requestContextPath
-      ? `${orgId}/${agentId}/${requestContextPath}`
-      : `${orgId}/${agentId}`;
+  let formData: FormData;
+  try {
+    formData = await c.req.formData();
+  } catch {
+    return c.json({ error: "Invalid multipart/form-data request" }, 400);
+  }
 
-    // Sanitize file name: trim and replace spaces with underscores
-    const fileName = file.name.trim().replace(/ /g, "_");
+  const file = formData.get("file") as File | null;
+  const requestContextPath = formData.get("requestContextPath") as
+    | string
+    | null;
+  const contentType = formData.get("contentType") as string | null;
+  const notes = formData.get("notes") as string | null;
 
-    if (isUnsafeFileName(fileName)) {
-      return c.json(
-        {
-          file: {
-            name: fileName,
-            path: "",
-            size: 0,
-            error: "File name contains invalid characters",
-          },
-        },
-        400,
-      );
-    }
+  if (!file) {
+    return c.json({ error: "File is required" }, 400);
+  }
 
-    if (!isSupportedFileExtension(fileName)) {
-      return c.json(
-        {
-          file: {
-            name: fileName,
-            path: "",
-            size: 0,
-            error: "File must be .json or .csv",
-          },
-        },
-        400,
-      );
-    }
+  if (!requestContextPath) {
+    return c.json({ error: "requestContextPath is required" }, 400);
+  }
 
-    try {
-      const content = Uint8Array.from(atob(file.content), (c) =>
-        c.charCodeAt(0),
-      );
+  const basePrefix = `${orgId}/${agentId}/${requestContextPath}`;
 
-      if (content.length > MAX_FILE_SIZE_BYTES) {
-        return c.json(
-          {
-            file: {
-              name: fileName,
-              path: "",
-              size: content.length,
-              error: `File exceeds ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit`,
-            },
-          },
-          400,
-        );
-      }
+  // Sanitize file name: trim and replace spaces with underscores
+  const fileName = file.name.trim().replace(/ /g, "_");
 
-      const key = `${basePrefix}/${fileName}`;
-
-      // Extract schema from file content
-      const schema = extractSchema(content, fileName);
-
-      // Build custom metadata
-      const customMetadata: Record<string, string> = {};
-      if (schema) {
-        customMetadata.schema = JSON.stringify(schema);
-      }
-      if (file.notes) {
-        customMetadata.notes = file.notes;
-      }
-
-      await c.env.CUSTOMER_DATASETS.put(key, content, {
-        httpMetadata: { contentType: file.contentType },
-        customMetadata:
-          Object.keys(customMetadata).length > 0 ? customMetadata : undefined,
-      });
-
-      return c.json({
+  if (isUnsafeFileName(fileName)) {
+    return c.json(
+      {
         file: {
           name: fileName,
-          path: key,
-          size: content.length,
+          path: "",
+          size: 0,
+          error: "File name contains invalid characters",
         },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      },
+      400,
+    );
+  }
+
+  if (!isSupportedFileExtension(fileName)) {
+    return c.json(
+      {
+        file: {
+          name: fileName,
+          path: "",
+          size: 0,
+          error: "File must be .json or .csv",
+        },
+      },
+      400,
+    );
+  }
+
+  try {
+    // Get raw bytes directly from file - no base64 decode needed
+    const content = new Uint8Array(await file.arrayBuffer());
+
+    if (content.length > MAX_FILE_SIZE_BYTES) {
       return c.json(
         {
           file: {
             name: fileName,
             path: "",
-            size: 0,
-            error: message,
+            size: content.length,
+            error: `File exceeds ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit`,
           },
         },
-        500,
+        400,
       );
     }
-  },
-);
+
+    const key = `${basePrefix}/${fileName}`;
+
+    // Extract schema from file content
+    const schema = extractSchema(content, fileName);
+
+    // Build custom metadata
+    const customMetadata: Record<string, string> = {};
+    if (schema) {
+      customMetadata.schema = JSON.stringify(schema);
+    }
+    if (notes) {
+      customMetadata.notes = notes;
+    }
+
+    // Use contentType from form field, or fall back to file.type
+    const finalContentType = contentType || file.type || "application/octet-stream";
+
+    await c.env.CUSTOMER_DATASETS.put(key, content, {
+      httpMetadata: { contentType: finalContentType },
+      customMetadata:
+        Object.keys(customMetadata).length > 0 ? customMetadata : undefined,
+    });
+
+    return c.json({
+      file: {
+        name: fileName,
+        path: key,
+        size: content.length,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json(
+      {
+        file: {
+          name: fileName,
+          path: "",
+          size: 0,
+          error: message,
+        },
+      },
+      500,
+    );
+  }
+});
 
 // DELETE /datasets/:filename - Delete single dataset file (Public API)
 // Uses ?context=... query param for request context path

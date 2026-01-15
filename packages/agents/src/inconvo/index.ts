@@ -183,9 +183,11 @@ function validateVegaLiteSpec(
   }
 
   // First, try to compile the Vega-Lite spec to a Vega spec.
+  // Cast through unknown because our Zod schema is minimal (only validates data.values);
+  // full spec validation happens here via vegaLite.compile()
   let compiled;
   try {
-    compiled = vegaLite.compile(response.spec as vegaLite.TopLevelSpec);
+    compiled = vegaLite.compile(response.spec as unknown as vegaLite.TopLevelSpec);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return [`Vega-Lite compilation error: ${message}`];

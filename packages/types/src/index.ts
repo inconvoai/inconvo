@@ -922,19 +922,9 @@ const baseTableSchema = z.object({
 });
 
 // Vega-Lite v5 spec schema for rich visualizations
-// Uses passthrough() to allow the full Vega-Lite spec while validating core structure
+// Minimal validation here - full spec validation happens at runtime via vega-lite compiler
 export const vegaLiteSpecSchema = z
   .object({
-    $schema: z
-      .string()
-      .optional()
-      .describe(
-        "Vega-Lite schema URL, e.g. https://vega.github.io/schema/vega-lite/v5.json",
-      ),
-    title: z.union([z.string(), z.object({}).passthrough()]).optional(),
-    description: z.string().optional(),
-    width: z.union([z.number(), z.literal("container")]).optional(),
-    height: z.union([z.number(), z.literal("container")]).optional(),
     data: z
       .object({
         values: z
@@ -944,48 +934,6 @@ export const vegaLiteSpecSchema = z
       .describe(
         "Data source with inline values only; URL-based or named data sources are not supported",
       ),
-    mark: z
-      .union([
-        z.enum([
-          "bar",
-          "line",
-          "point",
-          "area",
-          "arc",
-          "rect",
-          "rule",
-          "text",
-          "tick",
-          "circle",
-          "square",
-          "geoshape",
-        ]),
-        z.object({ type: z.string() }).passthrough(),
-      ])
-      .describe("Mark type for the visualization"),
-    encoding: z
-      .object({
-        x: z.object({}).passthrough().optional(),
-        y: z.object({}).passthrough().optional(),
-        color: z.object({}).passthrough().optional(),
-        size: z.object({}).passthrough().optional(),
-        shape: z.object({}).passthrough().optional(),
-        opacity: z.object({}).passthrough().optional(),
-        theta: z.object({}).passthrough().optional(),
-        radius: z.object({}).passthrough().optional(),
-        text: z.object({}).passthrough().optional(),
-        tooltip: z
-          .union([
-            z.object({}).passthrough(),
-            z.array(z.object({}).passthrough()),
-          ])
-          .optional(),
-      })
-      .passthrough()
-      .optional()
-      .describe("Visual encoding channels"),
-    layer: z.array(z.object({}).passthrough()).optional(),
-    config: z.object({}).passthrough().optional(),
   })
   .passthrough();
 

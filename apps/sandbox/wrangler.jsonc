@@ -72,6 +72,7 @@
   "vars": {
     "DATASETS_BUCKET": "customer-datasets",
     "CONVERSATION_DATA_BUCKET": "customer-conversation-data",
+    "SKIP_BUCKET_MOUNT": "",
   },
   "dev": {
     "port": 8787,

@@ -13,7 +13,7 @@ export interface AddConditionModalProps {
   onSubmit: (condition: {
     tableId: string;
     columnId: string;
-    requestContextFieldId: string;
+    userContextFieldId: string;
   }) => void;
   /** Available connections/databases */
   connections: ConnectionInfo[];
@@ -62,7 +62,7 @@ export function AddConditionModal({
       onSubmit({
         tableId,
         columnId,
-        requestContextFieldId: fieldId,
+        userContextFieldId: fieldId,
       });
       // Reset form
       setConnectionId(null);

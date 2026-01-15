@@ -23,7 +23,7 @@ export interface DefineCountOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "count";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -83,7 +83,7 @@ export async function defineCountOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyCountOperationParametersTool,
     toolName: "applyCountOperationParametersTool",

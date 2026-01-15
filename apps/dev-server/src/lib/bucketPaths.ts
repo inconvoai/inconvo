@@ -1,4 +1,4 @@
-export type RequestContextValues =
+export type UserContextValues =
   | Record<string, string | number>
   | null
   | undefined;
@@ -12,22 +12,22 @@ const DISALLOWED_CHARS = /[:\\/,]/;
 const validateContextPart = (part: string, label: string): void => {
   if (DISALLOWED_CHARS.test(part)) {
     throw new Error(
-      `Request context ${label} contains disallowed characters (: / \\ ,): "${part}"`,
+      `User context ${label} contains disallowed characters (: / \\ ,): "${part}"`,
     );
   }
 };
 
 /**
- * Builds a flat string representation of request context values in the format
+ * Builds a flat string representation of user context values in the format
  * "key:value, otherkey:othervalue".
  * Keys are sorted alphabetically to ensure consistent paths.
  */
-export const buildRequestContextPath = (
-  requestContext: RequestContextValues,
+export const buildUserContextPath = (
+  userContext: UserContextValues,
 ): string => {
-  if (!requestContext) return "";
+  if (!userContext) return "";
 
-  return Object.entries(requestContext)
+  return Object.entries(userContext)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => {
       const strValue = String(value);
@@ -39,19 +39,19 @@ export const buildRequestContextPath = (
 };
 
 /**
- * Builds a bucket path of the form "bucket-name:/orgId/agentId/<requestContext>/"
- * where requestContext is optional.
+ * Builds a bucket path of the form "bucket-name:/orgId/agentId/<userContext>/"
+ * where userContext is optional.
  */
 export const buildBucketPath = (
   bucketName: string,
   organisationId: string,
   agentId: string,
-  requestContextFlatString: string,
+  userContextFlatString: string,
 ): string => {
-  const requestContextSuffix = requestContextFlatString
-    ? `${requestContextFlatString}/`
+  const userContextSuffix = userContextFlatString
+    ? `${userContextFlatString}/`
     : "";
-  return `${bucketName}:/${organisationId}/${agentId}/${requestContextSuffix}`;
+  return `${bucketName}:/${organisationId}/${agentId}/${userContextSuffix}`;
 };
 
 export const getBucketBaseNames = () => {

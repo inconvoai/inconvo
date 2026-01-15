@@ -5,14 +5,14 @@ import { tableConditionsSchema } from "@repo/types";
 type TableSchema = Schema[number];
 export function buildConditionsForTable(
   tableSchema: TableSchema,
-  requestContext: Record<string, string | number>,
+  userContext: Record<string, string | number>,
 ) {
   const { columns = [] } = tableSchema;
   assert(columns.length > 0, "Table has no columns");
 
   const tableCondition = tableSchema.condition;
   if (tableCondition) {
-    const value = requestContext[tableCondition.requestContextField.key];
+    const value = userContext[tableCondition.userContextField.key];
     assert(value, "Condition value not provided");
     const conditions = [
       {

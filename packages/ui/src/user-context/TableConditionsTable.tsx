@@ -123,7 +123,7 @@ export function TableConditionsTable({
                 </Table.Td>
                 <Table.Td>
                   <Badge size="sm" color="blue" variant="light">
-                    {"{" + condition.requestContextField.key + "}"}
+                    {"{" + condition.userContextField.key + "}"}
                   </Badge>
                 </Table.Td>
                 <Table.Td>

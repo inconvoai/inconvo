@@ -30,7 +30,7 @@ import type {
   Column,
   ComputedColumn,
   Relation,
-  RequestContextField,
+  UserContextField,
   TableWithColumns,
   UpdateTablePayload,
   UpdateColumnPayload,
@@ -58,8 +58,8 @@ import { ColumnConversionForm } from "./ColumnConversionForm";
 export interface TableDetailProps {
   /** The table to display */
   table: TableSchema;
-  /** Request context fields for RLS configuration */
-  requestContextFields: RequestContextField[];
+  /** User context fields for RLS configuration */
+  userContextFields: UserContextField[];
   /** Available tables for manual relations */
   availableTables: TableWithColumns[];
   /** Whether the component is loading */
@@ -131,7 +131,7 @@ type ModalState =
 
 export function TableDetail({
   table,
-  requestContextFields,
+  userContextFields,
   availableTables,
   loading = false,
   onUpdateTable,
@@ -478,7 +478,7 @@ export function TableDetail({
         {modalState.type === "contextFilter" && (
           <ContextFilterForm
             table={table}
-            requestContextFields={requestContextFields}
+            userContextFields={userContextFields}
             onClose={closeModal}
             onSave={async (payload) => {
               await onUpsertContextFilter?.(payload);

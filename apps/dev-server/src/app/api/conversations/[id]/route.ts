@@ -20,7 +20,7 @@ export async function GET(
   // Return in SDK-compatible format
   return NextResponse.json({
     id: conversation.id,
-    context: conversation.requestContext ?? {},
+    context: conversation.userContext ?? {},
     messages: [], // Messages are not persisted in the dev server's in-memory store
   });
 }

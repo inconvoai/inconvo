@@ -108,16 +108,16 @@ model ColumnConversion {
 }
 
 model TableCondition {
-  id                    String              @id @default(uuid())
-  columnId              String
-  tableId               String              @unique
-  requestContextFieldId String
-  column                Column              @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  table                 Table               @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  requestContextField   RequestContextField @relation(fields: [requestContextFieldId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(uuid())
+  columnId           String
+  tableId            String           @unique
+  userContextFieldId String
+  column             Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  table              Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userContextField   UserContextField @relation(fields: [userContextFieldId], references: [id], onDelete: Cascade)
 }
 
-model RequestContextField {
+model UserContextField {
   id              String           @id @default(uuid())
   key             String           @unique
   type            String // STRING, NUMBER

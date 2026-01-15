@@ -1067,12 +1067,12 @@ export const inconvoEvalRunExample = z
 
 export type InconvoEvalRunExample = z.infer<typeof inconvoEvalRunExample>;
 
-export const inconvoRequestContextSchema = z.record(
+export const inconvoUserContextSchema = z.record(
   z.string(),
   z.union([z.string(), z.number()]),
 );
 
-export type InconvoRequestContext = z.infer<typeof inconvoRequestContextSchema>;
+export type InconvoUserContext = z.infer<typeof inconvoUserContextSchema>;
 
 export const inconvoExampleStatusSchema = z.enum(["PASS", "FAIL", "REVIEW"]);
 
@@ -1082,7 +1082,7 @@ export const inconvoExampleSchema = z
     trace_id: z.string(),
     createdAt: z.string(),
     modifiedAt: z.string().optional(),
-    requestContext: inconvoRequestContextSchema,
+    userContext: inconvoUserContextSchema,
     question: z.string(),
     answer: inconvoResponseSchema.optional(),
     status: inconvoExampleStatusSchema,
@@ -1168,7 +1168,7 @@ export type SchemaTable = {
   outwardRelations: SchemaRelation[];
   condition: {
     column: { name: string };
-    requestContextField: { key: string };
+    userContextField: { key: string };
   } | null;
 };
 
@@ -1178,7 +1178,7 @@ export type Schema = SchemaTable[];
 export type Conversation = {
   id: string;
   title: string | null;
-  requestContext: Record<string, string | number> | null;
+  userContext: Record<string, string | number> | null;
 };
 
 // Database connector interface - implemented by platform's UserDatabaseConnector

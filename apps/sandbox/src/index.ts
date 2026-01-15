@@ -152,22 +152,22 @@ app.use("*", requireApiKey);
 // Helper functions
 // ============================================================================
 
-/** Build bucket path for conversation data: "bucket:/orgId/agentId/requestContextPath/conversationId/" */
+/** Build bucket path for conversation data: "bucket:/orgId/agentId/userContextPath/conversationId/" */
 const buildConversationDataPath = (
   bucketName: string,
   orgId: string,
   agentId: string,
-  requestContextPath: string,
+  userContextPath: string,
   conversationId: string,
-) => `${bucketName}:/${orgId}/${agentId}/${requestContextPath}/${conversationId}/`;
+) => `${bucketName}:/${orgId}/${agentId}/${userContextPath}/${conversationId}/`;
 
-/** Build bucket path for datasets: "bucket:/orgId/agentId/requestContextPath/" */
+/** Build bucket path for datasets: "bucket:/orgId/agentId/userContextPath/" */
 const buildDatasetsPath = (
   bucketName: string,
   orgId: string,
   agentId: string,
-  requestContextPath: string,
-) => `${bucketName}:/${orgId}/${agentId}/${requestContextPath}/`;
+  userContextPath: string,
+) => `${bucketName}:/${orgId}/${agentId}/${userContextPath}/`;
 
 const mountBucketIfNeeded = async (
   sandbox: Awaited<ReturnType<typeof getSandbox>>,
@@ -228,7 +228,7 @@ const getSandboxWithContext = async (
     c.env.CONVERSATION_DATA_BUCKET,
     orgId,
     agentId,
-    params.requestContextPath,
+    params.userContextPath,
     params.conversationId,
   );
   await mountBucketIfNeeded(
@@ -238,13 +238,13 @@ const getSandboxWithContext = async (
     bucketOptions,
   );
 
-  // Mount datasets bucket (if requestContextPath provided)
-  if (params.requestContextPath) {
+  // Mount datasets bucket (if userContextPath provided)
+  if (params.userContextPath) {
     const datasetsPath = buildDatasetsPath(
       c.env.DATASETS_BUCKET,
       orgId,
       agentId,
-      params.requestContextPath,
+      params.userContextPath,
     );
     await mountBucketIfNeeded(
       sandbox,
@@ -276,15 +276,15 @@ app.get(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { context: requestContextPath, path: subPath } = c.req.valid("query");
+    const { context: userContextPath, path: subPath } = c.req.valid("query");
 
     // Build the prefix for listing
     // Base: orgId/agentId/
-    // With context: orgId/agentId/requestContextPath/
-    // With path: orgId/agentId/requestContextPath/subPath/
+    // With context: orgId/agentId/userContextPath/
+    // With path: orgId/agentId/userContextPath/subPath/
     let prefix = `${orgId}/${agentId}/`;
-    if (requestContextPath) {
-      prefix += `${requestContextPath}/`;
+    if (userContextPath) {
+      prefix += `${userContextPath}/`;
     }
     if (subPath) {
       // Normalize: remove leading/trailing slashes
@@ -341,7 +341,7 @@ app.get(
       } while (cursor);
 
       // Fetch metadata for files (only if we have files and context is provided)
-      if (files.length > 0 && requestContextPath) {
+      if (files.length > 0 && userContextPath) {
         await Promise.all(
           files.map(async (file) => {
             const key = `${prefix}${file.name}`;
@@ -395,7 +395,7 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
   }
 
   const file = formData.get("file") as File | null;
-  const requestContextPath = formData.get("requestContextPath") as
+  const userContextPath = formData.get("userContextPath") as
     | string
     | null;
   const contentType = formData.get("contentType") as string | null;
@@ -405,11 +405,11 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
     return c.json({ error: "File is required" }, 400);
   }
 
-  if (!requestContextPath) {
-    return c.json({ error: "requestContextPath is required" }, 400);
+  if (!userContextPath) {
+    return c.json({ error: "userContextPath is required" }, 400);
   }
 
-  const basePrefix = `${orgId}/${agentId}/${requestContextPath}`;
+  const basePrefix = `${orgId}/${agentId}/${userContextPath}`;
 
   // Sanitize file name: trim and replace spaces with underscores
   const fileName = file.name.trim().replace(/ /g, "_");
@@ -522,7 +522,7 @@ app.delete(
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
     const filename = c.req.param("filename");
-    const { context: requestContextPath } = c.req.valid("query");
+    const { context: userContextPath } = c.req.valid("query");
 
     const decodedFilename = decodeURIComponent(filename);
     const trimmedName = decodedFilename.trim();
@@ -534,8 +534,8 @@ app.delete(
       );
     }
 
-    const basePrefix = requestContextPath
-      ? `${orgId}/${agentId}/${requestContextPath}`
+    const basePrefix = userContextPath
+      ? `${orgId}/${agentId}/${userContextPath}`
       : `${orgId}/${agentId}`;
     const key = `${basePrefix}/${trimmedName}`;
 
@@ -609,8 +609,8 @@ app.post(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { conversationId, requestContextPath, files } = c.req.valid("json");
-    const pathPrefix = `${orgId}/${agentId}/${requestContextPath}/${conversationId}`;
+    const { conversationId, userContextPath, files } = c.req.valid("json");
+    const pathPrefix = `${orgId}/${agentId}/${userContextPath}/${conversationId}`;
 
     const storedFiles = await Promise.all(
       files.map(async (file) => {
@@ -754,7 +754,7 @@ app.get("/sandbox/files", requireOrgAndAgent, async (c) => {
   const sandbox = await getSandboxWithContext(c, params);
   await sandbox.writeFile("/workspace/analyze_json.py", ANALYZE_JSON_SCRIPT);
 
-  const mountPaths = params.requestContextPath
+  const mountPaths = params.userContextPath
     ? `${CONVERSATION_DATA_MOUNT_PATH} ${DATASETS_MOUNT_PATH}`
     : CONVERSATION_DATA_MOUNT_PATH;
 

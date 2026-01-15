@@ -24,7 +24,7 @@ export interface TableCondition {
     connection?: { id: string; name: string } | null;
   };
   column: { id: string; name: string };
-  requestContextField: { id: string; key: string };
+  userContextField: { id: string; key: string };
 }
 
 export interface TableInfo {

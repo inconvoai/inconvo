@@ -27,7 +27,7 @@ export interface DefineGroupByOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "groupBy";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -279,7 +279,7 @@ export async function defineGroupByOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyGroupByOperationParametersTool,
     toolName: "applyGroupByOperationParametersTool",

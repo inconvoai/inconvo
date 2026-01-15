@@ -25,7 +25,7 @@ interface RequestParams {
   tableSchema: Schema[number];
   tableName: string;
   question: string;
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -122,7 +122,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "findMany",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     assert(operationParams, "Failed to define findMany operation parameters");
@@ -140,7 +140,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "groupBy",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     assert(
@@ -163,7 +163,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "countRelations",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     assert(
@@ -184,7 +184,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "aggregate",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     return {
@@ -202,7 +202,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "aggregateGroups",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     assert(
@@ -222,7 +222,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "count",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     return {
@@ -240,7 +240,7 @@ export function operationParametersAgent(params: RequestParams) {
       tableName: params.tableName,
       question: params.question,
       operation: "findDistinct",
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     return {

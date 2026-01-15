@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 export type CacheKeyInput = {
   agentId: string | number;
-  requestContext?: Record<string, string | number>;
+  userContext?: Record<string, string | number>;
 };
 
 function hashContext(context: Record<string, string | number>): string {
@@ -19,12 +19,12 @@ function hashContext(context: Record<string, string | number>): string {
  */
 export function buildPromptCacheKey({
   agentId,
-  requestContext,
+  userContext,
 }: CacheKeyInput): string {
-  if (!requestContext || Object.keys(requestContext).length === 0) {
+  if (!userContext || Object.keys(userContext).length === 0) {
     return `${agentId}:noctx`;
   }
 
-  const contextHash = hashContext(requestContext);
+  const contextHash = hashContext(userContext);
   return `${agentId}:${contextHash}`;
 }

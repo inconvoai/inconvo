@@ -2,12 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "~/lib/prisma";
 
 /**
- * GET /api/schema/request-context
- * List all request context fields
+ * GET /api/schema/user-context
+ * List all user context fields
  */
 export async function GET() {
   try {
-    const fields = await prisma.requestContextField.findMany({
+    const fields = await prisma.userContextField.findMany({
       include: {
         tableConditions: {
           include: {
@@ -21,7 +21,7 @@ export async function GET() {
 
     return NextResponse.json({ fields });
   } catch (error) {
-    console.error("Failed to get request context fields:", error);
+    console.error("Failed to get user context fields:", error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to get fields",
@@ -32,8 +32,8 @@ export async function GET() {
 }
 
 /**
- * POST /api/schema/request-context
- * Create a new request context field
+ * POST /api/schema/user-context
+ * Create a new user context field
  */
 export async function POST(request: NextRequest) {
   try {
@@ -54,13 +54,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const field = await prisma.requestContextField.create({
+    const field = await prisma.userContextField.create({
       data: { key, type },
     });
 
     return NextResponse.json({ field }, { status: 201 });
   } catch (error) {
-    console.error("Failed to create request context field:", error);
+    console.error("Failed to create user context field:", error);
     return NextResponse.json(
       {
         error:

@@ -26,7 +26,7 @@ import type {
   Column,
   ComputedColumn,
   Relation,
-  RequestContextField,
+  UserContextField,
   TableWithColumns,
   FilterValue,
 } from "@repo/ui/semantic-model";
@@ -108,7 +108,7 @@ interface ApiTableDetail {
   outwardRelations: ApiRelation[];
   condition: {
     column: { id: string; name: string };
-    requestContextField: { id: string; key: string };
+    userContextField: { id: string; key: string };
   } | null;
 }
 
@@ -186,9 +186,9 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
             id: api.condition.column.id,
             name: api.condition.column.name,
           },
-          requestContextField: {
-            id: api.condition.requestContextField.id,
-            key: api.condition.requestContextField.key,
+          userContextField: {
+            id: api.condition.userContextField.id,
+            key: api.condition.userContextField.key,
           },
         }
       : null,
@@ -249,8 +249,8 @@ function SchemaPageContent() {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<TableSchema | null>(null);
-  const [requestContextFields, setRequestContextFields] = useState<
-    RequestContextField[]
+  const [userContextFields, setUserContextFields] = useState<
+    UserContextField[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -319,16 +319,16 @@ function SchemaPageContent() {
     }
   }, [accessFilter, currentPage, searchQuery]);
 
-  // Fetch request context fields
-  const fetchRequestContext = useCallback(async () => {
+  // Fetch user context fields
+  const fetchUserContext = useCallback(async () => {
     try {
-      const res = await fetch("/api/schema/request-context");
+      const res = await fetch("/api/schema/user-context");
       const data = (await res.json()) as {
         error?: string;
         fields?: Array<{ id: string; key: string; type: string }>;
       };
       if (data.error) throw new Error(data.error);
-      setRequestContextFields(
+      setUserContextFields(
         (data.fields ?? []).map((f) => ({
           id: f.id,
           key: f.key,
@@ -336,7 +336,7 @@ function SchemaPageContent() {
         })),
       );
     } catch (err) {
-      console.error("Failed to fetch request context:", err);
+      console.error("Failed to fetch user context:", err);
     }
   }, []);
 
@@ -379,10 +379,10 @@ function SchemaPageContent() {
   // Track if initial sync has been attempted
   const [initialSyncDone, setInitialSyncDone] = useState(false);
 
-  // Fetch request context once on mount
+  // Fetch user context once on mount
   useEffect(() => {
-    void fetchRequestContext();
-  }, [fetchRequestContext]);
+    void fetchUserContext();
+  }, [fetchUserContext]);
 
   // Fetch tables when URL params change
   useEffect(() => {
@@ -911,7 +911,7 @@ function SchemaPageContent() {
         <SemanticModelEditor
           tables={tables}
           selectedTable={selectedTable}
-          requestContextFields={requestContextFields}
+          userContextFields={userContextFields}
           availableTables={availableTables}
           listLoading={syncing}
           detailLoading={detailLoading}

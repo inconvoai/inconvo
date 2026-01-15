@@ -17,7 +17,7 @@ export interface ConversationItem {
   title: string | null;
   createdAt: string;
   updatedAt: string;
-  requestContext?: Record<string, string | number> | null;
+  userContext?: Record<string, string | number> | null;
 }
 
 interface ConversationSidebarProps {
@@ -91,15 +91,15 @@ export function ConversationSidebar({
                       <Text size="xs" c="dimmed">
                         {new Date(conv.updatedAt).toLocaleDateString()}
                       </Text>
-                      {conv.requestContext &&
-                        Object.keys(conv.requestContext).length > 0 && (
+                      {conv.userContext &&
+                        Object.keys(conv.userContext).length > 0 && (
                           <Badge
                             size="xs"
                             variant="light"
                             color="blue"
                             leftSection={<IconBraces size={10} />}
                           >
-                            {Object.keys(conv.requestContext).length}
+                            {Object.keys(conv.userContext).length}
                           </Badge>
                         )}
                     </Group>

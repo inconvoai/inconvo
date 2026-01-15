@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         condition: {
           include: {
             column: true,
-            requestContextField: true,
+            userContextField: true,
           },
         },
       },

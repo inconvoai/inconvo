@@ -77,8 +77,8 @@ interface QuestionAgentParams {
   agentId: string;
   /** Unique identifier for this run/message. Used to scope the sandbox instance. */
   runId: string;
-  /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
-  requestContextPath: string;
+  /** User context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
+  userContextPath: string;
   /** Available dataset files with metadata for agent context */
   availableDatasets?: AvailableDataset[];
   /** Optional callback to trigger conversation titling (e.g., via Inngest in platform) */
@@ -341,10 +341,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       default: () => [],
     }),
     // Context about the request to pass to the database retriever
-    requestContext: Annotation<Record<string, string | number>>({
+    userContext: Annotation<Record<string, string | number>>({
       reducer: (x, y) => y,
       default: () =>
-        params.conversation.requestContext as Record<string, string | number>,
+        params.conversation.userContext as Record<string, string | number>,
     }),
     error: Annotation<Record<string, unknown> | undefined>({
       reducer: (x, y) => y,
@@ -367,7 +367,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
   const promptCacheKey = buildPromptCacheKey({
     agentId: params.agentId,
-    requestContext: params.conversation.requestContext as Record<
+    userContext: params.conversation.userContext as Record<
       string,
       string | number
     >,
@@ -452,7 +452,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             await databaseRetrieverAgent({
               userQuestion: input.question,
               schema: dbConfig.schema,
-              requestContext: state.requestContext,
+              userContext: state.userContext,
               agentId: params.agentId,
               connector: dbConfig.connector,
             })
@@ -568,7 +568,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
-            requestContextPath: params.requestContextPath,
+            userContextPath: params.userContextPath,
           });
           const executionResult = await sandboxSession.executeCode(input.code);
           const toolCallId = config.toolCall?.id;
@@ -639,7 +639,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
-            requestContextPath: params.requestContextPath,
+            userContextPath: params.userContextPath,
           });
 
           const executionResult = await sandboxSession.executeCode(input.code);
@@ -842,7 +842,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const sandboxSession = sandboxClient.sandbox({
       conversationId: params.conversation.id,
       runId: state.runId,
-      requestContextPath: params.requestContextPath,
+      userContextPath: params.userContextPath,
     });
     void sandboxSession.start();
 
@@ -859,7 +859,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
       await sandboxClient.uploadConversationData({
         conversationId: params.conversation.id,
-        requestContextPath: params.requestContextPath,
+        userContextPath: params.userContextPath,
         files: [
           {
             name: sandboxFileName,
@@ -958,7 +958,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       databaseContext: databaseContext,
       chatHistory: state.chatHistory,
       date: new Date().toISOString().split("T")[0],
-      requestContext: JSON.stringify(state.requestContext),
+      userContext: JSON.stringify(state.userContext),
       userQuestion: new HumanMessage(state.userQuestion),
       messages: state.messages,
       availableDatasets,
@@ -981,7 +981,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         const sandboxSession = sandboxClient.sandbox({
           conversationId: params.conversation.id,
           runId: state.runId,
-          requestContextPath: params.requestContextPath,
+          userContextPath: params.userContextPath,
         });
         await sandboxSession.destroy();
       } catch {

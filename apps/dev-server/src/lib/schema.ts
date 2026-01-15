@@ -137,7 +137,7 @@ export async function getSchema(): Promise<Schema> {
       condition: {
         select: {
           column: { select: { name: true } },
-          requestContextField: { select: { key: true } },
+          userContextField: { select: { key: true } },
         },
       },
     },
@@ -239,8 +239,8 @@ export async function getSchema(): Promise<Schema> {
       condition: table.condition
         ? {
             column: { name: table.condition.column.name },
-            requestContextField: {
-              key: table.condition.requestContextField.key,
+            userContextField: {
+              key: table.condition.userContextField.key,
             },
           }
         : null,

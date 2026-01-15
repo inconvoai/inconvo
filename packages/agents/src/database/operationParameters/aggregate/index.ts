@@ -28,7 +28,7 @@ export interface DefineAggregateOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "aggregate";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -87,7 +87,7 @@ export async function defineAggregateOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyAggregateOperationParametersTool,
     toolName: "applyAggregateOperationParametersTool",

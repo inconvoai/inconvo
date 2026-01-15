@@ -41,7 +41,7 @@ export function ShellSideNav({ onNavClick }: ShellSideNavProps) {
           >
             <Group>
               <IconBraces size={20} />
-              <Text className={classes.linkText}>Request Context</Text>
+              <Text className={classes.linkText}>User Context</Text>
             </Group>
           </UnstyledButton>
           <UnstyledButton

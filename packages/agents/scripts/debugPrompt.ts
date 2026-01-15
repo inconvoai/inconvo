@@ -8,11 +8,11 @@ import type { ChatPromptTemplate } from "@langchain/core/prompts";
 
 // All prompts used in the codebase
 const KNOWN_PROMPTS = [
-  "inconvo_agent_gpt5_dev:eed029ed",
+  "inconvo_agent_gpt5_dev:1f1e8ce0",
   "select_table:dbe22856",
   "select_operation:e74c537d",
   "where_condition_agent_5:dded782c",
-  "extend_query:4836f794",
+  "extend_query:e2f41f22",
   "generate_conversation_title:9a82e721",
 ] as const;
 

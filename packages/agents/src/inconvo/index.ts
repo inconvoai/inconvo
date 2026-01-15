@@ -926,7 +926,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:eed029ed");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:1f1e8ce0");
 
     // Format tables as a markdown list grouped by database
     const tables = params.databases

@@ -5,7 +5,7 @@ import { getSandbox } from "@cloudflare/sandbox";
 import { zValidator } from "@hono/zod-validator";
 export { Sandbox } from "@cloudflare/sandbox";
 
-import { ANALYZE_JSON_SCRIPT, INCONVO_HELPER_MODULE } from "./scripts";
+import { ANALYZE_JSON_SCRIPT } from "./scripts";
 import {
   datasetsQuerySchema,
   datasetsDeleteQuerySchema,
@@ -175,38 +175,85 @@ const mountBucketIfNeeded = async (
   mountPath: string,
   options: ReturnType<typeof BUCKET_OPTIONS>,
 ) => {
-  console.log(
-    `[mount] Attempting to mount bucketPath="${bucketPath}" at mountPath="${mountPath}"`,
-  );
-
-  const mountStatus = await sandbox
-    .exec(`mountpoint -q ${mountPath}`)
-    .catch(() => null);
-
-  console.log(`[mount] mountpoint check result:`, JSON.stringify(mountStatus));
-
-  if (!mountStatus?.success) {
-    try {
-      await sandbox.mountBucket(bucketPath, mountPath, options);
-      console.log(`[mount] mountBucket call succeeded for ${mountPath}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`[mount] mountBucket error: ${message}`);
-      // If the mount path is already in use, treat it as mounted and continue.
-      if (!message.includes("already in use")) {
-        throw error;
-      }
-      console.log(`[mount] Mount path already in use, continuing`);
+  // Skip mountpoint check - just try to mount directly.
+  // The check adds ~2s on cold start waiting for container.
+  // If already mounted, we catch the "already in use" error.
+  try {
+    await sandbox.mountBucket(bucketPath, mountPath, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // If the mount path is already in use, treat it as mounted and continue.
+    if (!message.includes("already in use")) {
+      throw error;
     }
-  } else {
-    console.log(`[mount] Mount already exists at ${mountPath}`);
   }
-
-  const lsResult = await sandbox.exec(`ls -la ${mountPath}`);
-  console.log(`[mount] Contents of ${mountPath}:`, JSON.stringify(lsResult));
 };
 
-/** Get or create sandbox with mounted buckets */
+/**
+ * Copy files from R2 bucket to sandbox filesystem (for local dev without S3 mounting).
+ * This is used when SKIP_BUCKET_MOUNT is enabled because mountBucket() requires
+ * real S3 credentials that don't work in local wrangler dev.
+ */
+const copyBucketFilesToSandbox = async (
+  sandbox: Awaited<ReturnType<typeof getSandbox>>,
+  bucket: R2Bucket,
+  prefix: string,
+  mountPath: string,
+) => {
+  // Ensure mount directory exists and get list of existing files in one command
+  const existingResult = await sandbox.exec(
+    `mkdir -p ${mountPath} && find ${mountPath} -type f 2>/dev/null || true`
+  );
+  const existingFiles = new Set(
+    existingResult.stdout
+      .split("\n")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .map((p) => p.slice(mountPath.length + 1)) // Remove mountPath prefix to get relative path
+  );
+
+  // List and copy files from R2 that don't already exist in sandbox
+  let cursor: string | undefined;
+
+  do {
+    const listed = await bucket.list({ prefix, cursor, limit: 1000 });
+
+    for (const object of listed.objects) {
+      // Skip if it's a "folder" (ends with /)
+      if (object.key.endsWith("/")) continue;
+
+      // Get relative path by removing the prefix
+      const relativePath = object.key.slice(prefix.length);
+      if (!relativePath) continue;
+
+      // Skip if file already exists in sandbox
+      if (existingFiles.has(relativePath)) continue;
+
+      try {
+        const obj = await bucket.get(object.key);
+        if (!obj) continue;
+
+        const destPath = `${mountPath}/${relativePath}`;
+
+        // Create parent directories if the file is nested
+        const lastSlash = relativePath.lastIndexOf("/");
+        if (lastSlash > 0) {
+          const parentDir = `${mountPath}/${relativePath.slice(0, lastSlash)}`;
+          await sandbox.exec(`mkdir -p ${parentDir}`);
+        }
+
+        const content = await obj.text();
+        await sandbox.writeFile(destPath, content);
+      } catch (err) {
+        console.error(`[copy] Failed to copy ${object.key}:`, err);
+      }
+    }
+
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+};
+
+/** Get or create sandbox with mounted buckets (or copy files in dev mode) */
 const getSandboxWithContext = async (
   c: AuthedContext,
   params: SandboxParams,
@@ -221,37 +268,77 @@ const getSandboxWithContext = async (
     keepAlive: false,
   });
 
-  const bucketOptions = BUCKET_OPTIONS(c);
+  // In dev mode (SKIP_BUCKET_MOUNT=true), copy files from R2 into sandbox
+  // instead of mounting. This is needed because mountBucket() requires real
+  // S3 credentials that don't work with wrangler's local R2 emulation.
+  const skipBucketMount = c.env.SKIP_BUCKET_MOUNT === "true";
 
-  // Mount conversation data bucket (always required)
-  const conversationDataPath = buildConversationDataPath(
-    c.env.CONVERSATION_DATA_BUCKET,
-    orgId,
-    agentId,
-    params.userContextPath,
-    params.conversationId,
-  );
-  await mountBucketIfNeeded(
-    sandbox,
-    conversationDataPath,
-    CONVERSATION_DATA_MOUNT_PATH,
-    bucketOptions,
-  );
+  if (skipBucketMount) {
+    const conversationPrefix = `${orgId}/${agentId}/${params.userContextPath}/${params.conversationId}/`;
 
-  // Mount datasets bucket (if userContextPath provided)
-  if (params.userContextPath) {
-    const datasetsPath = buildDatasetsPath(
-      c.env.DATASETS_BUCKET,
+    // Run both copy operations in parallel
+    const copyPromises: Promise<void>[] = [
+      copyBucketFilesToSandbox(
+        sandbox,
+        c.env.CUSTOMER_CONVERSATION_DATA,
+        conversationPrefix,
+        CONVERSATION_DATA_MOUNT_PATH,
+      ),
+    ];
+
+    if (params.userContextPath) {
+      const datasetsPrefix = `${orgId}/${agentId}/${params.userContextPath}/`;
+      copyPromises.push(
+        copyBucketFilesToSandbox(
+          sandbox,
+          c.env.CUSTOMER_DATASETS,
+          datasetsPrefix,
+          DATASETS_MOUNT_PATH,
+        ),
+      );
+    }
+
+    await Promise.all(copyPromises);
+  } else {
+    // Production mode: mount buckets via S3
+    const bucketOptions = BUCKET_OPTIONS(c);
+
+    const conversationDataPath = buildConversationDataPath(
+      c.env.CONVERSATION_DATA_BUCKET,
       orgId,
       agentId,
       params.userContextPath,
+      params.conversationId,
     );
-    await mountBucketIfNeeded(
-      sandbox,
-      datasetsPath,
-      DATASETS_MOUNT_PATH,
-      bucketOptions,
-    );
+
+    // Run both mount operations in parallel
+    const mountPromises: Promise<void>[] = [
+      mountBucketIfNeeded(
+        sandbox,
+        conversationDataPath,
+        CONVERSATION_DATA_MOUNT_PATH,
+        bucketOptions,
+      ),
+    ];
+
+    if (params.userContextPath) {
+      const datasetsPath = buildDatasetsPath(
+        c.env.DATASETS_BUCKET,
+        orgId,
+        agentId,
+        params.userContextPath,
+      );
+      mountPromises.push(
+        mountBucketIfNeeded(
+          sandbox,
+          datasetsPath,
+          DATASETS_MOUNT_PATH,
+          bucketOptions,
+        ),
+      );
+    }
+
+    await Promise.all(mountPromises);
   }
 
   return sandbox;
@@ -885,22 +972,14 @@ app.post(
     }
   }),
   async (c) => {
-    const startTime = Date.now();
     const { code, ...sandboxParams } = c.req.valid("json");
 
     const sandbox = await getSandboxWithContext(c, sandboxParams);
-    console.log(`[execute] getSandboxWithContext: ${Date.now() - startTime}ms`);
 
-    // Write inconvo helper module so `from inconvo import ...` works
-    await sandbox.writeFile("/workspace/inconvo.py", INCONVO_HELPER_MODULE);
-    console.log(`[execute] writeFile inconvo.py: ${Date.now() - startTime}ms`);
-
+    // inconvo.py is pre-installed in container via Dockerfile at /workspace/
     await sandbox.writeFile("/workspace/analyze.py", code);
-    console.log(`[execute] writeFile analyze.py: ${Date.now() - startTime}ms`);
 
-    // Run from /workspace so relative imports work
     const result = await sandbox.exec("cd /workspace && python3 analyze.py");
-    console.log(`[execute] exec python: ${Date.now() - startTime}ms`);
 
     return c.json({
       output: result.stdout,

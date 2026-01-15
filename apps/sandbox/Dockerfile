@@ -9,3 +9,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     altair==6.0.0 \
     jsonschema==4.24.1
 
+# Precompile Python bytecode to speed up imports (~10-20% faster)
+RUN python3 -m compileall -q /usr/lib/python3* /usr/local/lib/python3* 2>/dev/null || true
+
+# Pre-install inconvo helper module so `from inconvo import ...` works
+COPY scripts/inconvo.py /workspace/inconvo.py
+

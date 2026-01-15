@@ -922,20 +922,8 @@ const baseTableSchema = z.object({
 });
 
 // Vega-Lite v5 spec schema for rich visualizations
-// Minimal validation here - full spec validation happens at runtime via vega-lite compiler
-export const vegaLiteSpecSchema = z
-  .object({
-    data: z
-      .object({
-        values: z
-          .array(z.record(z.string(), z.unknown()))
-          .describe("Inline data as array of objects"),
-      })
-      .describe(
-        "Data source with inline values only; URL-based or named data sources are not supported",
-      ),
-  })
-  .passthrough();
+// No validation here - full spec validation happens at runtime via vega-lite compiler
+export const vegaLiteSpecSchema = z.object({}).passthrough();
 
 export type VegaLiteSpec = z.infer<typeof vegaLiteSpecSchema>;
 

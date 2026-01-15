@@ -33,7 +33,7 @@ import { MessageList, type ChatMessage } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import type { InconvoResponse } from "@repo/types";
 
-interface RequestContextField {
+interface UserContextField {
   id: string;
   key: string;
   type: string;
@@ -62,8 +62,8 @@ export function ChatInterface() {
   const [progressMessage, setProgressMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
-  // Request context state
-  const [contextFields, setContextFields] = useState<RequestContextField[]>([]);
+  // User context state
+  const [contextFields, setContextFields] = useState<UserContextField[]>([]);
   const [contextValues, setContextValues] = useState<Record<string, string>>(
     {},
   );
@@ -113,8 +113,8 @@ export function ChatInterface() {
 
   const fetchContextFields = async () => {
     try {
-      const res = await fetch("/api/schema/request-context");
-      const data = (await res.json()) as { fields?: RequestContextField[] };
+      const res = await fetch("/api/schema/user-context");
+      const data = (await res.json()) as { fields?: UserContextField[] };
       setContextFields(data.fields ?? []);
     } catch (err) {
       console.error("Failed to fetch context fields:", err);
@@ -182,8 +182,8 @@ export function ChatInterface() {
     [activeConversationId, handleNewConversation],
   );
 
-  // Build request context object from values, converting types as needed
-  const buildRequestContext = useCallback(() => {
+  // Build user context object from values, converting types as needed
+  const buildUserContext = useCallback(() => {
     const context: Record<string, string | number> = {};
     for (const field of contextFields) {
       const value = contextValues[field.key];
@@ -206,7 +206,7 @@ export function ChatInterface() {
     setIsCreatingConversation(true);
     setError(undefined);
     try {
-      const context = buildRequestContext();
+      const context = buildUserContext();
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -227,7 +227,7 @@ export function ChatInterface() {
     } finally {
       setIsCreatingConversation(false);
     }
-  }, [buildRequestContext]);
+  }, [buildUserContext]);
 
   const handleSendMessage = useCallback(
     async (message: string) => {
@@ -353,7 +353,7 @@ export function ChatInterface() {
           </Alert>
         )}
 
-        {/* Request Context Setup - shown before first message */}
+        {/* User Context Setup - shown before first message */}
         {contextFields.length > 0 &&
         messages.length === 0 &&
         !contextConfirmed ? (
@@ -373,7 +373,7 @@ export function ChatInterface() {
                   </ThemeIcon>
                 </Center>
                 <Title order={4} ta="center">
-                  Set Request Context
+                  Set User Context
                 </Title>
                 <Text size="sm" c="dimmed" ta="center">
                   Configure context values to filter queries by user identity,
@@ -419,7 +419,7 @@ export function ChatInterface() {
           </Box>
         ) : (
           <>
-            {/* Request Context Display - show values once conversation has messages */}
+            {/* User Context Display - show values once conversation has messages */}
             {contextFields.length > 0 && messages.length > 0 && activeContextCount > 0 && (
               <Paper withBorder m="md" mb={0} py="xs" px="md">
                 <Group gap="xs">
@@ -428,13 +428,13 @@ export function ChatInterface() {
                     context:
                   </Text>
                   <Text size="sm" ff="monospace">
-                    {JSON.stringify(buildRequestContext())}
+                    {JSON.stringify(buildUserContext())}
                   </Text>
                 </Group>
               </Paper>
             )}
 
-            {/* Collapsible Request Context Panel - only shown before first message */}
+            {/* Collapsible User Context Panel - only shown before first message */}
             {contextFields.length > 0 && messages.length === 0 && (
               <Paper withBorder m="md" mb={0} p="xs">
                 <Group
@@ -445,7 +445,7 @@ export function ChatInterface() {
                   <Group gap="xs">
                     <IconBraces size={16} />
                     <Text size="sm" fw={500}>
-                      Request Context
+                      User Context
                     </Text>
                     {activeContextCount > 0 && (
                       <Badge size="xs" variant="filled" color="blue">

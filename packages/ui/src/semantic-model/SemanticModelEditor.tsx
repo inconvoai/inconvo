@@ -7,7 +7,7 @@ import type {
   TableSummary,
   TableSchema,
   TableAccess,
-  RequestContextField,
+  UserContextField,
   TableWithColumns,
   UpdateTablePayload,
   ColumnUpdatePayload,
@@ -31,8 +31,8 @@ export interface SemanticModelEditorProps {
   tables: TableSummary[];
   /** Currently selected table (full details) */
   selectedTable: TableSchema | null;
-  /** Request context fields for RLS configuration */
-  requestContextFields: RequestContextField[];
+  /** User context fields for RLS configuration */
+  userContextFields: UserContextField[];
   /** Available tables for manual relations */
   availableTables: TableWithColumns[];
   /** Whether the table list is loading */
@@ -104,7 +104,7 @@ export interface SemanticModelEditorProps {
 export function SemanticModelEditor({
   tables,
   selectedTable,
-  requestContextFields,
+  userContextFields,
   availableTables,
   listLoading = false,
   detailLoading = false,
@@ -348,7 +348,7 @@ export function SemanticModelEditor({
         {selectedTable ? (
           <TableDetail
             table={selectedTable}
-            requestContextFields={requestContextFields}
+            userContextFields={userContextFields}
             availableTables={availableTables}
             loading={detailLoading}
             onUpdateTable={handleUpdateTable}

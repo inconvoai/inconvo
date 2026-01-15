@@ -49,7 +49,7 @@ import type { ColumnAliasMap } from "./utils/queryCanonicalization";
 interface RequestParams {
   userQuestion: string;
   schema: Schema;
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   connector: DatabaseConnector;
   agentId: string | number;
 }
@@ -78,7 +78,7 @@ export const formatAllConditions = (
 export async function databaseRetrieverAgent(params: RequestParams) {
   const promptCacheKey = buildPromptCacheKey({
     agentId: params.agentId,
-    requestContext: params.requestContext,
+    userContext: params.userContext,
   });
   const OverallStateAnnotation = Annotation.Root({
     question: Annotation<string>({
@@ -203,7 +203,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         };
         const tableConditions = buildConditionsForTable(
           table,
-          params.requestContext,
+          params.userContext,
         );
 
         const queryWithConditions = formatAllConditions(
@@ -278,7 +278,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const setContextFilters = async (state: typeof DatabaseAgentState.State) => {
     const conditions = buildConditionsForTable(
       state.tableSchema,
-      params.requestContext,
+      params.userContext,
     );
     return { tableConditions: conditions };
   };
@@ -350,7 +350,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       tableSchema: state.tableSchema,
       tableName: state.tableName,
       question: state.question,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     }).invoke({});
     return { operationParams: operationParamsResponse.operationParameters };
@@ -368,7 +368,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       question: state.question,
       dateCondition: state.dateCondition,
       tableConditions: state.tableConditions,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
       agentId: params.agentId,
     });
     return { questionConditions: questionWhereAgentResponse };

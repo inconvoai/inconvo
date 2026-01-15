@@ -20,10 +20,10 @@ import {
   type ContextField,
   type TableCondition,
   type TableInfo,
-} from "@repo/ui/request-context";
+} from "@repo/ui/user-context";
 
 // API response types (slightly different from component types)
-interface ApiRequestContextField {
+interface ApiUserContextField {
   id: string;
   key: string;
   type: string;
@@ -38,11 +38,11 @@ interface ApiTableCondition {
   id: string;
   table: { id: string; name: string };
   column: { id: string; name: string };
-  requestContextField: { id: string; key: string };
+  userContextField: { id: string; key: string };
 }
 
 // Transform API fields to component format
-function toContextFields(apiFields: ApiRequestContextField[]): ContextField[] {
+function toContextFields(apiFields: ApiUserContextField[]): ContextField[] {
   return apiFields.map((f) => ({
     id: f.id,
     key: f.key,
@@ -55,8 +55,8 @@ function toContextFields(apiFields: ApiRequestContextField[]): ContextField[] {
   }));
 }
 
-export default function RequestContextPage() {
-  const [apiFields, setApiFields] = useState<ApiRequestContextField[]>([]);
+export default function UserContextPage() {
+  const [apiFields, setApiFields] = useState<ApiUserContextField[]>([]);
   const [conditions, setConditions] = useState<ApiTableCondition[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ export default function RequestContextPage() {
   const fetchData = useCallback(async () => {
     try {
       const [fieldsRes, conditionsRes, tablesRes] = await Promise.all([
-        fetch("/api/schema/request-context"),
+        fetch("/api/schema/user-context"),
         fetch("/api/schema/table-conditions"),
         fetch("/api/schema/tables"),
       ]);
@@ -81,7 +81,7 @@ export default function RequestContextPage() {
         conditionsRes.json(),
         tablesRes.json(),
       ])) as [
-        { error?: string; fields?: ApiRequestContextField[] },
+        { error?: string; fields?: ApiUserContextField[] },
         { error?: string; conditions?: ApiTableCondition[] },
         { error?: string; tables?: Array<{ name: string }> },
       ];
@@ -127,7 +127,7 @@ export default function RequestContextPage() {
   }) => {
     setAddFieldLoading(true);
     try {
-      const res = await fetch("/api/schema/request-context", {
+      const res = await fetch("/api/schema/user-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(field),
@@ -148,7 +148,7 @@ export default function RequestContextPage() {
 
   const handleDeleteField = async (id: string) => {
     try {
-      const res = await fetch(`/api/schema/request-context/${id}`, {
+      const res = await fetch(`/api/schema/user-context/${id}`, {
         method: "DELETE",
       });
       const data = (await res.json()) as { error?: string };
@@ -165,7 +165,7 @@ export default function RequestContextPage() {
   const handleAddCondition = async (condition: {
     tableId: string;
     columnId: string;
-    requestContextFieldId: string;
+    userContextFieldId: string;
   }) => {
     setAddConditionLoading(true);
     try {
@@ -214,7 +214,7 @@ export default function RequestContextPage() {
     id: c.id,
     table: c.table,
     column: c.column,
-    requestContextField: c.requestContextField,
+    userContextField: c.userContextField,
   }));
 
   if (loading) {
@@ -232,14 +232,20 @@ export default function RequestContextPage() {
       <Stack gap="lg">
         <Group gap="sm">
           <IconBraces size={28} />
-          <Title order={2}>Request Context</Title>
+          <Title order={2}>User Context</Title>
         </Group>
 
-        <Text c="dimmed">
-          Configure request context fields for row-level security. Context
-          values are passed at runtime to filter query results based on user
-          identity, tenant, or other criteria.
-        </Text>
+        <Stack gap={4} pt={0} mt={0}>
+          <Text c="dimmed" pt={0} mt={0}>
+            User Context allows you to give the agent information about the user
+            making the request.
+          </Text>
+          <Text c="dimmed" pt={0} mt={0}>
+            These fields can also be used to define table conditions to enforce
+            row-level security, as well as upload datasets to the agent for
+            specific users.
+          </Text>
+        </Stack>
 
         {error && (
           <Alert

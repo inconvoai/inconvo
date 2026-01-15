@@ -6,8 +6,8 @@ interface RouteParams {
 }
 
 /**
- * PATCH /api/schema/request-context/[id]
- * Update a request context field
+ * PATCH /api/schema/user-context/[id]
+ * Update a user context field
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
@@ -16,7 +16,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = (await request.json()) as { key?: string; type?: string };
     const { key, type } = body;
 
-    const field = await prisma.requestContextField.update({
+    const field = await prisma.userContextField.update({
       where: { id },
       data: {
         ...(key !== undefined && { key }),
@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ field });
   } catch (error) {
-    console.error("Failed to update request context field:", error);
+    console.error("Failed to update user context field:", error);
     return NextResponse.json(
       {
         error:
@@ -38,20 +38,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * DELETE /api/schema/request-context/[id]
- * Delete a request context field
+ * DELETE /api/schema/user-context/[id]
+ * Delete a user context field
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   try {
-    await prisma.requestContextField.delete({
+    await prisma.userContextField.delete({
       where: { id },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to delete request context field:", error);
+    console.error("Failed to delete user context field:", error);
     return NextResponse.json(
       {
         error:

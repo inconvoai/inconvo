@@ -6,7 +6,7 @@ import { getCheckpointer } from "~/lib/checkpointer";
 import { getSchema } from "~/lib/schema";
 import { getConversation, updateConversation } from "~/lib/conversations";
 import type { InconvoResponse } from "@repo/types";
-import { buildRequestContextPath } from "~/lib/bucketPaths";
+import { buildUserContextPath } from "~/lib/bucketPaths";
 
 const DEV_ORGANISATION_ID = "dev-org";
 const DEV_AGENT_ID = "dev-agent";
@@ -67,8 +67,8 @@ export async function POST(
     const schema = await getSchema();
     const connector = getConnector();
     const checkpointer = getCheckpointer();
-    const requestContextFlatString = buildRequestContextPath(
-      conversation.requestContext,
+    const userContextFlatString = buildUserContextPath(
+      conversation.userContext,
     );
 
     // Create the agent graph with databases array (single database for dev-server)
@@ -86,7 +86,7 @@ export async function POST(
       orgId: DEV_ORGANISATION_ID,
       agentId: DEV_AGENT_ID,
       runId,
-      requestContextPath: requestContextFlatString,
+      userContextPath: userContextFlatString,
     });
 
     // Helper to format response for SDK
@@ -112,7 +112,7 @@ export async function POST(
         const eventStream = graph.streamEvents(
           {
             userQuestion: message,
-            requestContext: conversation.requestContext ?? {},
+            userContext: conversation.userContext ?? {},
             runId,
           },
           {
@@ -200,7 +200,7 @@ export async function POST(
           const eventStream = graph.streamEvents(
             {
               userQuestion: message,
-              requestContext: conversation.requestContext ?? {},
+              userContext: conversation.userContext ?? {},
               runId,
             },
             {

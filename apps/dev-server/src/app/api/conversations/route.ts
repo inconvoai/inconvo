@@ -13,17 +13,14 @@ export async function GET() {
 }
 
 // POST /api/conversations - Create a new conversation
-// Accepts either `context` (SDK format) or `requestContext` (legacy format)
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
       context?: Record<string, string | number>;
-      requestContext?: Record<string, string | number>;
     };
-    // Support both SDK format (context) and legacy format (requestContext)
-    const requestContext = body.context ?? body.requestContext;
+    const userContext = body.context;
 
-    const conversation = createConversation(requestContext);
+    const conversation = createConversation(userContext);
     return NextResponse.json(conversation, { status: 201 });
   } catch (error) {
     console.error(

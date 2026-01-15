@@ -121,7 +121,7 @@ export interface Relation {
  */
 export interface TableCondition {
   column: { id: string; name: string };
-  requestContextField: { id: string; key: string };
+  userContextField: { id: string; key: string };
 }
 
 // =============================================================================
@@ -161,9 +161,9 @@ export interface TableSummary {
 // =============================================================================
 
 /**
- * Request context field (for context filter form)
+ * User context field (for context filter form)
  */
-export interface RequestContextField {
+export interface UserContextField {
   id: string;
   key: string;
   type: "STRING" | "NUMBER";
@@ -241,7 +241,7 @@ export interface ManualRelationUpdatePayload {
  */
 export interface ContextFilterPayload {
   columnId: string;
-  requestContextFieldId: string;
+  userContextFieldId: string;
 }
 
 /**

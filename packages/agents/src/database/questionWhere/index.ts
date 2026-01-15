@@ -46,7 +46,7 @@ interface RequestParams {
   tableSchema: Schema[number];
   dateCondition: DateCondition;
   tableConditions: TableConditions;
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -54,7 +54,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const llm = getAIModel("azure:gpt-5.1", {
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
   });
 

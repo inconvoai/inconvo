@@ -137,7 +137,7 @@ export async function buildOperationParametersPromptMessages(
     operation: keyof typeof operationDocs;
     tableName: string;
     question: string;
-    requestContext: Record<string, string | number>;
+    userContext: Record<string, string | number>;
   },
   tableSchema: string,
 ): Promise<BaseMessage[]> {
@@ -149,7 +149,7 @@ export async function buildOperationParametersPromptMessages(
     queryCurrentState: "no operation parameters defined",
     tableSchema,
     question: params.question,
-    requestContext: JSON.stringify(params.requestContext, null, 2),
+    userContext: JSON.stringify(params.userContext, null, 2),
   })) as Record<"messages", BaseMessage[]>;
   return formatted.messages;
 }

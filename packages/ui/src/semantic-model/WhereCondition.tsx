@@ -54,7 +54,7 @@ export function WhereCondition({
           =
         </Text>
         <Badge size="sm" variant="filled" color="blue">
-          {"{" + condition.requestContextField.key + "}"}
+          {"{" + condition.userContextField.key + "}"}
         </Badge>
       </Group>
     </Alert>

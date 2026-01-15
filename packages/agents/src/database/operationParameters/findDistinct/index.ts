@@ -22,7 +22,7 @@ export interface DefineFindDistinctOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findDistinct";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -86,7 +86,7 @@ export async function defineFindDistinctOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyFindDistinctOperationParametersTool,
     toolName: "applyFindDistinctOperationParametersTool",

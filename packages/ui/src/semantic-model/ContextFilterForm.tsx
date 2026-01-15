@@ -3,15 +3,15 @@ import { Select, Button, Group, Stack, Text, Alert } from "@mantine/core";
 import { IconInfoCircle } from "@tabler/icons-react";
 import type {
   TableSchema,
-  RequestContextField,
+  UserContextField,
   ContextFilterPayload,
 } from "./types";
 
 export interface ContextFilterFormProps {
   /** The table being configured */
   table: Pick<TableSchema, "id" | "name" | "columns" | "condition">;
-  /** Available request context fields */
-  requestContextFields: RequestContextField[];
+  /** Available user context fields */
+  userContextFields: UserContextField[];
   /** Callback when save is clicked */
   onSave: (payload: ContextFilterPayload) => Promise<void>;
   /** Callback when delete is clicked */
@@ -26,7 +26,7 @@ export interface ContextFilterFormProps {
 
 export function ContextFilterForm({
   table,
-  requestContextFields,
+  userContextFields,
   onSave,
   onDelete,
   onClose,
@@ -37,19 +37,19 @@ export function ContextFilterForm({
     table.condition?.column.name ?? ""
   );
   const [fieldKey, setFieldKey] = useState(
-    table.condition?.requestContextField.key ?? ""
+    table.condition?.userContextField.key ?? ""
   );
 
   const handleSave = async () => {
     if (!columnName || !fieldKey) return;
 
     const column = table.columns.find((col) => col.name === columnName);
-    const field = requestContextFields.find((f) => f.key === fieldKey);
+    const field = userContextFields.find((f) => f.key === fieldKey);
 
     if (column && field) {
       await onSave({
         columnId: column.id,
-        requestContextFieldId: field.id,
+        userContextFieldId: field.id,
       });
     }
   };
@@ -63,7 +63,7 @@ export function ContextFilterForm({
     label: column.name,
   }));
 
-  const requestContextOptions = requestContextFields.map((field) => ({
+  const userContextOptions = userContextFields.map((field) => ({
     value: field.key,
     label: field.key,
   }));
@@ -96,11 +96,11 @@ export function ContextFilterForm({
         />
 
         <Select
-          label="Request Context Field"
+          label="User Context Field"
           placeholder="Select a field"
           value={fieldKey}
           onChange={(value) => setFieldKey(value ?? "")}
-          data={requestContextOptions}
+          data={userContextOptions}
           description="The user context value to match against"
           disabled={isLoading}
         />
@@ -114,7 +114,7 @@ export function ContextFilterForm({
               </strong>{" "}
               equals{" "}
               <strong>
-                requestContext.{table.condition.requestContextField.key}
+                userContext.{table.condition.userContextField.key}
               </strong>
             </Text>
           </Alert>

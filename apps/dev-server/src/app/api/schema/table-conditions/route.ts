@@ -11,7 +11,7 @@ export async function GET() {
       include: {
         table: true,
         column: true,
-        requestContextField: true,
+        userContextField: true,
       },
     });
 
@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       tableId?: string;
       columnId?: string;
-      requestContextFieldId?: string;
+      userContextFieldId?: string;
     };
-    const { tableId, columnId, requestContextFieldId } = body;
+    const { tableId, columnId, userContextFieldId } = body;
 
-    if (!tableId || !columnId || !requestContextFieldId) {
+    if (!tableId || !columnId || !userContextFieldId) {
       return NextResponse.json(
-        { error: "tableId, columnId, and requestContextFieldId are required" },
+        { error: "tableId, columnId, and userContextFieldId are required" },
         { status: 400 },
       );
     }
@@ -57,22 +57,22 @@ export async function POST(request: NextRequest) {
       // Update existing condition
       const condition = await prisma.tableCondition.update({
         where: { tableId },
-        data: { columnId, requestContextFieldId },
+        data: { columnId, userContextFieldId },
         include: {
           table: true,
           column: true,
-          requestContextField: true,
+          userContextField: true,
         },
       });
       return NextResponse.json({ condition });
     }
 
     const condition = await prisma.tableCondition.create({
-      data: { tableId, columnId, requestContextFieldId },
+      data: { tableId, columnId, userContextFieldId },
       include: {
         table: true,
         column: true,
-        requestContextField: true,
+        userContextField: true,
       },
     });
 

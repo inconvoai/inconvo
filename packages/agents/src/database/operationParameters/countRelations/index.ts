@@ -24,7 +24,7 @@ export interface DefineCountRelationsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "countRelations";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -145,7 +145,7 @@ export async function defineCountRelationsOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyCountRelationsOperationParametersTool,
     toolName: "applyCountRelationsOperationParametersTool",

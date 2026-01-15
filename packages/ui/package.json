@@ -6,7 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat": "./src/chat/index.ts",
-    "./request-context": "./src/request-context/index.ts",
+    "./user-context": "./src/user-context/index.ts",
     "./semantic-model": "./src/semantic-model/index.ts"
   },
   "scripts": {

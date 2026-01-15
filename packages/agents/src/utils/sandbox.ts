@@ -27,20 +27,20 @@
  *
  * // Upload a dataset file
  * await client.datasets.upload({
- *   requestContextPath: "organisationId=1",
+ *   userContextPath: "organisationId=1",
  *   file: { name: "data.csv", content: Buffer.from(fileContent) },
  * });
  *
  * // Delete a dataset file
  * await client.datasets.delete({
- *   requestContextPath: "organisationId=1",
+ *   userContextPath: "organisationId=1",
  *   file: "data.csv",
  * });
  *
  * // Start sandbox and execute code
  * const sandbox = client.sandbox({
  *   conversationId: "conv-123",
- *   requestContextPath: "organisationId=1", // optional, for mounting datasets
+ *   userContextPath: "organisationId=1", // optional, for mounting datasets
  * });
  *
  * await sandbox.start();
@@ -83,7 +83,7 @@ export interface UploadDatasetFile {
 }
 
 export interface UploadDatasetsParams {
-  requestContextPath: string;
+  userContextPath: string;
   file: UploadDatasetFile;
 }
 
@@ -99,7 +99,7 @@ export interface UploadDatasetsResponse {
 }
 
 export interface DeleteDatasetsParams {
-  requestContextPath: string;
+  userContextPath: string;
   file: string;
 }
 
@@ -117,13 +117,13 @@ export interface SandboxParams {
   conversationId: string;
   /** Unique identifier for this run/message. Used to scope the sandbox instance. */
   runId: string;
-  /** Request context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
-  requestContextPath: string;
+  /** User context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
+  userContextPath: string;
 }
 
 export interface ConversationDataUploadParams {
   conversationId: string;
-  requestContextPath: string;
+  userContextPath: string;
   files: {
     name: string;
     content: string; // base64 encoded
@@ -176,7 +176,7 @@ class DatasetClient {
 
   /**
    * List datasets. Optionally filter by request context and navigate folders.
-   * @param options.context - Request context path to filter by (e.g., "organisationId=1")
+   * @param options.context - User context path to filter by (e.g., "organisationId=1")
    * @param options.path - Subfolder path within the context (e.g., "folder1/folder2")
    */
   async list(options?: {
@@ -211,7 +211,7 @@ class DatasetClient {
       type: params.file.contentType || "application/octet-stream",
     });
     formData.append("file", blob, params.file.name);
-    formData.append("requestContextPath", params.requestContextPath);
+    formData.append("userContextPath", params.userContextPath);
 
     if (params.file.contentType) {
       formData.append("contentType", params.file.contentType);
@@ -234,7 +234,7 @@ class DatasetClient {
     const url = new URL(
       `${this.baseUrl}/datasets/${encodeURIComponent(params.file)}`,
     );
-    url.searchParams.set("context", params.requestContextPath);
+    url.searchParams.set("context", params.userContextPath);
 
     return this.request<DeleteDatasetsResponse>(url.toString(), {
       method: "DELETE",
@@ -338,7 +338,7 @@ class SandboxSession {
   async describeFiles(): Promise<DescribeFilesResponse> {
     const url = new URL(`${this.baseUrl}/sandbox/files`);
     url.searchParams.set("conversationId", this.params.conversationId);
-    url.searchParams.set("requestContextPath", this.params.requestContextPath);
+    url.searchParams.set("userContextPath", this.params.userContextPath);
     return this.request<DescribeFilesResponse>(url.toString(), {
       method: "GET",
     });
@@ -487,7 +487,7 @@ export class SandboxClient {
    *
    * @param params.conversationId - The conversation ID (required)
    * @param params.runId - Unique run/message ID (required, scopes the sandbox instance)
-   * @param params.requestContextPath - Request context for mounting datasets (optional)
+   * @param params.userContextPath - User context for mounting datasets (optional)
    */
   sandbox(params: SandboxParams): SandboxSession {
     if (!params.conversationId) {

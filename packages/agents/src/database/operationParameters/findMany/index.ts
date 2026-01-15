@@ -27,7 +27,7 @@ export interface DefineFindManyOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findMany";
-  requestContext: Record<string, string | number>;
+  userContext: Record<string, string | number>;
   agentId: string | number;
 }
 
@@ -170,7 +170,7 @@ export async function defineFindManyOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      requestContext: params.requestContext,
+      userContext: params.userContext,
     }),
     tool: applyFindManyOperationParametersTool,
     toolName: "applyFindManyOperationParametersTool",

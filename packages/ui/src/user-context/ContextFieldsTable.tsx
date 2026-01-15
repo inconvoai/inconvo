@@ -88,7 +88,7 @@ export function ContextFieldsTable({
             <Table.Tr>
               <Table.Th>Key</Table.Th>
               <Table.Th>Type</Table.Th>
-              <Table.Th>Used In</Table.Th>
+              <Table.Th>Used In Tables:</Table.Th>
               <Table.Th w={50}></Table.Th>
             </Table.Tr>
           </Table.Thead>

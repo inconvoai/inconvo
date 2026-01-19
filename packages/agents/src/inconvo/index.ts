@@ -86,6 +86,8 @@ interface QuestionAgentParams {
     conversationId: string,
     message: string,
   ) => Promise<void>;
+  /** Mode for agent execution - healthcheck mode skips system prompt to reduce token usage */
+  mode?: "healthcheck";
 }
 
 const messageReducer = (
@@ -931,6 +933,15 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function callModel(state: typeof AgentState.State) {
+    // Skip system prompt for healthcheck mode to reduce token usage
+    if (params.mode === "healthcheck") {
+      const response = await model.bindTools(tools).invoke([
+        new HumanMessage(state.userQuestion),
+        ...(state.messages ?? []),
+      ]);
+      return { messages: [response] };
+    }
+
     const prompt = await getPrompt("inconvo_agent_gpt5_dev:1f1e8ce0");
 
     // Format tables as a markdown list grouped by database

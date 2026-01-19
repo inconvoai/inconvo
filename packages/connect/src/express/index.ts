@@ -157,9 +157,7 @@ export async function inconvo(): Promise<Router> {
       res
         .status(500)
         .setHeader("Content-Type", "application/json")
-        .send(
-          safeJsonStringify({ error: "Failed to persist augmentations" }),
-        );
+        .send(safeJsonStringify({ error: "Failed to persist augmentations" }));
     }
   });
 

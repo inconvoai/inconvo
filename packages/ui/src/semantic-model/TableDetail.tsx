@@ -64,6 +64,8 @@ export interface TableDetailProps {
   availableTables: TableWithColumns[];
   /** Whether the component is loading */
   loading?: boolean;
+  /** Whether the editor is in read-only mode (disables all mutations) */
+  readOnly?: boolean;
   /** Callback when table access changes */
   onUpdateTable?: (payload: UpdateTablePayload) => Promise<void>;
   /** Callback when a column is updated */
@@ -116,7 +118,9 @@ export interface TableDetailProps {
   /** Callback when a column unit is added */
   onAddColumnUnit?: (payload: UnitColumnPayload) => Promise<void>;
   /** Callback when a computed column unit is updated */
-  onUpdateComputedColumnUnit?: (payload: ComputedColumnUnitPayload) => Promise<void>;
+  onUpdateComputedColumnUnit?: (
+    payload: ComputedColumnUnitPayload,
+  ) => Promise<void>;
 }
 
 type ModalState =
@@ -134,6 +138,7 @@ export function TableDetail({
   userContextFields,
   availableTables,
   loading = false,
+  readOnly = false,
   onUpdateTable,
   onUpdateColumn,
   onCreateComputedColumn,
@@ -155,7 +160,7 @@ export function TableDetail({
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(table.context ?? "");
 
-  const isDisabled = table.access === "OFF";
+  const isDisabled = readOnly || table.access === "OFF";
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -289,6 +294,7 @@ export function TableDetail({
                   size="sm"
                   variant="subtle"
                   onClick={startEditingDescription}
+                  disabled={isDisabled}
                 >
                   <IconEdit size={14} />
                 </ActionIcon>
@@ -479,6 +485,7 @@ export function TableDetail({
           <ContextFilterForm
             table={table}
             userContextFields={userContextFields}
+            readOnly={readOnly}
             onClose={closeModal}
             onSave={async (payload) => {
               await onUpsertContextFilter?.(payload);

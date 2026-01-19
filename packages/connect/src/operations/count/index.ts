@@ -145,7 +145,12 @@ export async function count(db: Kysely<any>, query: Query) {
     }
   }
 
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

@@ -9,10 +9,7 @@ import { createAggregationFields } from "../utils/createAggregationFields";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
 import { buildDateComponentExpressions } from "../utils/buildDateComponentExpression";
-import {
-  applyJoinHop,
-  normaliseJoinHop,
-} from "../utils/joinDescriptorHelpers";
+import { applyJoinHop, normaliseJoinHop } from "../utils/joinDescriptorHelpers";
 import { buildJsonObject } from "../utils/jsonBuilderHelpers";
 import { parseJsonStrings } from "../utils/jsonParsing";
 import { env } from "../../env";
@@ -84,9 +81,9 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         key.interval,
       );
       groupByColumns.push(intervalExpression);
-      // BigQuery requires using alias in HAVING clause for computed expressions
+      // MySQL and BigQuery support alias in HAVING; PostgreSQL/MSSQL require the expression
       const havingExpr =
-        env.DATABASE_DIALECT === "bigquery"
+        env.DATABASE_DIALECT === "mysql" || env.DATABASE_DIALECT === "bigquery"
           ? sql.ref(dialectAlias)
           : intervalExpression;
       groupKeyExpressions.set(alias, {
@@ -105,7 +102,8 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         tableName: tableName!,
         schema,
       });
-      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
+      const alias =
+        key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
@@ -185,6 +183,11 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     }
   }
 
+  // Add group key select expressions so HAVING can reference their aliases
+  for (const [, expression] of groupKeyExpressions) {
+    perGroupSelections.push(expression.select);
+  }
+
   let groupQuery = dbForQuery.selectFrom(table);
 
   // Handle joins if specified - deduplicate hops to avoid duplicate table joins
@@ -205,7 +208,12 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     }
   }
 
-  const whereExpr = buildWhereConditions(whereAndArray, table, schema);
+  const whereExpr = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereExpr) {
     groupQuery = groupQuery.where(whereExpr);
   }

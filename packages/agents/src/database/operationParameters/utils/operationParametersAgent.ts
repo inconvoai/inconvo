@@ -132,6 +132,28 @@ export function createOperationParametersAgent<Result, Artifact>(
   };
 }
 
+function formatCurrentDate(): string {
+  const now = new Date();
+  const day = now.getDate();
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 export async function buildOperationParametersPromptMessages(
   params: {
     operation: keyof typeof operationDocs;
@@ -141,15 +163,15 @@ export async function buildOperationParametersPromptMessages(
   },
   tableSchema: string,
 ): Promise<BaseMessage[]> {
-  const prompt = await getPrompt("extend_query:e2f41f22");
+  const prompt = await getPrompt("extend_query:6e6c8f25");
   const formatted = (await prompt.invoke({
     operation: params.operation,
     table: params.tableName,
     operationDocs: JSON.stringify(operationDocs[params.operation], null, 2),
-    queryCurrentState: "no operation parameters defined",
     tableSchema,
     question: params.question,
     userContext: JSON.stringify(params.userContext, null, 2),
+    currentDate: formatCurrentDate(),
   })) as Record<"messages", BaseMessage[]>;
   return formatted.messages;
 }

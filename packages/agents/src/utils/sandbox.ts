@@ -270,7 +270,12 @@ class DatasetClient {
     if (init.headers) {
       const initHeaders = new Headers(init.headers);
       initHeaders.forEach((value, key) => {
-        if (!(init.body instanceof FormData && key.toLowerCase() === "content-type")) {
+        if (
+          !(
+            init.body instanceof FormData &&
+            key.toLowerCase() === "content-type"
+          )
+        ) {
           headers.set(key, value);
         }
       });

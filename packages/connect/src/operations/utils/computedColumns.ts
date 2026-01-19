@@ -11,15 +11,20 @@ export function getColumnFromTable({
   columnName,
   tableName,
   schema,
+  tableAlias,
 }: {
   columnName: string;
   tableName: string;
   schema: SchemaResponse;
+  tableAlias?: string; // Optional SQL alias for when same table is joined multiple times
 }): RawBuilder<unknown> {
   const table = schema.tables.find((t) => t.name === tableName);
   if (!table) {
     throw new Error(`Table not found in schema: ${tableName}`);
   }
+
+  // Use tableAlias for SQL references if provided, otherwise use tableName
+  const sqlTableRef = tableAlias ?? tableName;
 
   // Check if it's a computed column
   const computedColumn = table.computedColumns?.find(
@@ -29,7 +34,7 @@ export function getColumnFromTable({
   if (computedColumn) {
     return generateComputedColumnAsSQL(
       computedColumn.ast,
-      tableName,
+      sqlTableRef,
       schema,
       false,
     );
@@ -40,10 +45,10 @@ export function getColumnFromTable({
   );
 
   if (columnConversion) {
-    return generateColumnConversionAsSQL(columnConversion.ast, tableName);
+    return generateColumnConversionAsSQL(columnConversion.ast, sqlTableRef);
   }
 
-  return buildColumnReference(tableName, columnName);
+  return buildColumnReference(sqlTableRef, columnName);
 }
 
 function buildColumnReference(

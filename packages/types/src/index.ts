@@ -368,28 +368,6 @@ export type UnifiedAugmentationsSync = z.infer<
   typeof unifiedAugmentationsSyncSchema
 >;
 
-export const dateConditionSchema = z
-  .object({
-    OR: z.array(
-      z
-        .object({
-          AND: z.array(
-            z
-              .object({
-                column: z.string(),
-                operator: z.enum(["gte", "lte", "equals"]),
-                value: z.string(),
-              })
-              .strict(),
-          ),
-        })
-        .strict(),
-    ),
-  })
-  .strict()
-  .nullable();
-export type DateCondition = z.infer<typeof dateConditionSchema>;
-
 const conditionOperators = z.object({
   equals: z.any().optional(),
   not: z.any().optional(),
@@ -439,23 +417,6 @@ export const questionConditionsSchema = z
 
 export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
 
-const dateConditionsQuerySchema = z
-  .object({
-    OR: z.array(
-      z
-        .object({
-          AND: z.array(
-            z.record(
-              z.string(), // column name
-              z.record(z.string(), z.string()), // operator and value (always string for dates)
-            ),
-          ),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
-
 const formattedTableConditionsSchema = z.record(
   z.string(), // column name
   z.record(z.string(), z.union([z.string(), z.number()])), // operator and value
@@ -463,38 +424,26 @@ const formattedTableConditionsSchema = z.record(
 
 // The complete whereAndArray schema
 export const whereAndArraySchema = z.array(
-  z.union([
-    formattedTableConditionsSchema,
-    questionConditionsSchema,
-    dateConditionsQuerySchema,
-  ]),
+  z.union([formattedTableConditionsSchema, questionConditionsSchema]),
 );
 export type WhereAndArray = z.infer<typeof whereAndArraySchema>;
 
-const JsonColumnSchemaSchema = z.array(
-  z
-    .object({
-      tableName: z.string(),
-      jsonColumnName: z.string(),
-      jsonSchema: z.array(
-        z
-          .object({
-            name: z.string(),
-            relation: z.null(),
-            type: z.string(),
-          })
-          .strict(),
-      ),
-    })
-    .strict(),
-);
+// Table condition schema for row-level security / tenant filtering
+const tableConditionSchema = z.object({
+  column: z.string(),
+  value: z.union([z.string(), z.number()]),
+});
 
-export type JsonColumnSchema = z.infer<typeof JsonColumnSchemaSchema>;
+export const tableConditionsMapSchema = z
+  .record(z.string(), tableConditionSchema)
+  .nullable();
+
+export type TableConditionsMap = z.infer<typeof tableConditionsMapSchema>;
 
 const baseSchema = {
   table: z.string(),
   whereAndArray: whereAndArraySchema,
-  jsonColumnSchema: JsonColumnSchemaSchema.optional(),
+  tableConditions: tableConditionsMapSchema,
 };
 
 const fullyQualifiedColumnSchema = z

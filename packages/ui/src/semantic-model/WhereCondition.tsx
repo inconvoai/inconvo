@@ -34,12 +34,7 @@ export function WhereCondition({
   }
 
   return (
-    <Alert
-      icon={<IconLock size={16} />}
-      color="blue"
-      variant="light"
-      p="xs"
-    >
+    <Alert icon={<IconLock size={16} />} color="blue" variant="light" p="xs">
       <Group gap="xs" wrap="wrap" align="center">
         <Text size="sm" fw={500}>
           Row-level security:

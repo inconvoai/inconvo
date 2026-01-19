@@ -4,13 +4,11 @@ import type {
   AggregateGroupsQuery,
   CountQuery,
   CountRelationsQuery,
-  DateCondition,
   FindDistinctByEditDistanceQuery,
   FindDistinctQuery,
   FindManyQuery,
   GroupByQuery,
   QuestionConditions,
-  TableConditions,
   JoinPathHop,
 } from "@repo/types";
 import type { DBQuery, Operation } from "../types";
@@ -58,24 +56,6 @@ export function buildColumnLookup(schema: Schema): ColumnLookup {
     lookup.set(table.name, tableMap);
   });
   return lookup;
-}
-
-export function canonicalizeTableConditions(
-  tableConditions: TableConditions,
-  tableName: string,
-  lookup: ColumnLookup,
-  aliasTracker?: ColumnAliasMap,
-): TableConditions {
-  if (!tableConditions) return null;
-  return tableConditions.map((condition) => ({
-    ...condition,
-    column: canonicalizeColumnName(
-      lookup,
-      tableName,
-      condition.column,
-      aliasTracker,
-    ),
-  }));
 }
 
 export function canonicalizeQuestionConditions(
@@ -132,6 +112,32 @@ function canonicalizeQuestionConditionNode(
         result[key] = value;
       }
       return;
+    }
+
+    // Check for qualified column reference (table.column format)
+    if (key.includes(".")) {
+      const lastDot = key.lastIndexOf(".");
+      const qualifiedTable = key.slice(0, lastDot);
+      const qualifiedColumn = key.slice(lastDot + 1);
+
+      // Verify the qualified table exists in lookup
+      if (lookup.has(qualifiedTable)) {
+        const canonicalColumn = canonicalizeColumnName(
+          lookup,
+          qualifiedTable,
+          qualifiedColumn,
+          aliasTracker,
+        );
+        const canonicalKey = `${qualifiedTable}.${canonicalColumn}`;
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          result[canonicalKey] = {
+            ...(value as Record<string, unknown>),
+          };
+        } else {
+          result[canonicalKey] = value;
+        }
+        return;
+      }
     }
 
     const relation = tableSchema?.outwardRelations?.find(
@@ -199,31 +205,8 @@ function canonicalizeQuestionConditionNode(
   return result as QuestionConditionNode;
 }
 
-export function canonicalizeDateCondition(
-  dateCondition: DateCondition,
-  tableName: string,
-  lookup: ColumnLookup,
-  aliasTracker?: ColumnAliasMap,
-): DateCondition {
-  if (!dateCondition) return null;
-  return {
-    OR: dateCondition.OR.map((orClause) => ({
-      AND: orClause.AND.map((andClause) => ({
-        ...andClause,
-        column: canonicalizeColumnName(
-          lookup,
-          tableName,
-          andClause.column,
-          aliasTracker,
-        ),
-      })),
-    })),
-  };
-}
-
 export function canonicalizeQueryColumnReferences(
   query: DBQuery,
-  schema: Schema,
   baseTableName: string,
   lookup: ColumnLookup,
   aliasTracker?: ColumnAliasMap,
@@ -314,22 +297,12 @@ export function canonicalizeQueryColumnReferences(
       );
       const canonicalizedCount = Array.isArray(params.count)
         ? params.count.map((column) =>
-            canonicalizeMetricColumn(
-              column,
-              baseTableName,
-              lookup,
-              aliasTracker,
-            ),
+            canonicalizeMetricColumn(column, lookup, aliasTracker),
           )
         : null;
       const canonicalizedCountDistinct = Array.isArray(params.countDistinct)
         ? params.countDistinct.map((column) =>
-            canonicalizeMetricColumn(
-              column,
-              baseTableName,
-              lookup,
-              aliasTracker,
-            ),
+            canonicalizeMetricColumn(column, lookup, aliasTracker),
           )
         : null;
       return {
@@ -401,12 +374,7 @@ export function canonicalizeQueryColumnReferences(
       const canonicalizeAggregateColumns = (columns: string[] | null) =>
         columns
           ? columns.map((column) =>
-              canonicalizeMetricColumn(
-                column,
-                baseTableName,
-                lookup,
-                aliasTracker,
-              ),
+              canonicalizeMetricColumn(column, lookup, aliasTracker),
             )
           : null;
       return {
@@ -765,7 +733,6 @@ function resolveLookupTableName(lookup: ColumnLookup, alias: string) {
 
 function canonicalizeMetricColumn(
   column: string,
-  baseTableName: string,
   lookup: ColumnLookup,
   aliasTracker?: ColumnAliasMap,
 ) {

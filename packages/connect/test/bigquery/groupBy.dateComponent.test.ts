@@ -52,6 +52,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
   test("groups orders by day of week with canonical ordering", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -98,6 +99,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
   test("groups orders by month with canonical ordering", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -144,6 +146,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
   test("groups orders by quarter of year", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -191,6 +194,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
   test("filters by monthOfYear using HAVING with numeric value", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {

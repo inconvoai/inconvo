@@ -7,12 +7,16 @@ describe("MSSQL findMany Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
 
   beforeAll(async () => {
     loadTestEnv("mssql");
 
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
+
+    ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    await clearSchemaCache();
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
@@ -22,15 +26,17 @@ describe("MSSQL findMany Operation", () => {
 
   afterAll(async () => {
     if (db) await db.destroy();
+    await clearSchemaCache?.();
   });
 
   test("Which order recorded the highest subtotal and what product was sold?", async () => {
     const iql = {
       operation: "findMany" as const,
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          revenue: {
+          "orders.revenue": {
             gt: 0,
           },
         },
@@ -78,17 +84,14 @@ describe("MSSQL findMany Operation", () => {
       .orderBy(revenueExpr, "desc")
       .executeTakeFirst();
 
+    // New flat output format: {table}_{column} for base, {alias_with_dots_as_underscores}_{column} for joins
     const expected = expectedRow
       ? [
           {
-            id: Number(expectedRow.id),
-            revenue: Number(expectedRow.revenue),
-            created_at: expectedRow.created_at,
-            "orders.product": [
-              {
-                title: expectedRow.product_title,
-              },
-            ],
+            orders_id: Number(expectedRow.id),
+            orders_revenue: Number(expectedRow.revenue),
+            orders_created_at: expectedRow.created_at,
+            "orders.product_title": expectedRow.product_title,
           },
         ]
       : [];
@@ -96,10 +99,10 @@ describe("MSSQL findMany Operation", () => {
     const normalizeRows = (rows: any[]) =>
       rows.map((row) => ({
         ...row,
-        created_at:
-          row.created_at && typeof row.created_at.toISOString === "function"
-            ? row.created_at.toISOString()
-            : row.created_at,
+        orders_created_at:
+          row.orders_created_at && typeof row.orders_created_at.toISOString === "function"
+            ? row.orders_created_at.toISOString()
+            : row.orders_created_at,
       }));
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));

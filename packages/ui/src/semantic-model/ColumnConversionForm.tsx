@@ -71,7 +71,7 @@ function stringifyFallbackValue(value: unknown) {
 function buildCastAst(
   columnName: string,
   castType: LogicalCastType,
-  fallback: string
+  fallback: string,
 ): SQLCastExpressionAst {
   const castAst: SQLCastExpressionAst = {
     type: "cast",
@@ -163,7 +163,7 @@ export interface ColumnConversionFormProps {
   /** Callback when an existing conversion is updated */
   onUpdate?: (
     conversionId: string,
-    payload: ColumnConversionUpdatePayload
+    payload: ColumnConversionUpdatePayload,
   ) => Promise<void>;
   /** Callback when a conversion is deleted */
   onDelete?: (conversionId: string) => Promise<void>;
@@ -298,7 +298,7 @@ export function ColumnConversionForm({
               "type",
               value && logicalCastTypeOptions.some((opt) => opt.value === value)
                 ? (value as LogicalCastType)
-                : ""
+                : "",
             )
           }
           placeholder="Select target type"

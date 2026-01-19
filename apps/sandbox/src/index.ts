@@ -50,10 +50,7 @@ const isSupportedFileExtension = (name: string) => {
  * For CSV: returns column names from first row
  * For JSON: returns top-level keys (or array item keys)
  */
-function extractSchema(
-  content: Uint8Array,
-  fileName: string,
-): string[] | null {
+function extractSchema(content: Uint8Array, fileName: string): string[] | null {
   try {
     const text = new TextDecoder().decode(content);
 
@@ -85,7 +82,11 @@ function extractSchema(
     if (fileName.toLowerCase().endsWith(".json")) {
       const data = JSON.parse(text);
 
-      if (Array.isArray(data) && data.length > 0 && typeof data[0] === "object") {
+      if (
+        Array.isArray(data) &&
+        data.length > 0 &&
+        typeof data[0] === "object"
+      ) {
         // Array of objects - get keys from first item
         return Object.keys(data[0] as Record<string, unknown>);
       } else if (typeof data === "object" && data !== null) {
@@ -202,14 +203,14 @@ const copyBucketFilesToSandbox = async (
 ) => {
   // Ensure mount directory exists and get list of existing files in one command
   const existingResult = await sandbox.exec(
-    `mkdir -p ${mountPath} && find ${mountPath} -type f 2>/dev/null || true`
+    `mkdir -p ${mountPath} && find ${mountPath} -type f 2>/dev/null || true`,
   );
   const existingFiles = new Set(
     existingResult.stdout
       .split("\n")
       .map((p) => p.trim())
       .filter((p) => p.length > 0)
-      .map((p) => p.slice(mountPath.length + 1)) // Remove mountPath prefix to get relative path
+      .map((p) => p.slice(mountPath.length + 1)), // Remove mountPath prefix to get relative path
   );
 
   // List and copy files from R2 that don't already exist in sandbox
@@ -482,9 +483,7 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
   }
 
   const file = formData.get("file") as File | null;
-  const userContextPath = formData.get("userContextPath") as
-    | string
-    | null;
+  const userContextPath = formData.get("userContextPath") as string | null;
   const contentType = formData.get("contentType") as string | null;
   const notes = formData.get("notes") as string | null;
 
@@ -562,7 +561,8 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
     }
 
     // Use contentType from form field, or fall back to file.type
-    const finalContentType = contentType || file.type || "application/octet-stream";
+    const finalContentType =
+      contentType || file.type || "application/octet-stream";
 
     await c.env.CUSTOMER_DATASETS.put(key, content, {
       httpMetadata: { contentType: finalContentType },
@@ -646,8 +646,7 @@ app.delete(
   requireOrgAndAgent,
   zValidator("query", datasetsDeleteByPathQuerySchema, (result, c) => {
     if (!result.success) {
-      const message =
-        result.error.issues[0]?.message ?? "Path is required.";
+      const message = result.error.issues[0]?.message ?? "Path is required.";
       return c.json({ error: message }, 400);
     }
   }),
@@ -671,10 +670,7 @@ app.delete(
       return c.json({ file: fullPath, success: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return c.json(
-        { file: fullPath, success: false, error: message },
-        500,
-      );
+      return c.json({ file: fullPath, success: false, error: message }, 500);
     }
   },
 );
@@ -745,7 +741,8 @@ app.post(
             size: content.length,
           };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           return {
             name: fileName,
             path: "",
@@ -833,7 +830,8 @@ app.get("/sandbox/files", requireOrgAndAgent, async (c) => {
   const query = c.req.query();
   const result = sandboxParamsSchema.safeParse(query);
   if (!result.success) {
-    const message = result.error.issues[0]?.message ?? "Invalid query parameters.";
+    const message =
+      result.error.issues[0]?.message ?? "Invalid query parameters.";
     throw new HTTPException(400, { message });
   }
   const params = result.data;

@@ -46,6 +46,8 @@ import type { QuestionConditions } from "@repo/types";
 export function createQuestionConditionsDynamicSchema(
   tableSchema: Schema[number],
   fullSchema: Schema,
+  tableName: string,
+  joinedTableNames?: string[],
 ): z.ZodType<QuestionConditions> {
   const columns = tableSchema.columns ?? [];
   const computedColumns = tableSchema.computedColumns ?? [];
@@ -59,21 +61,21 @@ export function createQuestionConditionsDynamicSchema(
     "float",
   ]);
 
-  // Collect scalar columns by type.
+  // Collect scalar columns by type - all qualified with table name
   const stringColumns = columns
     .filter((c) => (c.effectiveType ?? c.type) === "string")
-    .map((c) => c.name);
+    .map((c) => `${tableName}.${c.name}`);
   const numberColumns = columns
     .filter((c) => numericTypes.has(c.effectiveType ?? c.type))
-    .map((c) => c.name)
+    .map((c) => `${tableName}.${c.name}`)
     // historical logic: numeric operators also allowed on computed columns
-    .concat(computedColumns.map((c) => c.name));
+    .concat(computedColumns.map((c) => `${tableName}.${c.name}`));
   const booleanColumns = columns
     .filter((c) => (c.effectiveType ?? c.type) === "boolean")
-    .map((c) => c.name);
+    .map((c) => `${tableName}.${c.name}`);
   const dateColumns = columns
     .filter((c) => (c.effectiveType ?? c.type) === "DateTime")
-    .map((c) => c.name);
+    .map((c) => `${tableName}.${c.name}`);
 
   /** Utility: ensure ISO date */
   const isoDate = z
@@ -260,6 +262,37 @@ export function createQuestionConditionsDynamicSchema(
     }
   });
 
+  // Build qualified column schemas for joined tables (table.column format)
+  const qualifiedColumnSchemas: z.ZodTypeAny[] = [];
+  if (joinedTableNames?.length) {
+    for (const joinedTableName of joinedTableNames) {
+      const jt = fullSchema.find((t) => t.name === joinedTableName);
+      if (!jt) continue;
+
+      for (const col of jt.columns ?? []) {
+        const qualifiedKey = `${joinedTableName}.${col.name}`;
+        const effectiveType = col.effectiveType ?? col.type;
+
+        if (effectiveType === "string") {
+          qualifiedColumnSchemas.push(buildStringColumnCondition(qualifiedKey));
+        } else if (numericTypes.has(effectiveType)) {
+          qualifiedColumnSchemas.push(buildNumberColumnCondition(qualifiedKey));
+        } else if (effectiveType === "boolean") {
+          qualifiedColumnSchemas.push(buildBooleanColumnCondition(qualifiedKey));
+        } else if (effectiveType === "DateTime") {
+          qualifiedColumnSchemas.push(buildDateColumnCondition(qualifiedKey));
+        }
+      }
+
+      // Also include computed columns from the joined table
+      for (const computed of jt.computedColumns ?? []) {
+        const qualifiedKey = `${joinedTableName}.${computed.name}`;
+        // Computed columns are typically numeric
+        qualifiedColumnSchemas.push(buildNumberColumnCondition(qualifiedKey));
+      }
+    }
+  }
+
   const filterObjectUnionParts: z.ZodTypeAny[] = [];
   if (scalarConditionSchemas.length)
     filterObjectUnionParts.push(scalarConditionUnion);
@@ -269,6 +302,18 @@ export function createQuestionConditionsDynamicSchema(
         ? relationConditionSchemas[0]!
         : (z.union(
             relationConditionSchemas as [
+              z.ZodTypeAny,
+              z.ZodTypeAny,
+              ...z.ZodTypeAny[],
+            ],
+          ) as z.ZodTypeAny),
+    );
+  if (qualifiedColumnSchemas.length)
+    filterObjectUnionParts.push(
+      qualifiedColumnSchemas.length === 1
+        ? qualifiedColumnSchemas[0]!
+        : (z.union(
+            qualifiedColumnSchemas as [
               z.ZodTypeAny,
               z.ZodTypeAny,
               ...z.ZodTypeAny[],
@@ -314,7 +359,14 @@ export function validateQuestionConditions(
   candidate: unknown,
   tableSchema: Schema[number],
   fullSchema: Schema,
+  tableName: string,
+  joinedTableNames?: string[],
 ) {
-  const schema = createQuestionConditionsDynamicSchema(tableSchema, fullSchema);
+  const schema = createQuestionConditionsDynamicSchema(
+    tableSchema,
+    fullSchema,
+    tableName,
+    joinedTableNames,
+  );
   return schema.safeParse(candidate);
 }

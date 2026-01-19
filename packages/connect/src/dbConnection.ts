@@ -1,9 +1,4 @@
-import {
-  Kysely,
-  MysqlDialect,
-  MssqlDialect,
-  PostgresDialect,
-} from "kysely";
+import { Kysely, MysqlDialect, MssqlDialect, PostgresDialect } from "kysely";
 import type { LogEvent, LogConfig, MysqlDialectConfig } from "kysely";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";

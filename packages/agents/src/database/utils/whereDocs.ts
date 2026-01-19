@@ -1,6 +1,12 @@
 export const whereConditionDocsSummary = `
 Supported WHERE conditions (capability-only cheat sheet)
 
+COLUMN REFERENCE FORMAT
+All column conditions must use qualified table.column format:
+• { "orders.status": { equals: "active" } } — correct
+• { "status": { equals: "active" } } — INCORRECT, will be rejected
+This applies to both the base table and any joined tables.
+
 WHAT YOU CAN FILTER BY
 • Numbers: equals, not equals, lt, lte, gt, gte, in [list]
 • Strings: equals, not equals, in [list], contains (case-sensitive), contains_insensitive (case-insensitive)
@@ -28,10 +34,27 @@ To-many relations:
 • none: no related row matches the condition
 • No related rows at all: none: {}
 
+IMPORTANT: Inside relation filters, use UNQUALIFIED column names (just the column name, not table.column):
+• { "product": { is: { "title": { contains: "MacBook" } } } } — correct (unqualified inside)
+• { "product": { is: { "products.title": { contains: "MacBook" } } } } — INCORRECT
+The relation already scopes to the target table, so qualification is unnecessary.
+
 Patterns:
-• “Has any children”: some with any valid child-column predicate
-• “No children at all”: none: {}
-• “All children satisfy X” and must exist: combine some (presence) + every (universality)
+• "Has any children": some with any valid child-column predicate
+• "No children at all": none: {}
+• "All children satisfy X" and must exist: combine some (presence) + every (universality)
+
+JOINED TABLE CONDITIONS (direct filtering on joined tables)
+When a query includes joins, you can filter directly on joined table columns using table.column format:
+• { "orders.status": { equals: "active" } } — filter on the joined orders table
+• { "products.category": { in: ["electronics", "books"] } } — filter joined products
+• Works with all standard operators (equals, not, lt, gt, contains, etc.)
+• Row-level security conditions are auto-applied to joined tables
+• This is simpler than relation-based filters when you already have a join defined
+
+When to use each approach:
+• Use table.column format when you have an explicit join and want simple column filtering
+• Use relation-based filters (some/every/none) when you need existence checks or don't have a join
 
 COMBINATION NOTES
 • Combine conditions with AND / OR (no logical NOT group; use scalar not operator instead)

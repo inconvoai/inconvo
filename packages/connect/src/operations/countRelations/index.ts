@@ -157,7 +157,12 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     );
   }
 
-  const whereExpr = buildWhereConditions(whereAndArray, table, schema);
+  const whereExpr = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereExpr) {
     selectBuilder = selectBuilder.where(whereExpr);
   }

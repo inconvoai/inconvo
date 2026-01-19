@@ -28,9 +28,10 @@ describe("BigQuery findMany Operation", () => {
     const iql = {
       operation: "findMany" as const,
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          revenue: {
+          "orders.revenue": {
             gt: 0,
           },
         },
@@ -79,24 +80,21 @@ describe("BigQuery findMany Operation", () => {
       .limit(1)
       .execute();
 
+    // New flat output format: {table}_{column} for base, {alias_with_dots_as_underscores}_{column} for joins
     const expected = expectedRows.map((row: any) => ({
-      id: Number(row.id),
-      revenue: Number(row.revenue),
-      created_at: row.created_at,
-      "orders.product": [
-        {
-          title: row.product_title,
-        },
-      ],
+      orders_id: Number(row.id),
+      orders_revenue: Number(row.revenue),
+      orders_created_at: row.created_at,
+      "orders.product_title": row.product_title,
     }));
 
     const normalizeRows = (rows: any[]) =>
       rows.map((row) => ({
         ...row,
-        created_at:
-          row.created_at && typeof row.created_at.toISOString === "function"
-            ? row.created_at.toISOString()
-            : row.created_at,
+        orders_created_at:
+          row.orders_created_at && typeof row.orders_created_at.toISOString === "function"
+            ? row.orders_created_at.toISOString()
+            : row.orders_created_at,
       }));
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));

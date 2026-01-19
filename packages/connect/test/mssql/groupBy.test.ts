@@ -26,6 +26,7 @@ describe("MSSQL groupBy Operation", () => {
   test("Which products drive the highest order subtotal?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -106,6 +107,7 @@ describe("MSSQL groupBy Operation", () => {
   test("countDistinct returns unique counts per group", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -181,6 +183,7 @@ describe("MSSQL groupBy Operation", () => {
   test("supports HAVING on aggregates", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -272,6 +275,7 @@ describe("MSSQL groupBy Operation", () => {
   test("supports HAVING on groupKey aliases", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -332,6 +336,215 @@ describe("MSSQL groupBy Operation", () => {
       expect(actualRow._count["orders.id"]).toBe(
         expectedRow._count["orders.id"],
       );
+    });
+  });
+
+  test("supports HAVING on dateInterval groupKey with ISO date", async () => {
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "groupBy" as const,
+      operationParameters: {
+        joins: null,
+        groupBy: [
+          {
+            type: "dateInterval",
+            column: "orders.created_at",
+            interval: "month",
+            alias: "month",
+          },
+        ],
+        count: ["orders.id"],
+        countDistinct: null,
+        sum: null,
+        min: null,
+        max: null,
+        avg: null,
+        orderBy: {
+          type: "groupKey" as const,
+          key: "month",
+          direction: "asc" as const,
+        },
+        limit: 12,
+        having: [
+          {
+            type: "groupKey",
+            key: "month",
+            operator: "gte",
+            value: "2024-01", // Month bucket format (YYYY-MM)
+          },
+        ],
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await groupBy(db, parsed);
+
+    // Validate the response has rows (or is empty if no data matches)
+    const resultRows = Array.isArray(response) ? response : response.data;
+    expect(Array.isArray(resultRows)).toBe(true);
+
+    // All returned months should be >= 2024-01
+    resultRows.forEach((row: any) => {
+      const monthStr = row.month as string;
+      expect(monthStr >= "2024-01").toBe(true);
+    });
+  });
+
+  test("supports HAVING on dateInterval groupKey with in operator and ISO dates", async () => {
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "groupBy" as const,
+      operationParameters: {
+        joins: null,
+        groupBy: [
+          {
+            type: "dateInterval",
+            column: "orders.created_at",
+            interval: "month",
+            alias: "month",
+          },
+        ],
+        count: ["orders.id"],
+        countDistinct: null,
+        sum: null,
+        min: null,
+        max: null,
+        avg: null,
+        orderBy: {
+          type: "groupKey" as const,
+          key: "month",
+          direction: "asc" as const,
+        },
+        limit: 12,
+        having: [
+          {
+            type: "groupKey",
+            key: "month",
+            operator: "in",
+            value: ["2024-01", "2024-06", "2024-12"], // Month bucket format (YYYY-MM)
+          },
+        ],
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await groupBy(db, parsed);
+
+    const resultRows = Array.isArray(response) ? response : response.data;
+    expect(Array.isArray(resultRows)).toBe(true);
+
+    // All returned months should be one of the specified values
+    resultRows.forEach((row: any) => {
+      const monthStr = row.month as string;
+      expect(["2024-01", "2024-06", "2024-12"]).toContain(monthStr);
+    });
+  });
+
+  test("supports HAVING on dateInterval groupKey with quarter bucket format", async () => {
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "groupBy" as const,
+      operationParameters: {
+        joins: null,
+        groupBy: [
+          {
+            type: "dateInterval",
+            column: "orders.created_at",
+            interval: "quarter",
+            alias: "quarter",
+          },
+        ],
+        count: ["orders.id"],
+        countDistinct: null,
+        sum: null,
+        min: null,
+        max: null,
+        avg: null,
+        orderBy: {
+          type: "groupKey" as const,
+          key: "quarter",
+          direction: "asc" as const,
+        },
+        limit: 8,
+        having: [
+          {
+            type: "groupKey",
+            key: "quarter",
+            operator: "in",
+            value: ["2024-Q1", "2024-Q2", "2024-Q3", "2024-Q4"], // Quarter bucket format (YYYY-Q#)
+          },
+        ],
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await groupBy(db, parsed);
+
+    const resultRows = Array.isArray(response) ? response : response.data;
+    expect(Array.isArray(resultRows)).toBe(true);
+
+    // All returned quarters should match the format YYYY-Q#
+    resultRows.forEach((row: any) => {
+      const quarterStr = row.quarter as string;
+      expect(quarterStr).toMatch(/^\d{4}-Q[1-4]$/);
+    });
+  });
+
+  test("supports HAVING on dateInterval groupKey with day bucket format", async () => {
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "groupBy" as const,
+      operationParameters: {
+        joins: null,
+        groupBy: [
+          {
+            type: "dateInterval",
+            column: "orders.created_at",
+            interval: "day",
+            alias: "day",
+          },
+        ],
+        count: ["orders.id"],
+        countDistinct: null,
+        sum: null,
+        min: null,
+        max: null,
+        avg: null,
+        orderBy: {
+          type: "groupKey" as const,
+          key: "day",
+          direction: "asc" as const,
+        },
+        limit: 30,
+        having: [
+          {
+            type: "groupKey",
+            key: "day",
+            operator: "gte",
+            value: "2024-01-01", // Day bucket format (YYYY-MM-DD)
+          },
+        ],
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await groupBy(db, parsed);
+
+    const resultRows = Array.isArray(response) ? response : response.data;
+    expect(Array.isArray(resultRows)).toBe(true);
+
+    // All returned days should be >= 2024-01-01
+    resultRows.forEach((row: any) => {
+      const dayStr = row.day as string;
+      expect(dayStr >= "2024-01-01").toBe(true);
     });
   });
 });

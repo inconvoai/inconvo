@@ -73,13 +73,16 @@ export function ChatInterface() {
   // Session storage helpers for persisting messages
   const getStorageKey = (id: string) => `inconvo-messages-${id}`;
 
-  const saveMessagesToStorage = useCallback((id: string, msgs: ChatMessage[]) => {
-    try {
-      sessionStorage.setItem(getStorageKey(id), JSON.stringify(msgs));
-    } catch (err) {
-      console.error("Failed to save messages to session storage:", err);
-    }
-  }, []);
+  const saveMessagesToStorage = useCallback(
+    (id: string, msgs: ChatMessage[]) => {
+      try {
+        sessionStorage.setItem(getStorageKey(id), JSON.stringify(msgs));
+      } catch (err) {
+        console.error("Failed to save messages to session storage:", err);
+      }
+    },
+    [],
+  );
 
   const loadMessagesFromStorage = useCallback((id: string): ChatMessage[] => {
     try {
@@ -95,7 +98,8 @@ export function ChatInterface() {
   const setMessages = useCallback(
     (update: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
       setMessagesState((prev) => {
-        const newMessages = typeof update === "function" ? update(prev) : update;
+        const newMessages =
+          typeof update === "function" ? update(prev) : update;
         if (activeConversationId) {
           saveMessagesToStorage(activeConversationId, newMessages);
         }
@@ -139,33 +143,38 @@ export function ChatInterface() {
     setContextConfirmed(false);
   }, []);
 
-  const handleSelectConversation = useCallback(async (id: string) => {
-    setActiveConversationId(id);
-    setError(undefined);
+  const handleSelectConversation = useCallback(
+    async (id: string) => {
+      setActiveConversationId(id);
+      setError(undefined);
 
-    // Load messages from session storage
-    const storedMessages = loadMessagesFromStorage(id);
-    setMessagesState(storedMessages);
+      // Load messages from session storage
+      const storedMessages = loadMessagesFromStorage(id);
+      setMessagesState(storedMessages);
 
-    // Load conversation context from server
-    try {
-      const res = await fetch(`/api/conversations/${id}`);
-      if (res.ok) {
-        const data = (await res.json()) as { context?: Record<string, string | number> };
-        if (data.context) {
-          // Convert context values to strings for the input fields
-          const stringValues: Record<string, string> = {};
-          for (const [key, value] of Object.entries(data.context)) {
-            stringValues[key] = String(value);
+      // Load conversation context from server
+      try {
+        const res = await fetch(`/api/conversations/${id}`);
+        if (res.ok) {
+          const data = (await res.json()) as {
+            context?: Record<string, string | number>;
+          };
+          if (data.context) {
+            // Convert context values to strings for the input fields
+            const stringValues: Record<string, string> = {};
+            for (const [key, value] of Object.entries(data.context)) {
+              stringValues[key] = String(value);
+            }
+            setContextValues(stringValues);
           }
-          setContextValues(stringValues);
+          setContextConfirmed(true);
         }
-        setContextConfirmed(true);
+      } catch (err) {
+        console.error("Failed to load conversation:", err);
       }
-    } catch (err) {
-      console.error("Failed to load conversation:", err);
-    }
-  }, [loadMessagesFromStorage]);
+    },
+    [loadMessagesFromStorage],
+  );
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -223,7 +232,9 @@ export function ChatInterface() {
       await fetchConversations();
     } catch (err) {
       console.error("Failed to create conversation:", err);
-      setError(err instanceof Error ? err.message : "Failed to create conversation");
+      setError(
+        err instanceof Error ? err.message : "Failed to create conversation",
+      );
     } finally {
       setIsCreatingConversation(false);
     }
@@ -248,14 +259,17 @@ export function ChatInterface() {
       ]);
 
       try {
-        const response = await fetch(`/api/conversations/${activeConversationId}/response`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message,
-            stream: true,
-          }),
-        });
+        const response = await fetch(
+          `/api/conversations/${activeConversationId}/response`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message,
+              stream: true,
+            }),
+          },
+        );
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -420,19 +434,21 @@ export function ChatInterface() {
         ) : (
           <>
             {/* User Context Display - show values once conversation has messages */}
-            {contextFields.length > 0 && messages.length > 0 && activeContextCount > 0 && (
-              <Paper withBorder m="md" mb={0} py="xs" px="md">
-                <Group gap="xs">
-                  <IconBraces size={14} />
-                  <Text size="sm" c="dimmed">
-                    context:
-                  </Text>
-                  <Text size="sm" ff="monospace">
-                    {JSON.stringify(buildUserContext())}
-                  </Text>
-                </Group>
-              </Paper>
-            )}
+            {contextFields.length > 0 &&
+              messages.length > 0 &&
+              activeContextCount > 0 && (
+                <Paper withBorder m="md" mb={0} py="xs" px="md">
+                  <Group gap="xs">
+                    <IconBraces size={14} />
+                    <Text size="sm" c="dimmed">
+                      context:
+                    </Text>
+                    <Text size="sm" ff="monospace">
+                      {JSON.stringify(buildUserContext())}
+                    </Text>
+                  </Group>
+                </Paper>
+              )}
 
             {/* Collapsible User Context Panel - only shown before first message */}
             {contextFields.length > 0 && messages.length === 0 && (

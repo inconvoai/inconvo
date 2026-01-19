@@ -127,7 +127,9 @@ export function AddConditionModal({
         <Select
           label="Column"
           description="Select the column to filter on"
-          placeholder={columnsLoading ? "Loading columns..." : "Select a column"}
+          placeholder={
+            columnsLoading ? "Loading columns..." : "Select a column"
+          }
           data={columns.map((c) => ({
             value: c.id,
             label: `${c.name} (${c.type})`,

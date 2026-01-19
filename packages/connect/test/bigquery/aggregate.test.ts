@@ -27,6 +27,7 @@ describe("BigQuery aggregate Operation", () => {
   test("aggregates subtotal stats", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {
@@ -80,9 +81,10 @@ describe("BigQuery aggregate Operation", () => {
   test("aggregates subtotal stats with filters", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          subtotal: {
+          "orders.subtotal": {
             gt: 100,
           },
         },
@@ -141,6 +143,7 @@ describe("BigQuery aggregate Operation", () => {
   test("countDistinct returns unique counts for specified columns", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {
@@ -185,6 +188,7 @@ describe("BigQuery aggregate Operation", () => {
     const startDate = new Date("2025-10-27T00:00:00.000Z");
     const iql = {
       table: "orders",
+      tableConditions: null,
       operation: "aggregate" as const,
       operationParameters: {
         avg: null,
@@ -210,14 +214,14 @@ describe("BigQuery aggregate Operation", () => {
       },
       whereAndArray: [
         {
-          organisation_id: {
+          "orders.organisation_id": {
             equals: 1,
           },
         },
         {
           AND: [
             {
-              created_at: {
+              "orders.created_at": {
                 gte: startDate.toISOString(),
               },
             },

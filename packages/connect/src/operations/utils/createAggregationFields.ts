@@ -13,7 +13,10 @@ export function createAggregationFields(
       columnIdentifier.split(".").length === 2,
       "Invalid column format for aggregation (not table.column)",
     );
-    const [tableName, columnName] = columnIdentifier.split(".") as [string, string];
+    const [tableName, columnName] = columnIdentifier.split(".") as [
+      string,
+      string,
+    ];
     return [
       `${tableName}.${columnName}`,
       aggregationFn(

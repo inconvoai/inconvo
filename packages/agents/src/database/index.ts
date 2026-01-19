@@ -1,31 +1,16 @@
 import { z } from "zod";
-import type {
-  DatabaseConnector,
-  JsonColumnSchema,
-  Query,
-  QueryResponse,
-} from "@repo/types";
+import type { DatabaseConnector, Query, QueryResponse } from "@repo/types";
 import { getAIModel } from "../utils/getAIModel";
 import assert from "assert";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
-import {
-  tableConditionsSchema,
-  dateConditionSchema,
-  querySchema,
-  questionConditionsSchema,
-  whereAndArraySchema,
-} from "@repo/types";
+import { querySchema, whereAndArraySchema } from "@repo/types";
 import { generatePrismaWhereArray } from "./utils/generatePrismaWhereArray";
 import { operationDocs } from "./utils/operationDocs";
 import { getPrompt } from "../utils/getPrompt";
 import YAML from "yaml";
 import { questionWhereConditionAgent } from "./questionWhere";
 import type { DBQuery, Operation } from "./types";
-import type {
-  TableConditions,
-  DateCondition,
-  QuestionConditions,
-} from "@repo/types";
+import type { QuestionConditions } from "@repo/types";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import {
   buildFullSchemaString,
@@ -33,16 +18,18 @@ import {
 } from "./utils/schemaFormatters";
 import { operationParametersAgent } from "./operationParameters";
 import type { Schema } from "@repo/types";
-import { mapJsonToSchema } from "./utils/jsonColumnSchemaMapper";
-import { buildConditionsForTable } from "./utils/buildConditionsForTable";
+import {
+  buildConditionsForTable,
+  buildTableConditionsMap,
+} from "./utils/buildConditionsForTable";
+import { generateJoinGraph } from "./utils/tableRelations";
+import { extractJoinedTableNames } from "./utils/extractJoinedTableNames";
 import { whereConditionDocsSummary } from "./utils/whereDocs";
 import { buildPromptCacheKey } from "../utils/promptCacheKey";
 import {
   buildColumnLookup,
-  canonicalizeDateCondition,
   canonicalizeQueryColumnReferences,
   canonicalizeQuestionConditions,
-  canonicalizeTableConditions,
 } from "./utils/queryCanonicalization";
 import type { ColumnAliasMap } from "./utils/queryCanonicalization";
 
@@ -54,25 +41,12 @@ interface RequestParams {
   agentId: string | number;
 }
 
-export const formatAllConditions = (
-  query: DBQuery,
-  tableConditions: TableConditions,
-  questionConditions: QuestionConditions,
-  dateCondition: DateCondition,
-) => {
-  const paredTableConditions = tableConditionsSchema.parse(tableConditions);
-  const parsedQuestionConditions =
-    questionConditionsSchema.parse(questionConditions);
-  const parsedDateCondition = dateConditionSchema.parse(dateCondition);
-
-  const whereAndArray = generatePrismaWhereArray(
-    paredTableConditions,
-    parsedQuestionConditions,
-    parsedDateCondition,
-  );
-
-  query.whereAndArray = whereAndArraySchema.parse(whereAndArray);
-  return query;
+// Context condition for RLS/tenant filtering
+export type ContextCondition = {
+  table: string;
+  column: string; // semantic column name
+  operator: "equals";
+  value: string | number;
 };
 
 export async function databaseRetrieverAgent(params: RequestParams) {
@@ -88,10 +62,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     schema: Annotation<Schema>({
       reducer: (x, y) => y,
       default: () => params.schema,
-    }),
-    jsonColumnSchema: Annotation<JsonColumnSchema | null>({
-      reducer: (x, y) => y,
-      default: () => null,
     }),
     tableSchema: Annotation<Schema[number]>({
       reducer: (x, y) => y,
@@ -126,13 +96,13 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     operationParams: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
     }),
-    tableConditions: Annotation<TableConditions>({
+    joinedTableNames: Annotation<string[]>({
       reducer: (x, y) => y,
-      default: () => null,
+      default: () => [],
     }),
-    dateCondition: Annotation<DateCondition>({
+    contextConditions: Annotation<ContextCondition[]>({
       reducer: (x, y) => y,
-      default: () => null,
+      default: () => [],
     }),
     questionConditions: Annotation<QuestionConditions>({
       reducer: (x, y) => y,
@@ -147,107 +117,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     ...OverallStateAnnotation.spec,
     ...QueryBuilderState.spec,
   });
-
-  const flattenJsonTablesInSchema = async (
-    state: typeof DatabaseAgentState.State,
-  ) => {
-    // feature flag for JSON Flattening
-    // Set to true to disable JSON flattening
-    if (true) {
-      return { schema: state.schema, jsonColumnSchemas: null };
-    }
-
-    const tablesWithJsonToFlatten = state.schema.filter((table) =>
-      table.columns.some(
-        (column: Schema[number]["columns"][number]) => column.type === "Json",
-      ),
-    );
-
-    if (tablesWithJsonToFlatten.length === 0) {
-      return { tablesWithJsonToFlatten: [] };
-    }
-
-    let jsonColumns: string[] = [];
-    tablesWithJsonToFlatten.forEach((table) => {
-      jsonColumns = table.columns
-        .filter(
-          (column: Schema[number]["columns"][number]) => column.type === "Json",
-        )
-        .map((column: Schema[number]["columns"][number]) => column.name);
-      if (jsonColumns.length > 1) {
-        throw new Error(
-          `Not Supported: Table ${table.name} has more than one JSON column`,
-        );
-      }
-    });
-
-    const jsonColumnSchemas = await Promise.all(
-      tablesWithJsonToFlatten.map(async (table) => {
-        const orderByColumn = table.columns.find(
-          (column: Schema[number]["columns"][number]) =>
-            column.type === "Int" || column.type === "String",
-        )?.name;
-        const jsonColumn = table.columns.find(
-          (column: Schema[number]["columns"][number]) => column.type === "Json",
-        );
-        const q = {
-          table: table.name,
-          operation: "findMany",
-          operationParameters: {
-            select: {
-              [table.name]: [jsonColumn?.name],
-            },
-            orderBy: { column: orderByColumn, direction: "asc" },
-            limit: 1,
-          },
-        };
-        const tableConditions = buildConditionsForTable(
-          table,
-          params.userContext,
-        );
-
-        const queryWithConditions = formatAllConditions(
-          q,
-          tableConditions,
-          null,
-          null,
-        );
-        const parsedQuery = querySchema.parse(queryWithConditions);
-        const { data: jsonColumnExampleValues } =
-          await params.connector.query(parsedQuery);
-        if (
-          !Array.isArray(jsonColumnExampleValues) ||
-          jsonColumnExampleValues.length === 0
-        ) {
-          throw new Error(
-            `No JSON column example values found for table ${table.name}`,
-          );
-        }
-        const jsonColumnExample = jsonColumnExampleValues?.[0] as Record<
-          string,
-          Record<string, string | number>
-        >;
-        return mapJsonToSchema(jsonColumnExample, table.name);
-      }),
-    );
-
-    const schemaWithJsonColumns = state.schema.map((table) => {
-      const jsonColumnSchema = jsonColumnSchemas.find(
-        (schema) => schema.tableName === table.name,
-      );
-      if (!jsonColumnSchema) {
-        return table;
-      }
-      return {
-        ...table,
-        columns: [...table.columns, ...jsonColumnSchema.jsonSchema],
-      };
-    });
-    return {
-      schema: schemaWithJsonColumns,
-      jsonColumnSchema: jsonColumnSchemas,
-    };
-  };
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
     const model = getAIModel("azure:gpt-5.1", {
@@ -273,14 +142,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const tableSchema = state.schema.find((t) => t.name === response.table);
     assert(tableSchema, `Table '${response.table}' not found`);
     return { tableName: response.table, tableSchema };
-  };
-
-  const setContextFilters = async (state: typeof DatabaseAgentState.State) => {
-    const conditions = buildConditionsForTable(
-      state.tableSchema,
-      params.userContext,
-    );
-    return { tableConditions: conditions };
   };
 
   const selectDatabaseOperation = async (
@@ -324,6 +185,12 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       },
     );
 
+    // Build table conditions inline for prompt context
+    const tableConditionsForPrompt = buildConditionsForTable(
+      state.tableSchema,
+      params.userContext,
+    );
+
     const operationResponse = await operationSelectorPrompt
       .pipe(operationSelector)
       .invoke({
@@ -331,7 +198,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         operationDocs: YAML.stringify(operationDocs, null, 2),
         filterDocsSummary: whereConditionDocsSummary,
         tableSchema: buildTableSchemaStringFromTableSchema(state.tableSchema),
-        tableConditions: JSON.stringify(state.tableConditions),
+        tableConditions: JSON.stringify(tableConditionsForPrompt),
       });
     if (operationResponse.operation === "NONE") {
       throw new Error(
@@ -353,7 +220,66 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       userContext: params.userContext,
       agentId: params.agentId,
     }).invoke({});
-    return { operationParams: operationParamsResponse.operationParameters };
+
+    const operationParams = operationParamsResponse.operationParameters;
+
+    // Extract joined table names from operation params
+    const joins = operationParams?.joins as
+      | Array<{
+          table: string;
+          path: Array<{ source: string[]; target: string[] }>;
+        }>
+      | null
+      | undefined;
+    const joinedTableNames = extractJoinedTableNames(joins);
+
+    return { operationParams, joinedTableNames };
+  };
+
+  const setContextFilters = async (state: typeof DatabaseAgentState.State) => {
+    const contextConditions: ContextCondition[] = [];
+
+    // Build conditions for the base table
+    const baseTableConditions = buildConditionsForTable(
+      state.tableSchema,
+      params.userContext,
+    );
+
+    if (baseTableConditions) {
+      for (const cond of baseTableConditions) {
+        contextConditions.push({
+          table: state.tableName,
+          column: cond.column,
+          operator: "equals",
+          value: cond.value as string | number,
+        });
+      }
+    }
+
+    // Build conditions for joined tables (using joinedTableNames from state)
+    for (const joinedTableName of state.joinedTableNames) {
+      const joinedTableSchema = state.schema.find(
+        (t) => t.name === joinedTableName,
+      );
+      if (!joinedTableSchema) continue;
+
+      const joinedTableConditions = buildConditionsForTable(
+        joinedTableSchema,
+        params.userContext,
+      );
+      if (joinedTableConditions) {
+        for (const cond of joinedTableConditions) {
+          contextConditions.push({
+            table: joinedTableName,
+            column: cond.column,
+            operator: "equals",
+            value: cond.value as string | number,
+          });
+        }
+      }
+    }
+
+    return { contextConditions };
   };
 
   const setMessageDerivedFilters = async (
@@ -366,8 +292,8 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       operation: state.operation,
       operationParams: state.operationParams,
       question: state.question,
-      dateCondition: state.dateCondition,
-      tableConditions: state.tableConditions,
+      contextConditions: state.contextConditions,
+      joinedTableNames: state.joinedTableNames,
       userContext: params.userContext,
       agentId: params.agentId,
     });
@@ -379,18 +305,23 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       table: state.tableName,
       operation: state.operation,
       operationParameters: state.operationParams,
+      tableConditions: null, // Set below after building tableConditionsMap
     };
 
     const columnLookup = buildColumnLookup(state.schema);
     // Tracker passed by ref and updated in the canonicalization functions
     const columnAliasTracker: ColumnAliasMap = {};
 
-    const canonicalizedTableConditions = canonicalizeTableConditions(
-      state.tableConditions,
-      state.tableName,
-      columnLookup,
-      columnAliasTracker,
-    );
+    // Canonicalize context conditions (convert semantic column names to db names)
+    const canonicalizedContextConditions: ContextCondition[] =
+      state.contextConditions.map((c) => {
+        const canonicalColumn =
+          columnLookup.get(c.table)?.get(c.column) ?? c.column;
+        return {
+          ...c,
+          column: canonicalColumn,
+        };
+      });
     const canonicalizedQuestionConditions = canonicalizeQuestionConditions(
       state.questionConditions,
       state.tableName,
@@ -398,27 +329,32 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       columnLookup,
       columnAliasTracker,
     );
-    const canonicalizedDateCondition = canonicalizeDateCondition(
-      state.dateCondition,
+
+    // Build tableConditions map for all relevant tables (for relation subquery filtering)
+    const { uniqueTableNames } = generateJoinGraph(
+      state.schema,
       state.tableName,
-      columnLookup,
-      columnAliasTracker,
+      2, // depth of 2 to cover most relation filters
+    );
+    const tableConditionsMap = buildTableConditionsMap(
+      state.schema,
+      uniqueTableNames,
+      params.userContext,
     );
 
-    const queryWithConditions = formatAllConditions(
-      query,
-      canonicalizedTableConditions,
+    // Build whereAndArray from context conditions and question conditions
+    const whereAndArray = generatePrismaWhereArray(
+      canonicalizedContextConditions,
       canonicalizedQuestionConditions,
-      canonicalizedDateCondition,
     );
 
-    if (state.jsonColumnSchema && state.jsonColumnSchema.length > 0) {
-      queryWithConditions.jsonColumnSchema = state.jsonColumnSchema;
-    }
+    query.whereAndArray = whereAndArraySchema.parse(whereAndArray);
+    query.tableConditions = tableConditionsMap ?? null;
+
+    const queryWithConditions = query;
 
     const queryUsingDbNames = canonicalizeQueryColumnReferences(
       queryWithConditions,
-      state.schema,
       state.tableName,
       columnLookup,
       columnAliasTracker,
@@ -466,14 +402,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const workflow = new StateGraph(OverallStateAnnotation)
-    .addNode("flatten_json_tables", flattenJsonTablesInSchema)
     .addNode("select_table_name", selectTableName, {
-      input: DatabaseAgentState,
-      metadata: {
-        userObservable: true,
-      },
-    })
-    .addNode("set_context_filters", setContextFilters, {
       input: DatabaseAgentState,
       metadata: {
         userObservable: true,
@@ -486,6 +415,12 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       },
     })
     .addNode("define_operation_params", defineOperationParams, {
+      input: DatabaseAgentState,
+      metadata: {
+        userObservable: true,
+      },
+    })
+    .addNode("set_context_filters", setContextFilters, {
       input: DatabaseAgentState,
       metadata: {
         userObservable: true,
@@ -512,12 +447,11 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addNode("format_database_response", formatDatabaseResponse, {
       input: DatabaseAgentState,
     })
-    .addEdge(START, "flatten_json_tables")
-    .addEdge("flatten_json_tables", "select_table_name")
-    .addEdge("select_table_name", "set_context_filters")
-    .addEdge("set_context_filters", "select_operation")
+    .addEdge(START, "select_table_name")
+    .addEdge("select_table_name", "select_operation")
     .addEdge("select_operation", "define_operation_params")
-    .addEdge("define_operation_params", "set_message_derived_filters")
+    .addEdge("define_operation_params", "set_context_filters")
+    .addEdge("set_context_filters", "set_message_derived_filters")
     .addEdge("set_message_derived_filters", "build_query")
     .addEdge("build_query", "execute_query")
     .addEdge("execute_query", "format_database_response")

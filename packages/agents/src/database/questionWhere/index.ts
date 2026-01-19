@@ -5,7 +5,7 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { tool } from "@langchain/core/tools";
 import { questionConditionsSchema, type QuestionConditions } from "@repo/types";
 import type { Operation } from "../types";
-import type { TableConditions, DateCondition } from "@repo/types";
+import type { ContextCondition } from "../index";
 import type { Schema } from "@repo/types";
 import { getAIModel } from "../../utils/getAIModel";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
@@ -44,8 +44,8 @@ interface RequestParams {
   operationParams: Record<string, unknown>;
   schema: Schema;
   tableSchema: Schema[number];
-  dateCondition: DateCondition;
-  tableConditions: TableConditions;
+  contextConditions: ContextCondition[];
+  joinedTableNames: string[];
   userContext: Record<string, string | number>;
   agentId: string | number;
 }
@@ -80,6 +80,8 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const filterValidator = createQuestionConditionsDynamicSchema(
     params.tableSchema,
     params.schema,
+    params.tableName,
+    params.joinedTableNames,
   );
 
   const applyFilterTool = tool(
@@ -123,15 +125,16 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     },
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:dded782c");
+  const agentPrompt = await getPrompt("where_condition_agent_5:a7141b35");
   const agentPromptFormatted = (await agentPrompt.invoke({
     tableName: params.tableName,
     operation: params.operation,
     date: new Date().toISOString(),
     operationParams: JSON.stringify(params.operationParams, null, 2),
-    tableConditions: JSON.stringify(params.tableConditions, null, 2),
+    contextConditions: JSON.stringify(params.contextConditions, null, 2),
     tableSchema: buildTableSchemaStringFromTableSchema(params.tableSchema),
     relatedTablesSchemas: relatedTablesSchemasString,
+    joinedTableNames: params.joinedTableNames.join(", ") || "none",
   })) as Record<"messages", BaseMessage[]>;
 
   const modelWithTools = llm.bindTools([applyFilterTool]);

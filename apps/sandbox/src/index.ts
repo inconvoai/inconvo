@@ -34,7 +34,7 @@ const BUCKET_OPTIONS = (c: AuthedContext) => ({
     accessKeyId: c.env.R2_ACCESS_KEY_ID,
     secretAccessKey: c.env.R2_SECRET_ACCESS_KEY,
   },
-  s3fsOptions: ["use_path_request_style"],
+  s3fsOptions: ["use_path_request_style", "stat_cache_expire=1"],
 });
 
 const isUnsafeFileName = (name: string) =>

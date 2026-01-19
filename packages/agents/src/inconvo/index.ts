@@ -842,14 +842,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       agentId: params.agentId,
     });
 
-    // Pre-warm sandbox in background for later code execution (once)
-    const sandboxSession = sandboxClient.sandbox({
-      conversationId: params.conversation.id,
-      runId: state.runId,
-      userContextPath: params.userContextPath,
-    });
-    void sandboxSession.start();
-
     const DATA_PREVIEW_LIMIT = 50;
     const allResults: { query: string; data: unknown }[] = [];
     const allMessages: ToolMessage[] = [];
@@ -920,6 +912,15 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }),
       );
     }
+
+    // Pre-warm sandbox in background for later code execution
+    // This must happen AFTER uploads complete to avoid s3fs caching stale directory listings
+    const sandboxSession = sandboxClient.sandbox({
+      conversationId: params.conversation.id,
+      runId: state.runId,
+      userContextPath: params.userContextPath,
+    });
+    void sandboxSession.start();
 
     return {
       sandboxUsed: true, // Sandbox was pre-warmed and data uploaded

@@ -63,7 +63,7 @@ type Token = {
 function setEditorMarkers(
   editor: monaco.editor.IStandaloneCodeEditor,
   monacoParam: typeof monaco,
-  markers: monaco.editor.IMarkerData[]
+  markers: monaco.editor.IMarkerData[],
 ) {
   const model = editor.getModel();
   if (model) {
@@ -123,7 +123,7 @@ function tokenizeExpression(expression: string): Token[] {
       }
     } else {
       throw new Error(
-        `Unexpected character: ${remainingExpression[0]} at position ${position}`
+        `Unexpected character: ${remainingExpression[0]} at position ${position}`,
       );
     }
   }
@@ -133,7 +133,7 @@ function tokenizeExpression(expression: string): Token[] {
 
 function parseExpression(
   tokens: Token[],
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): [SQLComputedColumnAst, Token[]] {
   const [left, remainingTokens] = parseTerm(tokens, validColumnNames);
   return parseExpressionTail(left, remainingTokens, validColumnNames);
@@ -142,7 +142,7 @@ function parseExpression(
 function parseExpressionTail(
   left: SQLComputedColumnAst,
   tokens: Token[],
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): [SQLComputedColumnAst, Token[]] {
   if (
     tokens.length === 0 ||
@@ -168,7 +168,7 @@ function parseExpressionTail(
 
 function parseTerm(
   tokens: Token[],
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): [SQLComputedColumnAst, Token[]] {
   const [left, remainingTokens] = parseFactor(tokens, validColumnNames);
   return parseTermTail(left, remainingTokens, validColumnNames);
@@ -177,7 +177,7 @@ function parseTerm(
 function parseTermTail(
   left: SQLComputedColumnAst,
   tokens: Token[],
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): [SQLComputedColumnAst, Token[]] {
   if (
     tokens.length === 0 ||
@@ -194,7 +194,7 @@ function parseTermTail(
   const operator = operatorToken.value as SQLOperator;
   const [right, remainingTokens] = parseFactor(
     tokens.slice(1),
-    validColumnNames
+    validColumnNames,
   );
   const operation: SQLOperation = {
     type: "operation",
@@ -206,7 +206,7 @@ function parseTermTail(
 
 function parseFactor(
   tokens: Token[],
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): [SQLComputedColumnAst, Token[]] {
   const token = tokens[0];
   if (!token) {
@@ -235,7 +235,7 @@ function parseFactor(
   if (token.type === "leftParen") {
     const [expr, afterExpr] = parseExpression(
       tokens.slice(1),
-      validColumnNames
+      validColumnNames,
     );
     if (
       afterExpr.length === 0 ||
@@ -255,7 +255,7 @@ function parseFactor(
 
 function parseExpressionToAst(
   expressionString: string,
-  validColumnNames: string[]
+  validColumnNames: string[],
 ): SQLComputedColumnAst {
   const tokens = tokenizeExpression(expressionString);
   if (tokens.length === 0) {
@@ -279,7 +279,7 @@ export function ComputedColumnForm({
   const [editorInstance, setEditorInstance] =
     useState<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [monacoInstance, setMonacoInstance] = useState<typeof monaco | null>(
-    null
+    null,
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -288,11 +288,11 @@ export function ComputedColumnForm({
       table.columns
         .filter(({ type, effectiveType }) =>
           ["number", "integer", "bigint", "decimal", "float"].includes(
-            effectiveType ?? type
-          )
+            effectiveType ?? type,
+          ),
         )
         .map((col) => col.name),
-    [table.columns]
+    [table.columns],
   );
 
   const form = useForm<ComputedColumnFormValues>({
@@ -350,7 +350,7 @@ export function ComputedColumnForm({
 
   function registerColumnExpressionLanguage(
     monacoParam: typeof monaco,
-    columns: string[]
+    columns: string[],
   ) {
     monacoParam.editor.defineTheme("columnExpressionTheme", {
       base: "vs",
@@ -390,7 +390,7 @@ export function ComputedColumnForm({
             [/[a-zA-Z_]\w*/, "identifier"],
           ],
         },
-      }
+      },
     );
     languageRegistrationState.current.tokensProviderId = tokensDisposable;
 
@@ -453,7 +453,7 @@ export function ComputedColumnForm({
   const handleEditorDidMount = useCallback(
     (
       editor: monaco.editor.IStandaloneCodeEditor,
-      monacoParam: typeof monaco
+      monacoParam: typeof monaco,
     ): void => {
       editorRef.current = editor;
       setEditorInstance(editor);
@@ -466,7 +466,7 @@ export function ComputedColumnForm({
         }, 100);
       });
     },
-    [numberColumns]
+    [numberColumns],
   );
 
   useEffect(() => {
@@ -506,7 +506,10 @@ export function ComputedColumnForm({
       const errorMessage =
         error instanceof Error ? error.message : "Invalid expression";
       if (errorMessage.includes("Unique constraint failed")) {
-        form.setFieldError("name", "Computed column with this name already exists");
+        form.setFieldError(
+          "name",
+          "Computed column with this name already exists",
+        );
       } else {
         setSubmitError(errorMessage);
       }
@@ -578,7 +581,7 @@ export function ComputedColumnForm({
                     if (newValue) {
                       const parsedAst = parseExpressionToAst(
                         newValue,
-                        numberColumns
+                        numberColumns,
                       );
                       form.setFieldValue("expression", parsedAst);
                       if (editorInstance && monacoInstance) {
@@ -600,16 +603,16 @@ export function ComputedColumnForm({
                       if (model) {
                         let endLineNumber = model.getLineCount();
                         let endColumn = model.getLineMaxColumn(
-                          model.getLineCount()
+                          model.getLineCount(),
                         );
 
                         const errorStartMatch = /at position (\d+)/.exec(
-                          errorMessage
+                          errorMessage,
                         );
                         if (errorStartMatch?.[1]) {
                           const errorPosition = parseInt(
                             errorStartMatch[1],
-                            10
+                            10,
                           );
                           const lines = model.getLinesContent();
                           let position = 0;
@@ -626,7 +629,7 @@ export function ComputedColumnForm({
                         }
 
                         const tokenMatch = /Unexpected token: (\S+)/.exec(
-                          errorMessage
+                          errorMessage,
                         );
                         if (tokenMatch?.[1]) {
                           const unexpectedToken = tokenMatch[1];
@@ -640,7 +643,8 @@ export function ComputedColumnForm({
                                 startLineNumber = i + 1;
                                 startColumn = tokenIndex - position + 1;
                                 endLineNumber = startLineNumber;
-                                endColumn = startColumn + unexpectedToken.length;
+                                endColumn =
+                                  startColumn + unexpectedToken.length;
                                 break;
                               }
                               position += lines[i]!.length + 1;

@@ -106,8 +106,7 @@ describe("count validator", () => {
       expect(
         result.issues.some(
           (issue) =>
-            issue.code === "invalid_column" ||
-            issue.code === "invalid_value",
+            issue.code === "invalid_column" || issue.code === "invalid_value",
         ),
       ).toBe(true);
     }

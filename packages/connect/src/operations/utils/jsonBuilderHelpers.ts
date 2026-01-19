@@ -111,7 +111,10 @@ export function reconstructNestedFromFlat(
 
   // Add nested objects to result
   for (const prefix of prefixes) {
-    if (nestedObjects[prefix] && Object.keys(nestedObjects[prefix]).length > 0) {
+    if (
+      nestedObjects[prefix] &&
+      Object.keys(nestedObjects[prefix]).length > 0
+    ) {
       result[prefix] = nestedObjects[prefix];
     }
   }

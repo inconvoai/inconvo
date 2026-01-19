@@ -26,6 +26,7 @@ describe("MSSQL aggregate Operation", () => {
   test("What is the highest subtotal we have recorded on an order?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {
@@ -79,9 +80,10 @@ describe("MSSQL aggregate Operation", () => {
   test("What is the highest subtotal for an order priced over $100?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          subtotal: {
+          "orders.subtotal": {
             gt: 100,
           },
         },
@@ -139,6 +141,7 @@ describe("MSSQL aggregate Operation", () => {
   test("countDistinct returns unique counts for specified columns", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {

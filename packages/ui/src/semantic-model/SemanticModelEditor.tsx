@@ -21,7 +21,11 @@ import type {
   ColumnUnitPayload,
   ComputedColumnUnitPayload,
 } from "./types";
-import { TableList, type FilterValue, type ConnectionOption } from "./TableList";
+import {
+  TableList,
+  type FilterValue,
+  type ConnectionOption,
+} from "./TableList";
 import { TableDetail } from "./TableDetail";
 
 export type { FilterValue };
@@ -39,6 +43,8 @@ export interface SemanticModelEditorProps {
   listLoading?: boolean;
   /** Whether the selected table is loading */
   detailLoading?: boolean;
+  /** Whether the editor is in read-only mode (disables all mutations) */
+  readOnly?: boolean;
   /** Callback when a table is selected */
   onTableSelect: (tableId: string) => void;
 
@@ -68,37 +74,85 @@ export interface SemanticModelEditorProps {
   /** Callback when connection changes */
   onConnectionChange?: (connectionId: string | null) => void;
   /** Callback when table is updated */
-  onUpdateTable?: (tableId: string, payload: UpdateTablePayload) => Promise<void>;
+  onUpdateTable?: (
+    tableId: string,
+    payload: UpdateTablePayload,
+  ) => Promise<void>;
   /** Callback when a column is updated */
-  onUpdateColumn?: (tableId: string, columnId: string, payload: ColumnUpdatePayload) => Promise<void>;
+  onUpdateColumn?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnUpdatePayload,
+  ) => Promise<void>;
   /** Callback when a computed column is created */
-  onCreateComputedColumn?: (tableId: string, payload: ComputedColumnCreatePayload) => Promise<void>;
+  onCreateComputedColumn?: (
+    tableId: string,
+    payload: ComputedColumnCreatePayload,
+  ) => Promise<void>;
   /** Callback when a computed column is updated */
-  onUpdateComputedColumn?: (tableId: string, columnId: string, payload: ComputedColumnUpdatePayload) => Promise<void>;
+  onUpdateComputedColumn?: (
+    tableId: string,
+    columnId: string,
+    payload: ComputedColumnUpdatePayload,
+  ) => Promise<void>;
   /** Callback when a computed column is deleted */
   onDeleteComputedColumn?: (tableId: string, columnId: string) => Promise<void>;
   /** Callback when a relation is updated */
-  onUpdateRelation?: (tableId: string, relationId: string, selected: boolean) => Promise<void>;
+  onUpdateRelation?: (
+    tableId: string,
+    relationId: string,
+    selected: boolean,
+  ) => Promise<void>;
   /** Callback when a manual relation is created */
-  onCreateManualRelation?: (tableId: string, payload: ManualRelationCreatePayload) => Promise<void>;
+  onCreateManualRelation?: (
+    tableId: string,
+    payload: ManualRelationCreatePayload,
+  ) => Promise<void>;
   /** Callback when a manual relation is updated */
-  onUpdateManualRelation?: (tableId: string, relationId: string, payload: ManualRelationUpdatePayload) => Promise<void>;
+  onUpdateManualRelation?: (
+    tableId: string,
+    relationId: string,
+    payload: ManualRelationUpdatePayload,
+  ) => Promise<void>;
   /** Callback when a manual relation is deleted */
-  onDeleteManualRelation?: (tableId: string, relationId: string) => Promise<void>;
+  onDeleteManualRelation?: (
+    tableId: string,
+    relationId: string,
+  ) => Promise<void>;
   /** Callback when a context filter is created/updated */
-  onUpsertContextFilter?: (tableId: string, payload: ContextFilterPayload) => Promise<void>;
+  onUpsertContextFilter?: (
+    tableId: string,
+    payload: ContextFilterPayload,
+  ) => Promise<void>;
   /** Callback when a context filter is deleted */
   onDeleteContextFilter?: (tableId: string) => Promise<void>;
   /** Callback when a column conversion is created */
-  onCreateColumnConversion?: (tableId: string, columnId: string, payload: ColumnConversionCreatePayload) => Promise<void>;
+  onCreateColumnConversion?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnConversionCreatePayload,
+  ) => Promise<void>;
   /** Callback when a column conversion is updated */
-  onUpdateColumnConversion?: (tableId: string, columnId: string, payload: ColumnConversionUpdatePayload) => Promise<void>;
+  onUpdateColumnConversion?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnConversionUpdatePayload,
+  ) => Promise<void>;
   /** Callback when a column conversion is deleted */
-  onDeleteColumnConversion?: (tableId: string, columnId: string) => Promise<void>;
+  onDeleteColumnConversion?: (
+    tableId: string,
+    columnId: string,
+  ) => Promise<void>;
   /** Callback when a column unit is added */
-  onAddColumnUnit?: (tableId: string, payload: ColumnUnitPayload) => Promise<void>;
+  onAddColumnUnit?: (
+    tableId: string,
+    payload: ColumnUnitPayload,
+  ) => Promise<void>;
   /** Callback when a computed column unit is updated */
-  onUpdateComputedColumnUnit?: (tableId: string, payload: ComputedColumnUnitPayload) => Promise<void>;
+  onUpdateComputedColumnUnit?: (
+    tableId: string,
+    payload: ComputedColumnUnitPayload,
+  ) => Promise<void>;
 }
 
 export function SemanticModelEditor({
@@ -108,6 +162,7 @@ export function SemanticModelEditor({
   availableTables,
   listLoading = false,
   detailLoading = false,
+  readOnly = false,
   onTableSelect,
   // Server-side filtering props
   searchQuery: controlledSearchQuery,
@@ -142,21 +197,23 @@ export function SemanticModelEditor({
 }: SemanticModelEditorProps) {
   // Internal state for client-side mode (when server-side callbacks not provided)
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
-  const [internalAccessFilter, setInternalAccessFilter] = useState<FilterValue>("active");
+  const [internalAccessFilter, setInternalAccessFilter] =
+    useState<FilterValue>("active");
 
   // Use controlled or internal state
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
   const accessFilter = controlledAccessFilter ?? internalAccessFilter;
 
   const handleSearchChange = onSearchChange ?? setInternalSearchQuery;
-  const handleAccessFilterChange = onAccessFilterChange ?? setInternalAccessFilter;
+  const handleAccessFilterChange =
+    onAccessFilterChange ?? setInternalAccessFilter;
 
   // Handler for changing table access from sidebar
   const handleTableAccessChange = useCallback(
     async (tableId: string, access: TableAccess) => {
       await onUpdateTable?.(tableId, { access });
     },
-    [onUpdateTable]
+    [onUpdateTable],
   );
 
   // Wrap callbacks to include tableId
@@ -166,7 +223,7 @@ export function SemanticModelEditor({
         await onUpdateTable?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onUpdateTable]
+    [selectedTable, onUpdateTable],
   );
 
   const handleUpdateColumn = useCallback(
@@ -175,7 +232,7 @@ export function SemanticModelEditor({
         await onUpdateColumn?.(selectedTable.id, columnId, payload);
       }
     },
-    [selectedTable, onUpdateColumn]
+    [selectedTable, onUpdateColumn],
   );
 
   const handleCreateComputedColumn = useCallback(
@@ -184,7 +241,7 @@ export function SemanticModelEditor({
         await onCreateComputedColumn?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onCreateComputedColumn]
+    [selectedTable, onCreateComputedColumn],
   );
 
   const handleUpdateComputedColumn = useCallback(
@@ -193,7 +250,7 @@ export function SemanticModelEditor({
         await onUpdateComputedColumn?.(selectedTable.id, columnId, payload);
       }
     },
-    [selectedTable, onUpdateComputedColumn]
+    [selectedTable, onUpdateComputedColumn],
   );
 
   const handleDeleteComputedColumn = useCallback(
@@ -202,7 +259,7 @@ export function SemanticModelEditor({
         await onDeleteComputedColumn?.(selectedTable.id, columnId);
       }
     },
-    [selectedTable, onDeleteComputedColumn]
+    [selectedTable, onDeleteComputedColumn],
   );
 
   const handleUpdateRelation = useCallback(
@@ -211,7 +268,7 @@ export function SemanticModelEditor({
         await onUpdateRelation?.(selectedTable.id, relationId, selected);
       }
     },
-    [selectedTable, onUpdateRelation]
+    [selectedTable, onUpdateRelation],
   );
 
   const handleCreateManualRelation = useCallback(
@@ -220,7 +277,7 @@ export function SemanticModelEditor({
         await onCreateManualRelation?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onCreateManualRelation]
+    [selectedTable, onCreateManualRelation],
   );
 
   const handleUpdateManualRelation = useCallback(
@@ -229,7 +286,7 @@ export function SemanticModelEditor({
         await onUpdateManualRelation?.(selectedTable.id, relationId, payload);
       }
     },
-    [selectedTable, onUpdateManualRelation]
+    [selectedTable, onUpdateManualRelation],
   );
 
   const handleDeleteManualRelation = useCallback(
@@ -238,7 +295,7 @@ export function SemanticModelEditor({
         await onDeleteManualRelation?.(selectedTable.id, relationId);
       }
     },
-    [selectedTable, onDeleteManualRelation]
+    [selectedTable, onDeleteManualRelation],
   );
 
   const handleUpsertContextFilter = useCallback(
@@ -247,7 +304,7 @@ export function SemanticModelEditor({
         await onUpsertContextFilter?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onUpsertContextFilter]
+    [selectedTable, onUpsertContextFilter],
   );
 
   const handleDeleteContextFilter = useCallback(async () => {
@@ -262,7 +319,7 @@ export function SemanticModelEditor({
         await onCreateColumnConversion?.(selectedTable.id, columnId, payload);
       }
     },
-    [selectedTable, onCreateColumnConversion]
+    [selectedTable, onCreateColumnConversion],
   );
 
   const handleUpdateColumnConversion = useCallback(
@@ -271,7 +328,7 @@ export function SemanticModelEditor({
         await onUpdateColumnConversion?.(selectedTable.id, columnId, payload);
       }
     },
-    [selectedTable, onUpdateColumnConversion]
+    [selectedTable, onUpdateColumnConversion],
   );
 
   const handleDeleteColumnConversion = useCallback(
@@ -280,7 +337,7 @@ export function SemanticModelEditor({
         await onDeleteColumnConversion?.(selectedTable.id, columnId);
       }
     },
-    [selectedTable, onDeleteColumnConversion]
+    [selectedTable, onDeleteColumnConversion],
   );
 
   const handleAddColumnUnit = useCallback(
@@ -289,7 +346,7 @@ export function SemanticModelEditor({
         await onAddColumnUnit?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onAddColumnUnit]
+    [selectedTable, onAddColumnUnit],
   );
 
   const handleUpdateComputedColumnUnit = useCallback(
@@ -298,7 +355,7 @@ export function SemanticModelEditor({
         await onUpdateComputedColumnUnit?.(selectedTable.id, payload);
       }
     },
-    [selectedTable, onUpdateComputedColumnUnit]
+    [selectedTable, onUpdateComputedColumnUnit],
   );
 
   return (
@@ -351,6 +408,7 @@ export function SemanticModelEditor({
             userContextFields={userContextFields}
             availableTables={availableTables}
             loading={detailLoading}
+            readOnly={readOnly}
             onUpdateTable={handleUpdateTable}
             onUpdateColumn={handleUpdateColumn}
             onCreateComputedColumn={handleCreateComputedColumn}

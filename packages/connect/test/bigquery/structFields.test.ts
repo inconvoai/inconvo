@@ -99,6 +99,7 @@ describe("BigQuery STRUCT Field Support", () => {
       const iql = {
         operation: "findMany" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [],
         operationParameters: {
           select: {
@@ -124,21 +125,22 @@ describe("BigQuery STRUCT Field Support", () => {
       expect(Array.isArray(response.data)).toBe(true);
       expect(response.data.length).toBeGreaterThan(0);
 
-      // Verify the STRUCT fields are returned
+      // Verify the STRUCT fields are returned (new flat format: table_column)
       const firstRow = response.data[0];
-      expect(firstRow).toHaveProperty("type");
-      expect(firstRow).toHaveProperty("properties#payment_method");
-      expect(firstRow).toHaveProperty("properties#currency");
+      expect(firstRow.events_type).toBeDefined();
+      expect(firstRow["events_properties#payment_method"]).toBeDefined();
+      expect(firstRow["events_properties#currency"]).toBeDefined();
     });
 
     it("can filter on STRUCT fields", async () => {
       const iql = {
         operation: "findMany" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [
           {
-            "properties#payment_method": {
-              eq: "card",
+            "events.properties#payment_method": {
+              equals: "card",
             },
           },
         ],
@@ -160,9 +162,9 @@ describe("BigQuery STRUCT Field Support", () => {
       expect(response.data).toBeDefined();
       expect(response.data.length).toBeGreaterThan(0);
 
-      // All returned rows should have payment_method = 'card'
+      // All returned rows should have payment_method = 'card' (new flat format: table_column)
       for (const row of response.data) {
-        expect(row["properties#payment_method"]).toBe("card");
+        expect(row["events_properties#payment_method"]).toBe("card");
       }
     });
 
@@ -170,6 +172,7 @@ describe("BigQuery STRUCT Field Support", () => {
       const iql = {
         operation: "findMany" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [],
         operationParameters: {
           select: {
@@ -194,6 +197,7 @@ describe("BigQuery STRUCT Field Support", () => {
       const iql = {
         operation: "findMany" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [],
         operationParameters: {
           joins: null,
@@ -221,12 +225,13 @@ describe("BigQuery STRUCT Field Support", () => {
       expect(Array.isArray(response.data)).toBe(true);
       expect(response.data.length).toBe(1);
 
+      // New flat format: table_column
       const firstRow = response.data[0];
-      expect(firstRow).toHaveProperty("type");
-      expect(firstRow).toHaveProperty("timestamp");
-      expect(firstRow).toHaveProperty("properties#total_price");
-      expect(firstRow).toHaveProperty("properties#currency");
-      expect(firstRow).toHaveProperty("properties#purchase_id");
+      expect(firstRow.events_type).toBeDefined();
+      expect(firstRow.events_timestamp).toBeDefined();
+      expect(firstRow["events_properties#total_price"]).toBeDefined();
+      expect(firstRow["events_properties#currency"]).toBeDefined();
+      expect(firstRow["events_properties#purchase_id"]).toBeDefined();
     });
   });
 
@@ -235,10 +240,11 @@ describe("BigQuery STRUCT Field Support", () => {
       const iql = {
         operation: "count" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [
           {
-            "properties#status": {
-              eq: "confirmed",
+            "events.properties#status": {
+              equals: "confirmed",
             },
           },
         ],
@@ -262,6 +268,7 @@ describe("BigQuery STRUCT Field Support", () => {
       const iql = {
         operation: "groupBy" as const,
         table: "events",
+        tableConditions: null,
         whereAndArray: [],
         operationParameters: {
           groupBy: [

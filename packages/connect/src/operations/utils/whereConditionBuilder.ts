@@ -1,6 +1,9 @@
 import { sql } from "kysely";
 import type { Expression, SqlBool } from "kysely";
-import type { WhereConditions } from "../../types/querySchema";
+import type {
+  WhereConditions,
+  TableConditionsMap,
+} from "../../types/querySchema";
 import { getColumnFromTable } from "./computedColumns";
 import { env } from "../../env";
 import type { SchemaResponse } from "../../types/types";
@@ -37,6 +40,7 @@ export function buildWhereConditions(
   whereAndArray: WhereConditions,
   tableName: string,
   schema: SchemaResponse,
+  tableConditions: TableConditionsMap,
 ): Expression<SqlBool> | undefined {
   if (!whereAndArray || whereAndArray.length === 0) {
     return undefined;
@@ -49,7 +53,12 @@ export function buildWhereConditions(
     const whereGroup = whereAndArray[i];
     if (whereGroup === null || whereGroup === undefined) continue;
 
-    const condition = parseConditionObject(whereGroup, tableName, schema);
+    const condition = parseConditionObject(
+      whereGroup,
+      tableName,
+      schema,
+      tableConditions,
+    );
     if (condition) {
       topLevelConditions.push(condition);
     }
@@ -77,6 +86,8 @@ function parseConditionObject(
   condition: any,
   tableName: string,
   schema: SchemaResponse,
+  tableConditions: TableConditionsMap,
+  insideRelationFilter: boolean = false,
 ): Expression<SqlBool> | undefined {
   if (!condition || typeof condition !== "object") {
     return undefined;
@@ -87,7 +98,13 @@ function parseConditionObject(
     const andConditions: Expression<SqlBool>[] = [];
 
     for (const subCondition of condition.AND) {
-      const parsed = parseConditionObject(subCondition, tableName, schema);
+      const parsed = parseConditionObject(
+        subCondition,
+        tableName,
+        schema,
+        tableConditions,
+        insideRelationFilter,
+      );
       if (parsed !== undefined) {
         andConditions.push(parsed);
       }
@@ -110,7 +127,13 @@ function parseConditionObject(
     const orConditions: Expression<SqlBool>[] = [];
 
     for (const subCondition of condition.OR) {
-      const parsed = parseConditionObject(subCondition, tableName, schema);
+      const parsed = parseConditionObject(
+        subCondition,
+        tableName,
+        schema,
+        tableConditions,
+        insideRelationFilter,
+      );
       if (parsed !== undefined) {
         orConditions.push(parsed);
       }
@@ -133,7 +156,13 @@ function parseConditionObject(
     const notConditions: Expression<SqlBool>[] = [];
 
     for (const subCondition of condition.NOT) {
-      const parsed = parseConditionObject(subCondition, tableName, schema);
+      const parsed = parseConditionObject(
+        subCondition,
+        tableName,
+        schema,
+        tableConditions,
+        insideRelationFilter,
+      );
       if (parsed !== undefined) {
         notConditions.push(parsed);
       }
@@ -165,66 +194,83 @@ function parseConditionObject(
   for (const [column, operators] of Object.entries(condition)) {
     if (column === "AND" || column === "OR" || column === "NOT") continue;
 
-    // Check if this column is a relation
+    // Check if this is a relation (unqualified name like "orderItems")
     const isRelation = currentTable?.relations?.some(
       (r: any) => r.name === column,
     );
 
+    // All column references must be qualified (table.column format)
+    // Relations are the exception - they use unqualified names
+    let resolvedTableName: string;
+    let resolvedColumnName: string;
+
+    if (column.includes(".")) {
+      // Qualified column reference
+      const lastDot = column.lastIndexOf(".");
+      const qualifiedTable = column.slice(0, lastDot);
+      const qualifiedColumn = column.slice(lastDot + 1);
+
+      // Verify table exists in schema
+      const targetTable = schema.tables.find((t: any) => t.name === qualifiedTable);
+      if (!targetTable) {
+        throw new Error(`Table "${qualifiedTable}" not found in schema for column "${column}"`);
+      }
+
+      resolvedTableName = qualifiedTable;
+      resolvedColumnName = qualifiedColumn;
+    } else if (isRelation) {
+      // Relations use unqualified names - handled below
+      resolvedTableName = tableName;
+      resolvedColumnName = column;
+    } else if (insideRelationFilter) {
+      // Inside relation filters, unqualified columns are allowed
+      // They resolve to the current target table
+      resolvedTableName = tableName;
+      resolvedColumnName = column;
+    } else {
+      // Unqualified non-relation column at top level
+      throw new Error(
+        `Column "${column}" must be qualified with a table name. ` +
+        `Use "${tableName}.${column}" for the base table, or "joined_table.${column}" if filtering on a joined table.`
+      );
+    }
+
     if (operators === null) {
       // Column IS NULL
       columnConditions.push(
-        buildOperatorCondition(column, "equals", null, tableName, schema),
+        buildOperatorCondition(resolvedColumnName, "equals", null, resolvedTableName, schema),
       );
     } else if (typeof operators === "object" && !Array.isArray(operators)) {
-      // Check if this is a relation filter
       if (isRelation) {
-        // This is a relation filter
+        // This is a relation filter (relations are always unqualified)
         const relationCondition = buildRelationFilter(
           column,
           operators,
           tableName,
           schema,
+          tableConditions,
         );
         if (relationCondition) {
           columnConditions.push(relationCondition);
         }
       } else {
-        // Multiple operators for the column
+        // Column operators (column is qualified)
         for (const [operator, value] of Object.entries(operators)) {
-          // Handle relation operators
-          if (
-            operator === "is" ||
-            operator === "isNot" ||
-            operator === "some" ||
-            operator === "every" ||
-            operator === "none"
-          ) {
-            const relationCondition = buildRelationFilter(
-              column,
-              { [operator]: value },
-              tableName,
+          columnConditions.push(
+            buildOperatorCondition(
+              resolvedColumnName,
+              operator,
+              value,
+              resolvedTableName,
               schema,
-            );
-            if (relationCondition) {
-              columnConditions.push(relationCondition);
-            }
-          } else {
-            columnConditions.push(
-              buildOperatorCondition(
-                column,
-                operator,
-                value,
-                tableName,
-                schema,
-              ),
-            );
-          }
+            ),
+          );
         }
       }
     } else {
       // Direct value comparison (implicit equals)
       columnConditions.push(
-        buildOperatorCondition(column, "equals", operators, tableName, schema),
+        buildOperatorCondition(resolvedColumnName, "equals", operators, resolvedTableName, schema),
       );
     }
   }
@@ -246,6 +292,7 @@ function buildRelationFilter(
   filterObj: Record<string, any>,
   currentTableName: string,
   schema: SchemaResponse,
+  tableConditions: TableConditionsMap,
 ): Expression<SqlBool> | undefined {
   // Use the schema passed from above
   const currentTable = schema.tables.find((t) => t.name === currentTableName);
@@ -275,10 +322,20 @@ function buildRelationFilter(
   }
 
   // Get the operator and nested condition
-  const [[operator, nestedCondition]] = Object.entries(filterObj) as [[string, any]];
+  const [[operator, nestedCondition]] = Object.entries(filterObj) as [
+    [string, any],
+  ];
 
   // Build the subquery
   const targetTableRef = sql.table(targetTable);
+
+  // Build table condition expression for the target table (row-level security)
+  let tableConditionExpr: Expression<SqlBool> | undefined;
+  const targetCondition = tableConditions?.[targetTable];
+  if (targetCondition) {
+    const { column, value } = targetCondition;
+    tableConditionExpr = sql<SqlBool>`${sql.ref(`${targetTable}.${column}`)} = ${value}`;
+  }
 
   // Build the join condition based on whether it's a list relation or not
   let joinCondition: Expression<SqlBool>;
@@ -325,6 +382,16 @@ function buildRelationFilter(
     }
   }
 
+  // Helper to build combined WHERE clause for subqueries
+  const buildSubqueryWhere = (
+    ...exprs: (Expression<SqlBool> | undefined)[]
+  ): Expression<SqlBool> => {
+    const validExprs = exprs.filter(
+      (e): e is Expression<SqlBool> => e !== undefined,
+    );
+    return combineSqlExpressions(validExprs, "AND");
+  };
+
   // Check if we need to parse nested conditions
   const needsNestedParsing =
     nestedCondition &&
@@ -332,39 +399,39 @@ function buildRelationFilter(
     Object.keys(nestedCondition).length > 0;
 
   if (needsNestedParsing) {
-    // Parse nested conditions
+    // Parse nested conditions (pass tableConditions for nested relation filters)
+    // insideRelationFilter=true allows unqualified column names relative to target table
     const nestedWhere = parseConditionObject(
       nestedCondition,
       targetTable,
       schema,
+      tableConditions,
+      true, // insideRelationFilter
     );
 
     // Build the EXISTS/NOT EXISTS subquery
     switch (operator) {
       case "some":
         // At least one related record matches the condition
-        if (nestedWhere) {
-          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
-        } else {
-          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition})`;
-        }
+        return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
 
       case "none":
         // No related records match the condition
-        if (nestedWhere) {
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
-        } else {
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition})`;
-        }
+        return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
 
       case "every":
         // All related records match the condition (no record violates the condition)
         if (nestedWhere) {
           // "Every child satisfies condition" = "No child violates condition"
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND NOT (${nestedWhere}))`;
+          // Note: tableConditionExpr scopes which records we check, nestedWhere is the condition to satisfy
+          const baseWhere = buildSubqueryWhere(
+            joinCondition,
+            tableConditionExpr,
+          );
+          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${baseWhere} AND NOT (${nestedWhere}))`;
         } else {
           // If no condition, this is always true if there are no related records
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND FALSE)`;
+          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr)} AND FALSE)`;
         }
 
       case "is":
@@ -375,7 +442,7 @@ function buildRelationFilter(
         }
 
         if (nestedWhere) {
-          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
+          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
         } else {
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
@@ -393,7 +460,7 @@ function buildRelationFilter(
         }
 
         if (nestedWhere) {
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
+          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
         } else {
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(
@@ -414,15 +481,15 @@ function buildRelationFilter(
   switch (operator) {
     case "some":
       // At least one related record exists
-      return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition})`;
+      return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr)})`;
 
     case "none":
       // No related records exist
-      return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition})`;
+      return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr)})`;
 
     case "every":
       // All related records match (when no condition, this means no records violate it)
-      return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND FALSE)`;
+      return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr)} AND FALSE)`;
 
     case "is":
       // To-one relation check
@@ -452,9 +519,10 @@ function buildRelationFilter(
           nestedCondition,
           targetTable,
           schema,
+          tableConditions,
         );
         if (nestedWhere) {
-          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
+          return sql`EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
         } else {
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
@@ -484,9 +552,10 @@ function buildRelationFilter(
           nestedCondition,
           targetTable,
           schema,
+          tableConditions,
         );
         if (nestedWhere) {
-          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${joinCondition} AND ${nestedWhere})`;
+          return sql`NOT EXISTS (SELECT 1 FROM ${targetTableRef} WHERE ${buildSubqueryWhere(joinCondition, tableConditionExpr, nestedWhere)})`;
         } else {
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(

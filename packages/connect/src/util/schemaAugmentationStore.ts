@@ -54,7 +54,9 @@ export function computeAugmentationsHash(payload: {
   const sorted = {
     relations: [...payload.relations]
       .sort((a: any, b: any) =>
-        `${a.sourceTable}.${a.name}`.localeCompare(`${b.sourceTable}.${b.name}`),
+        `${a.sourceTable}.${a.name}`.localeCompare(
+          `${b.sourceTable}.${b.name}`,
+        ),
       )
       .map(normalizeObject),
     computedColumns: [...payload.computedColumns]

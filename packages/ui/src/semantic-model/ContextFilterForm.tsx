@@ -22,6 +22,8 @@ export interface ContextFilterFormProps {
   saveLoading?: boolean;
   /** Whether a delete operation is in progress */
   deleteLoading?: boolean;
+  /** Whether the form is in read-only mode (disables all mutations) */
+  readOnly?: boolean;
 }
 
 export function ContextFilterForm({
@@ -32,12 +34,13 @@ export function ContextFilterForm({
   onClose,
   saveLoading = false,
   deleteLoading = false,
+  readOnly = false,
 }: ContextFilterFormProps) {
   const [columnName, setColumnName] = useState(
-    table.condition?.column.name ?? ""
+    table.condition?.column.name ?? "",
   );
   const [fieldKey, setFieldKey] = useState(
-    table.condition?.userContextField.key ?? ""
+    table.condition?.userContextField.key ?? "",
   );
 
   const handleSave = async () => {
@@ -69,6 +72,7 @@ export function ContextFilterForm({
   }));
 
   const isLoading = saveLoading || deleteLoading;
+  const isDisabled = readOnly || isLoading;
 
   return (
     <Stack h="100%" justify="space-between">
@@ -92,7 +96,7 @@ export function ContextFilterForm({
           onChange={(value) => setColumnName(value ?? "")}
           data={columnOptions}
           description="The column to filter on"
-          disabled={isLoading}
+          disabled={isDisabled}
         />
 
         <Select
@@ -102,7 +106,7 @@ export function ContextFilterForm({
           onChange={(value) => setFieldKey(value ?? "")}
           data={userContextOptions}
           description="The user context value to match against"
-          disabled={isLoading}
+          disabled={isDisabled}
         />
 
         {table.condition && (
@@ -126,7 +130,7 @@ export function ContextFilterForm({
             color="red"
             onClick={handleDelete}
             loading={deleteLoading}
-            disabled={!table.condition || saveLoading}
+            disabled={readOnly || !table.condition || saveLoading}
           >
             Delete
           </Button>
@@ -136,7 +140,7 @@ export function ContextFilterForm({
           <Button
             onClick={handleSave}
             loading={saveLoading}
-            disabled={!columnName || !fieldKey || deleteLoading}
+            disabled={readOnly || !columnName || !fieldKey || deleteLoading}
           >
             Save
           </Button>

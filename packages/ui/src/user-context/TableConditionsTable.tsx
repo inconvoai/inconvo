@@ -108,7 +108,9 @@ export function TableConditionsTable({
             {conditions.map((condition) => (
               <Table.Tr key={condition.id}>
                 <Table.Td>
-                  <Text fw={500}>{condition.table.connection?.name ?? "—"}</Text>
+                  <Text fw={500}>
+                    {condition.table.connection?.name ?? "—"}
+                  </Text>
                 </Table.Td>
                 <Table.Td>
                   <Text fw={500}>{condition.table.name}</Text>

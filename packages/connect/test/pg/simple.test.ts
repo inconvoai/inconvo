@@ -11,7 +11,8 @@ describe("PostgreSQL Simple Query Test", () => {
 
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
-    getCachedSchema = (await import("../../src/util/schemaCache")).getCachedSchema;
+    getCachedSchema = (await import("../../src/util/schemaCache"))
+      .getCachedSchema;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });

@@ -47,4 +47,7 @@ export { TableDetail } from "./TableDetail";
 export type { TableDetailProps } from "./TableDetail";
 
 export { SemanticModelEditor } from "./SemanticModelEditor";
-export type { SemanticModelEditorProps, FilterValue } from "./SemanticModelEditor";
+export type {
+  SemanticModelEditorProps,
+  FilterValue,
+} from "./SemanticModelEditor";

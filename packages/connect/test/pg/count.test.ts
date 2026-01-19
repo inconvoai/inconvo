@@ -26,6 +26,7 @@ describe("PostgreSQL count Operation", () => {
   test("How many orders have we recorded?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "count" as const,
       operationParameters: {
@@ -55,9 +56,10 @@ describe("PostgreSQL count Operation", () => {
   test("How many orders do we have with a subtotal over $500?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          subtotal: {
+          "orders.subtotal": {
             gt: 500,
           },
         },
@@ -91,6 +93,7 @@ describe("PostgreSQL count Operation", () => {
   test("How many orders reference a product and how many unique products appear?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "count" as const,
       operationParameters: {
@@ -143,6 +146,7 @@ describe("PostgreSQL count Operation", () => {
   test("How many unique customers placed an order?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "count" as const,
       operationParameters: {
@@ -174,6 +178,7 @@ describe("PostgreSQL count Operation", () => {
     expect(() =>
       QuerySchema.parse({
         table: "orders",
+        tableConditions: null,
         whereAndArray: [],
         operation: "count" as const,
         operationParameters: {

@@ -26,6 +26,7 @@ describe("MySQL aggregate Operation", () => {
   test("What is the highest subtotal we have recorded on an order?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {
@@ -79,9 +80,10 @@ describe("MySQL aggregate Operation", () => {
   test("What is the highest subtotal for an order priced over $100?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          subtotal: {
+          "orders.subtotal": {
             gt: 100,
           },
         },
@@ -139,6 +141,7 @@ describe("MySQL aggregate Operation", () => {
   test("aggregates qualified column names with joins", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       operation: "aggregate" as const,
       operationParameters: {
         avg: null,
@@ -164,14 +167,14 @@ describe("MySQL aggregate Operation", () => {
       },
       whereAndArray: [
         {
-          organisation_id: {
+          "orders.organisation_id": {
             equals: 1,
           },
         },
         {
           AND: [
             {
-              created_at: {
+              "orders.created_at": {
                 gte: "2025-10-27T00:00:00.000Z",
               },
             },
@@ -203,6 +206,7 @@ describe("MySQL aggregate Operation", () => {
     const startDate = new Date("2025-10-27T00:00:00.000Z");
     const iql = {
       table: "orders",
+      tableConditions: null,
       operation: "aggregate" as const,
       operationParameters: {
         avg: null,
@@ -228,14 +232,14 @@ describe("MySQL aggregate Operation", () => {
       },
       whereAndArray: [
         {
-          organisation_id: {
+          "orders.organisation_id": {
             equals: 1,
           },
         },
         {
           AND: [
             {
-              created_at: {
+              "orders.created_at": {
                 gte: startDate.toISOString(),
               },
             },
@@ -281,6 +285,7 @@ describe("MySQL aggregate Operation", () => {
   test("countDistinct returns unique counts for specified columns", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "aggregate" as const,
       operationParameters: {

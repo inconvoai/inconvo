@@ -28,6 +28,7 @@ describe("BigQuery findDistinct Operation", () => {
   test("Find the distinct cities our customers live in", async () => {
     const iql = {
       table: "users",
+      tableConditions: null,
       whereAndArray: [],
       operation: "findDistinct" as const,
       operationParameters: {

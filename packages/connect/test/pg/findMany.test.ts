@@ -6,22 +6,26 @@ import { loadTestEnv } from "../loadTestEnv";
 const normalizeRows = (rows: any[]) =>
   rows.map((row) => ({
     ...row,
-    created_at:
-      row.created_at && typeof row.created_at.toISOString === "function"
-        ? row.created_at.toISOString()
-        : row.created_at,
+    orders_created_at:
+      row.orders_created_at && typeof row.orders_created_at.toISOString === "function"
+        ? row.orders_created_at.toISOString()
+        : row.orders_created_at,
   }));
 
 describe("PostgreSQL findMany Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
 
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
+
+    ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    await clearSchemaCache();
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
@@ -31,15 +35,17 @@ describe("PostgreSQL findMany Operation", () => {
 
   afterAll(async () => {
     if (db) await db.destroy();
+    await clearSchemaCache?.();
   });
 
   test("Which order recorded the highest subtotal and what product was sold?", async () => {
     const iql = {
       operation: "findMany" as const,
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          revenue: {
+          "orders.revenue": {
             gt: 0,
           },
         },
@@ -88,15 +94,12 @@ describe("PostgreSQL findMany Operation", () => {
       .limit(1)
       .execute();
 
+    // New flat output format: {table}_{column} for base, {alias_with_dots_as_underscores}_{column} for joins
     const expected = expectedRows.map((row: any) => ({
-      id: Number(row.id),
-      revenue: Number(row.revenue),
-      created_at: row.created_at,
-      "orders.product": [
-        {
-          title: row.product_title,
-        },
-      ],
+      orders_id: Number(row.id),
+      orders_revenue: Number(row.revenue),
+      orders_created_at: row.created_at,
+      "orders.product_title": row.product_title,
     }));
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));
@@ -106,9 +109,10 @@ describe("PostgreSQL findMany Operation", () => {
     const iql = {
       operation: "findMany" as const,
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          revenue: {
+          "orders.revenue": {
             gt: 0,
           },
         },
@@ -157,15 +161,12 @@ describe("PostgreSQL findMany Operation", () => {
       .limit(1)
       .execute();
 
+    // New flat output format: {table}_{column} for base, {alias_with_dots_as_underscores}_{column} for joins
     const expected = expectedRows.map((row: any) => ({
-      id: Number(row.id),
-      revenue: Number(row.revenue),
-      created_at: row.created_at,
-      "orders.product": [
-        {
-          title: row.product_title,
-        },
-      ],
+      orders_id: Number(row.id),
+      orders_revenue: Number(row.revenue),
+      orders_created_at: row.created_at,
+      "orders.product_title": row.product_title,
     }));
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));

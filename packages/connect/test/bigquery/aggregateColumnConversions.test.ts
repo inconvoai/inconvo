@@ -104,6 +104,7 @@ describe("BigQuery aggregate with column conversions", () => {
     const iql = {
       operation: "aggregate" as const,
       table: "events",
+      tableConditions: null,
       whereAndArray: [],
       operationParameters: {
         count: null,

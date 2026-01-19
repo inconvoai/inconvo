@@ -27,6 +27,7 @@ describe("MySQL countRelations Operation", () => {
   test("How many orders does each product have (order by most orders)?", async () => {
     const iql = {
       table: "products",
+      tableConditions: null,
       whereAndArray: [],
       operation: "countRelations" as const,
       operationParameters: {
@@ -88,6 +89,7 @@ describe("MySQL countRelations Operation", () => {
   test("How many distinct orders has each user placed?", async () => {
     const iql = {
       table: "users",
+      tableConditions: null,
       whereAndArray: [],
       operation: "countRelations" as const,
       operationParameters: {

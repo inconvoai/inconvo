@@ -194,6 +194,157 @@ const DATE_COMPONENT_RANGES: Record<
   quarterOfYear: { min: 1, max: 4, label: "quarter (1-4)" },
 };
 
+/**
+ * Bucket format patterns for dateInterval grouping
+ * These match the output format from buildDateIntervalExpression
+ */
+const DATE_INTERVAL_PATTERNS: Record<
+  "day" | "week" | "month" | "quarter" | "year" | "hour",
+  { regex: RegExp; example: string }
+> = {
+  day: { regex: /^\d{4}-\d{2}-\d{2}$/, example: "2024-01-15" },
+  week: { regex: /^\d{4}-W?\d{1,2}$/, example: "2024-W03 or 202403" },
+  month: { regex: /^\d{4}-\d{2}$/, example: "2024-01" },
+  quarter: { regex: /^\d{4}-Q[1-4]$/, example: "2024-Q1" },
+  year: { regex: /^\d{4}$/, example: "2024" },
+  hour: { regex: /^\d{4}-\d{2}-\d{2} \d{2}:00$/, example: "2024-01-15 14:00" },
+};
+
+/**
+ * Check if a string matches the expected bucket format for a dateInterval
+ */
+function isValidDateIntervalBucket(
+  value: string,
+  interval: "day" | "week" | "month" | "quarter" | "year" | "hour",
+): boolean {
+  const pattern = DATE_INTERVAL_PATTERNS[interval];
+  return pattern.regex.test(value);
+}
+
+/**
+ * Validate that a HAVING value is appropriate for a dateInterval groupKey
+ */
+function validateDateIntervalHavingValue(
+  value: unknown,
+  operator: string,
+  interval: "day" | "week" | "month" | "quarter" | "year" | "hour",
+): { valid: boolean; message: string; transformedValue?: unknown } {
+  const pattern = DATE_INTERVAL_PATTERNS[interval];
+
+  const validateSingleValue = (
+    v: unknown,
+  ): { valid: boolean; transformed?: string } => {
+    if (typeof v === "string" && isValidDateIntervalBucket(v, interval)) {
+      return { valid: true, transformed: v };
+    }
+    // Also accept numbers for year interval (MySQL/MSSQL return numbers)
+    if (interval === "year" && typeof v === "number") {
+      return { valid: true, transformed: String(v) };
+    }
+    return { valid: false };
+  };
+
+  if (operator === "in" || operator === "notIn") {
+    if (!Array.isArray(value)) {
+      return {
+        valid: false,
+        message: `Value for '${operator}' operator must be an array`,
+      };
+    }
+    const results = value.map((v) => validateSingleValue(v));
+    const invalidIndices = results
+      .map((r, i) => (!r.valid ? i : -1))
+      .filter((i) => i !== -1);
+    if (invalidIndices.length > 0) {
+      return {
+        valid: false,
+        message: `Invalid ${interval} bucket values at indices ${invalidIndices.join(", ")}. Expected format: "${pattern.example}". Do not use relative expressions like "now()-30d".`,
+      };
+    }
+    return {
+      valid: true,
+      message: "",
+      transformedValue: results.map((r) => r.transformed),
+    };
+  }
+
+  // For equals, not, lt, lte, gt, gte operators
+  const result = validateSingleValue(value);
+  if (!result.valid) {
+    return {
+      valid: false,
+      message: `Invalid ${interval} bucket value: ${JSON.stringify(value)}. Expected format: "${pattern.example}". Do not use relative expressions like "now()-30d".`,
+    };
+  }
+
+  return { valid: true, message: "", transformedValue: result.transformed };
+}
+
+/**
+ * Check if a string is a valid ISO date string (for aggregate min/max on date columns)
+ */
+function isValidIsoDateString(value: string): boolean {
+  // ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ
+  const isoDateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
+  if (isoDateRegex.test(value)) {
+    const date = new Date(value);
+    return !isNaN(date.getTime());
+  }
+  return false;
+}
+
+/**
+ * Validate that a HAVING value is appropriate for an aggregate on a date column (min/max)
+ */
+function validateDateAggregateHavingValue(
+  value: unknown,
+  operator: string,
+): { valid: boolean; message: string; transformedValue?: unknown } {
+  const validateSingleValue = (
+    v: unknown,
+  ): { valid: boolean; transformed?: string } => {
+    if (typeof v === "string" && isValidIsoDateString(v)) {
+      return { valid: true, transformed: v };
+    }
+    return { valid: false };
+  };
+
+  if (operator === "in" || operator === "notIn") {
+    if (!Array.isArray(value)) {
+      return {
+        valid: false,
+        message: `Value for '${operator}' operator must be an array`,
+      };
+    }
+    const results = value.map((v) => validateSingleValue(v));
+    const invalidIndices = results
+      .map((r, i) => (!r.valid ? i : -1))
+      .filter((i) => i !== -1);
+    if (invalidIndices.length > 0) {
+      return {
+        valid: false,
+        message: `Invalid date values at indices ${invalidIndices.join(", ")}. Expected ISO date strings (e.g., "2024-01-15" or "2024-01-15T00:00:00Z"). Do not use relative expressions like "now()-30d".`,
+      };
+    }
+    return {
+      valid: true,
+      message: "",
+      transformedValue: results.map((r) => r.transformed),
+    };
+  }
+
+  // For equals, not, lt, lte, gt, gte operators
+  const result = validateSingleValue(value);
+  if (!result.valid) {
+    return {
+      valid: false,
+      message: `Invalid date value: ${JSON.stringify(value)}. Expected ISO date string (e.g., "2024-01-15" or "2024-01-15T00:00:00Z"). Do not use relative expressions like "now()-30d".`,
+    };
+  }
+
+  return { valid: true, message: "", transformedValue: result.transformed };
+}
+
 function validateDateComponentHavingValue(
   value: unknown,
   component: "dayOfWeek" | "monthOfYear" | "quarterOfYear",
@@ -413,6 +564,9 @@ export function validateGroupByCandidate(
     }
   }
 
+  // Track transformed HAVING values for date columns
+  const havingTransforms = new Map<number, unknown>();
+
   if (data.having) {
     data.having.forEach((condition, index) => {
       if (condition.type === "groupKey") {
@@ -440,6 +594,22 @@ export function validateGroupByCandidate(
                 code: "invalid_date_component_value",
               });
             }
+          } else if (groupByEntry?.type === "dateInterval") {
+            // For dateInterval group keys, validate bucket format values
+            const valueValidation = validateDateIntervalHavingValue(
+              condition.value,
+              condition.operator,
+              groupByEntry.interval,
+            );
+            if (!valueValidation.valid) {
+              issues.push({
+                path: `having[${index}].value`,
+                message: valueValidation.message,
+                code: "invalid_date_interval_value",
+              });
+            } else if (valueValidation.transformedValue !== undefined) {
+              havingTransforms.set(index, valueValidation.transformedValue);
+            }
           }
         }
         return;
@@ -447,7 +617,30 @@ export function validateGroupByCandidate(
 
       ensureColumnTablesAllowed([condition.column], `having[${index}].column`);
 
-      if (
+      // Check if the column is a date column (for min/max on dates)
+      const isDateColumn = ctx.intervalColumns.includes(condition.column);
+
+      if (isDateColumn) {
+        // For date columns with min/max aggregates, validate the value is an ISO date
+        if (
+          condition.function === "min" ||
+          condition.function === "max"
+        ) {
+          const valueValidation = validateDateAggregateHavingValue(
+            condition.value,
+            condition.operator,
+          );
+          if (!valueValidation.valid) {
+            issues.push({
+              path: `having[${index}].value`,
+              message: valueValidation.message,
+              code: "invalid_date_value",
+            });
+          } else if (valueValidation.transformedValue !== undefined) {
+            havingTransforms.set(index, valueValidation.transformedValue);
+          }
+        }
+      } else if (
         condition.function !== "count" &&
         condition.function !== "countDistinct" &&
         !ctx.numericalColumns.includes(condition.column)
@@ -467,8 +660,17 @@ export function validateGroupByCandidate(
 
   const cleanAgg = (agg: string[] | null | undefined) =>
     agg && agg.length > 0 ? agg : null;
-  const cleanHaving = (having: typeof data.having) =>
-    having && having.length > 0 ? having : null;
+  const cleanHaving = (having: typeof data.having) => {
+    if (!having || having.length === 0) return null;
+    // Apply any transformed values from date validation
+    return having.map((condition, index) => {
+      const transformedValue = havingTransforms.get(index);
+      if (transformedValue !== undefined) {
+        return { ...condition, value: transformedValue };
+      }
+      return condition;
+    });
+  };
 
   const result: GroupByQuery["operationParameters"] = {
     joins: validatedJoins ?? null,

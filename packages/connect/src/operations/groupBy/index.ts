@@ -97,7 +97,10 @@ export async function groupBy(db: Kysely<any>, query: Query) {
     // For MSSQL, use flat columns instead of JSON subqueries
     flatAggregateSelections.push(
       ...buildFlatAggregateSelections("_count", countJsonFields),
-      ...buildFlatAggregateSelections("_countDistinct", countDistinctJsonFields),
+      ...buildFlatAggregateSelections(
+        "_countDistinct",
+        countDistinctJsonFields,
+      ),
       ...buildFlatAggregateSelections("_min", minJsonFields),
       ...buildFlatAggregateSelections("_max", maxJsonFields),
       ...buildFlatAggregateSelections("_sum", sumJsonFields),
@@ -185,9 +188,9 @@ export async function groupBy(db: Kysely<any>, query: Query) {
       );
       selections.push(intervalExpression.as(dialectAlias));
       groupByColumns.push(intervalExpression);
-      // BigQuery requires using alias in HAVING clause for computed expressions
+      // MySQL and BigQuery support alias in HAVING; PostgreSQL/MSSQL require the expression
       const havingExpr =
-        env.DATABASE_DIALECT === "bigquery"
+        env.DATABASE_DIALECT === "mysql" || env.DATABASE_DIALECT === "bigquery"
           ? sql.ref(dialectAlias)
           : intervalExpression;
       groupKeyExpressions.set(alias, {
@@ -206,7 +209,8 @@ export async function groupBy(db: Kysely<any>, query: Query) {
         tableName: tableName!,
         schema,
       });
-      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
+      const alias =
+        key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
@@ -258,7 +262,12 @@ export async function groupBy(db: Kysely<any>, query: Query) {
   }
 
   // Apply WHERE conditions before grouping
-  const whereExpr = buildWhereConditions(whereAndArray, table, schema);
+  const whereExpr = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereExpr) {
     dbQuery = dbQuery.where(whereExpr);
   }

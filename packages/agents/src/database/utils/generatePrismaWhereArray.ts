@@ -1,23 +1,25 @@
-import type { TableConditions, QuestionConditions } from "@repo/types";
-import type { DateCondition } from "@repo/types";
+import type { QuestionConditions } from "@repo/types";
+import type { ContextCondition } from "../index";
 
 export function generatePrismaWhereArray(
-  tableCondition: TableConditions,
-  questionCondition: QuestionConditions,
-  dateCondition: DateCondition,
+  contextConditions: ContextCondition[],
+  questionConditions: QuestionConditions,
 ) {
   const whereAndArray = [];
-  if (tableCondition && tableCondition.length > 0) {
-    const whereConditions = tableCondition.reduce(
+
+  // Add context conditions with qualified column names (table.column)
+  if (contextConditions && contextConditions.length > 0) {
+    const whereConditions = contextConditions.reduce(
       (
         acc: Record<
           string,
           Record<string, string | number | null | object | boolean>
         >,
-        tableCondition,
+        condition,
       ) => {
-        acc[tableCondition.column] = {
-          [tableCondition.operator]: tableCondition.value,
+        const qualifiedColumn = `${condition.table}.${condition.column}`;
+        acc[qualifiedColumn] = {
+          [condition.operator]: condition.value,
         };
         return acc;
       },
@@ -25,23 +27,11 @@ export function generatePrismaWhereArray(
     );
     whereAndArray.push(whereConditions);
   }
-  if (questionCondition) {
-    whereAndArray.push(questionCondition);
+
+  // Add question-derived conditions
+  if (questionConditions) {
+    whereAndArray.push(questionConditions);
   }
-  if (dateCondition) {
-    const dateConditions = dateCondition.OR.map((dateRange) => {
-      const dateLimits = dateRange.AND.map((dateLimit) => {
-        return {
-          [dateLimit.column]: {
-            [dateLimit.operator]: dateLimit.value,
-          },
-        };
-      });
-      return {
-        AND: [...dateLimits],
-      };
-    });
-    whereAndArray.push({ OR: [...dateConditions] });
-  }
+
   return whereAndArray;
 }

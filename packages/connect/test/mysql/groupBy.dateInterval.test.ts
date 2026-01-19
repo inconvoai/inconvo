@@ -33,6 +33,7 @@ describe("MySQL groupBy dateInterval buckets", () => {
   test("How many orders were placed in each month?", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {

@@ -15,5 +15,8 @@ export interface DBQuery {
   operation: string;
   operationParameters: Record<string, unknown>;
   whereAndArray?: WhereAndArray;
-  jsonColumnSchema?: unknown;
+  tableConditions: Record<
+    string,
+    { column: string; value: string | number }
+  > | null;
 }

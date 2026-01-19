@@ -1,7 +1,7 @@
 export const operationDocs = {
   findMany: {
     description:
-      "Returns one or more records for a given table using a `select` map keyed by table alias. Each key lists the columns to fetch for that alias. You can optionally include joins and an order clause (set to null if not ordering).",
+      "Returns one or more records for a given table using a `select` map keyed by table alias. Each key lists the columns to fetch for that alias. You can optionally include joins and an order clause (set to null if not ordering). Output columns are flattened with format: `table_column` for base table, `alias_column` for joined tables (dots in alias become underscores).",
     examples: [
       {
         question:
@@ -35,24 +35,20 @@ export const operationDocs = {
         },
         response: [
           {
-            name: "John",
-            address: {
-              line1: "123 Main St",
-              line2: "Apt 2",
-              city: "Boston",
-              state: "MA",
-              zip: "02110",
-            },
+            user_name: "John",
+            "user__address_line1": "123 Main St",
+            "user__address_line2": "Apt 2",
+            "user__address_city": "Boston",
+            "user__address_state": "MA",
+            "user__address_zip": "02110",
           },
           {
-            name: "Joe",
-            address: {
-              line1: "456 Elm St",
-              line2: "Apt 3",
-              city: "New York",
-              state: "NY",
-              zip: "10001",
-            },
+            user_name: "Joe",
+            "user__address_line1": "456 Elm St",
+            "user__address_line2": "Apt 3",
+            "user__address_city": "New York",
+            "user__address_state": "NY",
+            "user__address_zip": "10001",
           },
         ],
       },
@@ -103,17 +99,13 @@ export const operationDocs = {
         },
         response: [
           {
-            id: 1,
-            name: "Alice",
-            created_at: "2024-10-01T12:00:00.000Z",
-            orders: [
-              {
-                id: 301,
-                subtotal: 199.99,
-                created_at: "2024-10-02T09:00:00.000Z",
-                products: [{ title: "Noise Cancelling Headphones" }],
-              },
-            ],
+            users_id: 1,
+            users_name: "Alice",
+            users_created_at: "2024-10-01T12:00:00.000Z",
+            "users__orders_id": 301,
+            "users__orders_subtotal": 199.99,
+            "users__orders_created_at": "2024-10-02T09:00:00.000Z",
+            "users__orders__products_title": "Noise Cancelling Headphones",
           },
         ],
       },

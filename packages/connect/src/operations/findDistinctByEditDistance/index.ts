@@ -53,7 +53,12 @@ export async function findDistinctByEditDistance(
   dbQuery = applyLimit(dbQuery, 5000);
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

@@ -28,16 +28,17 @@ describe("MySQL findMany Operation", () => {
     const iql = {
       operation: "findMany" as const,
       table: "orders",
+      tableConditions: null,
       whereAndArray: [
         {
-          revenue: {
+          "orders.subtotal": {
             gt: 0,
           },
         },
       ],
       operationParameters: {
         select: {
-          orders: ["id", "revenue", "created_at"],
+          orders: ["id", "subtotal", "created_at"],
           "orders.product": ["title"],
         },
         joins: [
@@ -53,7 +54,7 @@ describe("MySQL findMany Operation", () => {
           },
         ],
         orderBy: {
-          column: "revenue",
+          column: "subtotal",
           direction: "desc" as const,
         },
         limit: 1,
@@ -63,40 +64,35 @@ describe("MySQL findMany Operation", () => {
     const parsed = QuerySchema.parse(iql);
     const response = await findMany(db, parsed);
 
-    const revenueExpr = sql`((o.subtotal - o.discount) + o.tax) * o.quantity`;
-
     const expectedRows = await db
       .selectFrom("orders as o")
       .innerJoin("products as p", "p.id", "o.product_id")
       .select([
         sql<number>`o.id`.as("id"),
-        sql<number>`${revenueExpr}`.as("revenue"),
+        sql<number>`o.subtotal`.as("subtotal"),
         sql<string>`p.title`.as("product_title"),
         sql`o.created_at`.as("created_at"),
       ])
-      .where(revenueExpr, ">", 0)
-      .orderBy(revenueExpr, "desc")
+      .where("o.subtotal", ">", 0)
+      .orderBy("o.subtotal", "desc")
       .limit(1)
       .execute();
 
+    // New flat output format: {table}_{column} for base, {alias_with_dots_as_underscores}_{column} for joins
     const expected = expectedRows.map((row: any) => ({
-      id: Number(row.id),
-      revenue: Number(row.revenue),
-      created_at: row.created_at,
-      "orders.product": [
-        {
-          title: row.product_title,
-        },
-      ],
+      orders_id: Number(row.id),
+      orders_subtotal: Number(row.subtotal),
+      orders_created_at: row.created_at,
+      "orders.product_title": row.product_title,
     }));
 
     const normalizeRows = (rows: any[]) =>
       rows.map((row) => ({
         ...row,
-        created_at:
-          row.created_at && typeof row.created_at.toISOString === "function"
-            ? row.created_at.toISOString()
-            : row.created_at,
+        orders_created_at:
+          row.orders_created_at && typeof row.orders_created_at.toISOString === "function"
+            ? row.orders_created_at.toISOString()
+            : row.orders_created_at,
       }));
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));

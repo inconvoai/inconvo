@@ -112,7 +112,12 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     dbQuery = dbQuery.select(selectFields);
   }
 
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

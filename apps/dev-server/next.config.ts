@@ -7,7 +7,12 @@ import * as path from "path";
 dotenv.config({ path: path.join(process.cwd(), ".inconvo.env") });
 
 const config: NextConfig = {
-  transpilePackages: ["@repo/ui", "@repo/types", "@repo/agents", "@repo/connect"],
+  transpilePackages: [
+    "@repo/ui",
+    "@repo/types",
+    "@repo/agents",
+    "@repo/connect",
+  ],
   serverExternalPackages: [
     "pino",
     "pino-pretty",

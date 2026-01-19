@@ -10,7 +10,11 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconInfoCircle } from "@tabler/icons-react";
-import type { TableSchema, ColumnUnitPayload, ComputedColumnUnitPayload } from "./types";
+import type {
+  TableSchema,
+  ColumnUnitPayload,
+  ComputedColumnUnitPayload,
+} from "./types";
 
 export interface UnitsFormProps {
   /** The table schema (used to get available columns) */
@@ -53,12 +57,12 @@ export function UnitsForm({
 
   // Get numeric columns (regular columns)
   const numericColumns = (table.columns ?? []).filter((col) =>
-    ["number"].some((type) => col.type.toLowerCase().includes(type))
+    ["number"].some((type) => col.type.toLowerCase().includes(type)),
   );
 
   // Get numeric computed columns
   const numericComputedColumns = (table.computedColumns ?? []).filter((col) =>
-    ["number"].some((type) => col.type.toLowerCase().includes(type))
+    ["number"].some((type) => col.type.toLowerCase().includes(type)),
   );
 
   // Build column options with group info
@@ -69,7 +73,9 @@ export function UnitsForm({
     })),
     ...numericComputedColumns.map((col) => ({
       value: `computed:${col.id}`,
-      label: col.unit ? `${col.name} (${col.unit}) [computed]` : `${col.name} [computed]`,
+      label: col.unit
+        ? `${col.name} (${col.unit}) [computed]`
+        : `${col.name} [computed]`,
     })),
   ];
 
@@ -91,7 +97,7 @@ export function UnitsForm({
     } else {
       // Handle regular column
       const selectedColumn = numericColumns.find(
-        (col) => col.id === selectedColumnId
+        (col) => col.id === selectedColumnId,
       );
       if (!selectedColumn) return;
 
@@ -128,7 +134,9 @@ export function UnitsForm({
 
           if (value?.startsWith("computed:")) {
             const computedColumnId = value.replace("computed:", "");
-            const computedColumn = numericComputedColumns.find((col) => col.id === computedColumnId);
+            const computedColumn = numericComputedColumns.find(
+              (col) => col.id === computedColumnId,
+            );
             form.setFieldValue("unit", computedColumn?.unit ?? "");
           } else {
             const column = numericColumns.find((col) => col.id === value);

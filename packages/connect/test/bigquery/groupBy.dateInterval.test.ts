@@ -34,6 +34,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
   test("counts orders grouped by month bucket", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {

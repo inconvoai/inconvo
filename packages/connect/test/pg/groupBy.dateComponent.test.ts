@@ -51,6 +51,7 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
   test("groups orders by day of week with canonical ordering", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -97,6 +98,7 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
   test("groups orders by month with canonical ordering", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {
@@ -143,6 +145,7 @@ describe("PostgreSQL groupBy dateComponent buckets", () => {
   test("groups orders by quarter of year", async () => {
     const iql = {
       table: "orders",
+      tableConditions: null,
       whereAndArray: [],
       operation: "groupBy" as const,
       operationParameters: {

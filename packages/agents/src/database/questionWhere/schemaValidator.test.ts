@@ -13,6 +13,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
     return;
   }
 
+  const tableName = table.name;
+
+  // Helper to qualify column names
+  const qualify = (colName: string) => `${tableName}.${colName}`;
+
   const stringCol = table.columns.find((c) => c.type === "string");
   const numberCol = table.columns.find((c) => c.type === "number");
   const booleanCol = table.columns.find((c) => c.type === "boolean");
@@ -22,7 +27,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
   const toManyRel = table.outwardRelations.find((r) => r.isList === true);
 
   test("null (no filters) is valid", () => {
-    const result = validateQuestionConditions(null, table, fullSchema);
+    const result = validateQuestionConditions(null, table, fullSchema, tableName);
     expect(result.success).toBe(true);
   });
 
@@ -31,11 +36,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [stringCol.name]: { equals: "Example Value" },
+            [qualify(stringCol.name)]: { equals: "Example Value" },
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(true);
     });
   }
@@ -45,11 +50,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [numberCol.name]: { gt: 10 },
+            [qualify(numberCol.name)]: { gt: 10 },
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(true);
     });
   }
@@ -59,11 +64,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [booleanCol.name]: { equals: true },
+            [qualify(booleanCol.name)]: { equals: true },
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(true);
     });
   }
@@ -73,11 +78,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [dateCol.name]: { gte: new Date().toISOString() },
+            [qualify(dateCol.name)]: { gte: new Date().toISOString() },
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(true);
     });
   }
@@ -98,7 +103,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
             },
           ],
         };
-        const result = validateQuestionConditions(candidate, table, fullSchema);
+        const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
         expect(result.success).toBe(true);
       });
     }
@@ -120,7 +125,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
             },
           ],
         };
-        const result = validateQuestionConditions(candidate, table, fullSchema);
+        const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
         expect(result.success).toBe(true);
       });
     }
@@ -134,7 +139,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
         },
       ],
     };
-    const result = validateQuestionConditions(candidate, table, fullSchema);
+    const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
     expect(result.success).toBe(false);
   });
 
@@ -143,11 +148,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [stringCol.name]: { startsWith: "abc" }, // startsWith not in dynamic schema
+            [qualify(stringCol.name)]: { startsWith: "abc" }, // startsWith not in dynamic schema
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(false);
     });
   }
@@ -157,12 +162,12 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       const candidate = {
         AND: [
           {
-            [stringCol.name]: { equals: "x" },
-            [numberCol.name]: { equals: 5 },
+            [qualify(stringCol.name)]: { equals: "x" },
+            [qualify(numberCol.name)]: { equals: 5 },
           },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(false);
     });
   }
@@ -189,7 +194,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
             },
           ],
         };
-        const result = validateQuestionConditions(candidate, table, fullSchema);
+        const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
         expect(result.success).toBe(false);
       });
     }
@@ -214,7 +219,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
             },
           ],
         };
-        const result = validateQuestionConditions(candidate, table, fullSchema);
+        const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
         expect(result.success).toBe(false);
       });
     }
@@ -230,7 +235,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
         },
       ],
     };
-    const result = validateQuestionConditions(candidate, table, fullSchema);
+    const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
     expect(result.success).toBe(false);
   });
 
@@ -246,7 +251,7 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
         },
       ],
     };
-    const result = validateQuestionConditions(candidate, table, fullSchema);
+    const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
     expect(result.success).toBe(false);
   });
 
@@ -254,11 +259,11 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
     test("valid AND group mixed with invalid unknown column fails", () => {
       const candidate = {
         AND: [
-          { [stringCol.name]: { equals: "X" } },
+          { [qualify(stringCol.name)]: { equals: "X" } },
           { __UnknownCol__: { equals: 5 } },
         ],
       };
-      const result = validateQuestionConditions(candidate, table, fullSchema);
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(false);
     });
   }

@@ -10,7 +10,11 @@ function hashContext(context: Record<string, string | number>): string {
     .sort()
     .map((key) => `${key}:${String(context[key])}`)
     .join("|");
-  return crypto.createHash("sha256").update(flattened).digest("hex").slice(0, 16);
+  return crypto
+    .createHash("sha256")
+    .update(flattened)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**

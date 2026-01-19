@@ -36,7 +36,6 @@ export type {
   Query,
   WhereConditions,
   QuestionConditions,
-  DateCondition,
   JoinPathHop,
   GroupByKey,
   GroupByOrderBy,
@@ -48,7 +47,6 @@ export type {
 export {
   QuerySchema,
   questionConditionsSchema,
-  dateConditionSchema,
   whereAndArraySchema,
   joinDescriptorSchema,
   joinPathHopSchema,

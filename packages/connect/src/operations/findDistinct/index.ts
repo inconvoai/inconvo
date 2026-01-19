@@ -32,7 +32,12 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
     .distinct();
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    query.tableConditions,
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

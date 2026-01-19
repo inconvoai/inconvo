@@ -46,7 +46,10 @@ export interface ManualRelationFormProps {
   /** Callback when a new relation is created */
   onCreate?: (payload: ManualRelationCreatePayload) => Promise<void>;
   /** Callback when an existing relation is updated */
-  onUpdate?: (relationId: string, payload: ManualRelationUpdatePayload) => Promise<void>;
+  onUpdate?: (
+    relationId: string,
+    payload: ManualRelationUpdatePayload,
+  ) => Promise<void>;
   /** Callback when cancel/close is clicked */
   onClose: () => void;
   /** Whether a save is in progress */
@@ -111,7 +114,7 @@ export function ManualRelationForm({
         label: column.name,
         value: column.name,
       })),
-    [table.columns]
+    [table.columns],
   );
 
   const targetTableOptions = useMemo(
@@ -122,7 +125,7 @@ export function ManualRelationForm({
           label: t.name,
           value: t.id,
         })),
-    [availableTables, table.id]
+    [availableTables, table.id],
   );
 
   const selectedTargetTable = useMemo(() => {
@@ -135,7 +138,7 @@ export function ManualRelationForm({
         label: column.name,
         value: column.name,
       })) ?? [],
-    [selectedTargetTable]
+    [selectedTargetTable],
   );
 
   const handleSubmit = form.onSubmit(
@@ -149,7 +152,8 @@ export function ManualRelationForm({
       if (
         values.columnPairs.length === 0 ||
         values.columnPairs.some(
-          (pair: ColumnPair) => !pair.sourceColumnName || !pair.targetColumnName
+          (pair: ColumnPair) =>
+            !pair.sourceColumnName || !pair.targetColumnName,
         )
       ) {
         setSubmitError("All column mappings must have both source and target.");
@@ -175,10 +179,10 @@ export function ManualRelationForm({
             ? error.message
             : isEditing
               ? "Failed to update manual relation."
-              : "Failed to create manual relation."
+              : "Failed to create manual relation.",
         );
       }
-    }
+    },
   );
 
   const addColumnPair = () => {
@@ -300,8 +304,8 @@ export function ManualRelationForm({
                                   ...existing,
                                   sourceColumnName: value ?? "",
                                 }
-                              : existing
-                        )
+                              : existing,
+                        ),
                       )
                     }
                   />
@@ -324,8 +328,8 @@ export function ManualRelationForm({
                                   ...existing,
                                   targetColumnName: value ?? "",
                                 }
-                              : existing
-                        )
+                              : existing,
+                        ),
                       )
                     }
                   />

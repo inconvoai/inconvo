@@ -11,7 +11,9 @@ describe("MySQL findDistinctByEditDistance Operation", () => {
 
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
-    findDistinctByEditDistance = (await import("~/operations/findDistinctByEditDistance")).findDistinctByEditDistance;
+    findDistinctByEditDistance = (
+      await import("~/operations/findDistinctByEditDistance")
+    ).findDistinctByEditDistance;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
   });
@@ -24,6 +26,7 @@ describe("MySQL findDistinctByEditDistance Operation", () => {
     const query = {
       operation: "findDistinctByEditDistance" as const,
       table: "products",
+      tableConditions: null,
       whereAndArray: [],
       operationParameters: {
         column: "title",

@@ -30,6 +30,7 @@ describe("BigQuery findDistinctByEditDistance Operation", () => {
     const iql = {
       operation: "findDistinctByEditDistance" as const,
       table: "products",
+      tableConditions: null,
       whereAndArray: [],
       operationParameters: {
         column: "title",

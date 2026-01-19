@@ -607,4 +607,312 @@ describe("groupBy validator", () => {
       expect(result.issues[0]?.message).toContain("day of week (1-7)");
     }
   });
+
+  it("rejects HAVING dateInterval groupKey with relative date expression", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "month" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "gte" as const,
+          value: "now()-30d", // Invalid - should be bucket format
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_interval_value");
+      expect(result.issues[0]?.message).toContain("2024-01");
+    }
+  });
+
+  it("accepts HAVING dateInterval groupKey with valid month bucket format", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "month" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "gte" as const,
+          value: "2026-01", // Valid month bucket format
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.having?.[0]?.value).toBe("2026-01");
+    }
+  });
+
+  it("accepts HAVING dateInterval groupKey with valid day bucket format", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "day" as const,
+          alias: "day",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "day",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "day",
+          operator: "lt" as const,
+          value: "2026-01-18", // Valid day bucket format
+        },
+      ],
+      limit: 30,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
+
+  it("rejects HAVING dateInterval groupKey with full ISO date for month interval", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "month" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "gte" as const,
+          value: "2026-01-01", // Full date - invalid for month bucket
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_interval_value");
+    }
+  });
+
+  it("rejects HAVING dateInterval groupKey with in operator and invalid bucket formats", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "month" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "in" as const,
+          value: ["2026-01", "now()-30d"], // Second value is invalid
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues[0]?.code).toBe("invalid_date_interval_value");
+    }
+  });
+
+  it("accepts HAVING dateInterval groupKey with in operator and valid month buckets", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "month" as const,
+          alias: "month",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "month",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "month",
+          operator: "in" as const,
+          value: ["2026-01", "2026-02", "2026-03"], // All valid month buckets
+        },
+      ],
+      limit: 12,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+    if (result.status === "valid") {
+      expect(result.result.having?.[0]?.value).toEqual([
+        "2026-01",
+        "2026-02",
+        "2026-03",
+      ]);
+    }
+  });
+
+  it("accepts HAVING dateInterval groupKey with year bucket format", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "year" as const,
+          alias: "year",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "year",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "year",
+          operator: "gte" as const,
+          value: "2024", // Valid year bucket format
+        },
+      ],
+      limit: 10,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
+
+  it("accepts HAVING dateInterval groupKey with quarter bucket format", () => {
+    const candidate = {
+      joins: null,
+      groupBy: [
+        {
+          type: "dateInterval" as const,
+          column: "users.createdAt",
+          interval: "quarter" as const,
+          alias: "quarter",
+        },
+      ],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "groupKey" as const,
+        key: "quarter",
+        direction: "asc" as const,
+      },
+      having: [
+        {
+          type: "groupKey" as const,
+          key: "quarter",
+          operator: "in" as const,
+          value: ["2024-Q1", "2024-Q2"], // Valid quarter bucket format
+        },
+      ],
+      limit: 10,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
 });

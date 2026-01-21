@@ -77,10 +77,12 @@ interface QuestionAgentParams {
   agentId: string;
   /** Unique identifier for this run/message. Used to scope the sandbox instance. */
   runId: string;
-  /** User context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
-  userContextPath: string;
+  /** User identifier for scoping datasets and conversation data. */
+  userIdentifier: string;
   /** Available dataset files with metadata for agent context */
   availableDatasets?: AvailableDataset[];
+  /** User context for context-scoped dataset mounting in sandbox. */
+  userContext?: Record<string, string | number>;
   /** Optional callback to trigger conversation titling (e.g., via Inngest in platform) */
   onTitleConversation?: (
     conversationId: string,
@@ -572,7 +574,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
-            userContextPath: params.userContextPath,
+            userIdentifier: params.userIdentifier,
+            userContext: params.userContext,
           });
           const executionResult = await sandboxSession.executeCode(input.code);
           const toolCallId = config.toolCall?.id;
@@ -609,7 +612,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           "**Use this for intermediate analysis.** For final responses to the user, use `generateResponse` instead.\n\n" +
           "**File paths (IMPORTANT - always use full paths):**\n" +
           "- Database results: `/conversation_data/{sandboxFile}`\n" +
-          "- Static datasets: `/datasets/{filename}`\n\n" +
+          "- Datasets: Use the exact `targetPath` from the available datasets list\n\n" +
           "Only printed output is returned, so print any data you need to inspect.\n\n" +
           "**Available libraries:** pandas, numpy, json, altair\n\n" +
           "**Example:**\n" +
@@ -643,7 +646,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           const sandboxSession = sandboxClient.sandbox({
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
-            userContextPath: params.userContextPath,
+            userIdentifier: params.userIdentifier,
+            userContext: params.userContext,
           });
 
           const executionResult = await sandboxSession.executeCode(input.code);
@@ -745,7 +749,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           "## IMPORTANT: File paths\n\n" +
           "Always use the FULL PATH when opening files:\n" +
           "- Database results: `/conversation_data/{sandboxFile}`\n" +
-          "- Static datasets: `/datasets/{filename}`\n\n" +
+          "- Datasets: Use the exact `targetPath` from the available datasets list\n\n" +
           "✅ CORRECT: `open('/conversation_data/abc-123.json')`\n" +
           "❌ WRONG: `open('abc-123.json')` - File not found!\n\n" +
           "---\n\n" +
@@ -754,6 +758,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           "✅ CORRECT: `chart(alt.Chart(df).mark_bar().encode(...), 'message')`\n" +
           "❌ WRONG: `chart({'mark': 'bar', ...}, 'message')` - This will fail!\n\n" +
           "The function signature is: `chart(altair_chart_object, message_string)`\n\n" +
+          "**For complex charts:** Take time to carefully plan your approach. Consider the data structure, appropriate chart type, axis encodings, color schemes, and any transformations needed. Think through edge cases like missing data or unexpected values.\n\n" +
           "---\n\n" +
           "## Examples\n\n" +
           "### Table response\n" +
@@ -855,7 +860,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       const base64Content = Buffer.from(jsonString, "utf-8").toString("base64");
       await sandboxClient.uploadConversationData({
         conversationId: params.conversation.id,
-        userContextPath: params.userContextPath,
+        userIdentifier: params.userIdentifier,
         files: [
           {
             name: sandboxFileName,
@@ -918,7 +923,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const sandboxSession = sandboxClient.sandbox({
       conversationId: params.conversation.id,
       runId: state.runId,
-      userContextPath: params.userContextPath,
+      userIdentifier: params.userIdentifier,
+      userContext: params.userContext,
     });
     void sandboxSession.start();
 
@@ -931,7 +937,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent_gpt5_dev:1f1e8ce0");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:c092a503");
 
     // Format tables as a markdown list grouped by database
     const tables = params.databases
@@ -944,18 +950,60 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       .join("\n");
 
     // Format available datasets for agent context
-    const availableDatasets =
-      params.availableDatasets && params.availableDatasets.length > 0
-        ? params.availableDatasets
-            .map((ds) => {
-              const schemaInfo = ds.schema
-                ? `columns: [${ds.schema.join(", ")}]`
-                : "schema: unknown";
-              const notesInfo = ds.notes ? ` Notes: "${ds.notes}"` : "";
-              return `- ${ds.targetPath}: ${schemaInfo}${notesInfo}`;
-            })
-            .join("\n")
-        : "No datasets available";
+    const availableDatasets = (() => {
+      if (!params.availableDatasets || params.availableDatasets.length === 0) {
+        return "No datasets available";
+      }
+
+      // Group datasets by scope (user vs context)
+      const userDatasets: AvailableDataset[] = [];
+      const contextDatasets: Map<string, AvailableDataset[]> = new Map();
+
+      for (const ds of params.availableDatasets) {
+        // Context datasets have paths like /datasets/context_{key}/filename
+        const contextMatch = ds.targetPath.match(
+          /\/datasets\/context_([^/]+)\//,
+        );
+        if (contextMatch?.[1]) {
+          const contextKey = contextMatch[1];
+          if (!contextDatasets.has(contextKey)) {
+            contextDatasets.set(contextKey, []);
+          }
+          contextDatasets.get(contextKey)!.push(ds);
+        } else {
+          userDatasets.push(ds);
+        }
+      }
+
+      const formatDataset = (ds: AvailableDataset) => {
+        const lines = [`  - ${ds.name} (${ds.targetPath})`];
+        if (ds.schema && ds.schema.length > 0) {
+          lines.push(`    Columns: ${ds.schema.join(", ")}`);
+        }
+        if (ds.notes) {
+          lines.push(`    Notes: ${ds.notes}`);
+        }
+        return lines.join("\n");
+      };
+
+      const sections: string[] = [];
+
+      // User-specific datasets
+      if (userDatasets.length > 0) {
+        sections.push(
+          `User-specific datasets:\n${userDatasets.map(formatDataset).join("\n")}`,
+        );
+      }
+
+      // Context-scoped datasets (shared)
+      for (const [contextKey, datasets] of contextDatasets) {
+        sections.push(
+          `Shared datasets (${contextKey}):\n${datasets.map(formatDataset).join("\n")}`,
+        );
+      }
+
+      return sections.join("\n\n");
+    })();
 
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
       tables,
@@ -986,7 +1034,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         const sandboxSession = sandboxClient.sandbox({
           conversationId: params.conversation.id,
           runId: state.runId,
-          userContextPath: params.userContextPath,
+          userIdentifier: params.userIdentifier,
+          userContext: params.userContext,
         });
         await sandboxSession.destroy();
       } catch {

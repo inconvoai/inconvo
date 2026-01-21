@@ -5,19 +5,31 @@ import { getSandbox } from "@cloudflare/sandbox";
 import { zValidator } from "@hono/zod-validator";
 export { Sandbox } from "@cloudflare/sandbox";
 
-import { ANALYZE_JSON_SCRIPT } from "./scripts";
 import {
-  datasetsQuerySchema,
-  datasetsDeleteQuerySchema,
+  datasetsListQuerySchema,
   datasetsDeleteByPathQuerySchema,
   conversationDataUploadBodySchema,
   sandboxParamsSchema,
   executeBodySchema,
   type SandboxParams,
 } from "./schemas";
+import {
+  validateContextKey,
+  validateContextValue,
+  validateUserIdentifier,
+} from "./validation";
+
+// Internal mount configuration (not exposed to callers)
+interface DatasetMount {
+  type: "user" | "context";
+  key?: string;
+  mountPath: string;
+  prefix: string;
+}
 
 const CONVERSATION_DATA_MOUNT_PATH = "/conversation_data";
 const DATASETS_MOUNT_PATH = "/datasets";
+const DATASETS_USER_MOUNT_PATH = "/datasets/user";
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // Context type for routes that use requireOrgAndAgent middleware
@@ -26,7 +38,7 @@ type AuthedContext = Context<{
   Variables: { orgId: string; agentId: string };
 }>;
 
-const BUCKET_OPTIONS = (c: AuthedContext) => ({
+const BUCKET_OPTIONS = (c: AuthedContext, prefix: string) => ({
   endpoint: "https://54b7b8f961038aedf6044dd0c242e67d.r2.cloudflarestorage.com",
   provider: "r2" as const,
   readOnly: true,
@@ -35,6 +47,7 @@ const BUCKET_OPTIONS = (c: AuthedContext) => ({
     secretAccessKey: c.env.R2_SECRET_ACCESS_KEY,
   },
   s3fsOptions: ["use_path_request_style", "stat_cache_expire=1"],
+  prefix,
 });
 
 const isUnsafeFileName = (name: string) =>
@@ -153,26 +166,24 @@ app.use("*", requireApiKey);
 // Helper functions
 // ============================================================================
 
-/** Build bucket path for conversation data: "bucket:/orgId/agentId/userContextPath/conversationId/" */
-const buildConversationDataPath = (
-  bucketName: string,
+/** Build prefix for conversation data: "/orgId/agentId/userIdentifier/conversationId/" */
+const buildConversationDataPrefix = (
   orgId: string,
   agentId: string,
-  userContextPath: string,
+  userIdentifier: string,
   conversationId: string,
-) => `${bucketName}:/${orgId}/${agentId}/${userContextPath}/${conversationId}/`;
+) => `/${orgId}/${agentId}/${userIdentifier}/${conversationId}/`;
 
-/** Build bucket path for datasets: "bucket:/orgId/agentId/userContextPath/" */
-const buildDatasetsPath = (
-  bucketName: string,
+/** Build prefix for user-scoped datasets: "/orgId/agentId/userIdentifier/{value}/" */
+const buildUserIdentifierPrefix = (
   orgId: string,
   agentId: string,
-  userContextPath: string,
-) => `${bucketName}:/${orgId}/${agentId}/${userContextPath}/`;
+  userIdentifier: string,
+) => `/${orgId}/${agentId}/userIdentifier/${userIdentifier}/`;
 
 const mountBucketIfNeeded = async (
   sandbox: Awaited<ReturnType<typeof getSandbox>>,
-  bucketPath: string,
+  bucketName: string,
   mountPath: string,
   options: ReturnType<typeof BUCKET_OPTIONS>,
 ) => {
@@ -180,7 +191,7 @@ const mountBucketIfNeeded = async (
   // The check adds ~2s on cold start waiting for container.
   // If already mounted, we catch the "already in use" error.
   try {
-    await sandbox.mountBucket(bucketPath, mountPath, options);
+    await sandbox.mountBucket(bucketName, mountPath, options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // If the mount path is already in use, treat it as mounted and continue.
@@ -254,6 +265,77 @@ const copyBucketFilesToSandbox = async (
   } while (cursor);
 };
 
+/**
+ * Build dataset mounts based on userIdentifier and userContext.
+ * - Always includes user-scoped datasets mount
+ * - Includes context-scoped mounts for contexts that exist AND match userContext
+ */
+const buildDatasetMounts = async (
+  c: AuthedContext,
+  orgId: string,
+  agentId: string,
+  userIdentifier: string,
+  userContext?: Record<string, string | number>,
+): Promise<DatasetMount[]> => {
+  const mounts: DatasetMount[] = [];
+
+  // 1. Always add user-scoped datasets mount
+  mounts.push({
+    type: "user",
+    mountPath: DATASETS_USER_MOUNT_PATH,
+    prefix: buildUserIdentifierPrefix(orgId, agentId, userIdentifier),
+  });
+
+  // 2. Add context-scoped mounts if userContext is provided
+  if (userContext && typeof userContext === "object") {
+    // List existing context folders from R2
+    const contextPrefix = `${orgId}/${agentId}/userContext/`;
+    const existingContexts: { key: string; value: string }[] = [];
+
+    let cursor: string | undefined;
+    do {
+      const result = await c.env.CUSTOMER_DATASETS.list({
+        prefix: contextPrefix,
+        delimiter: "/",
+        cursor,
+        limit: 1000,
+      });
+
+      for (const delimitedPrefix of result.delimitedPrefixes ?? []) {
+        const folderPath = delimitedPrefix.slice(contextPrefix.length);
+        const folderName = folderPath.replace(/\/$/, "");
+        const colonIndex = folderName.indexOf(":");
+        if (colonIndex > 0) {
+          const key = folderName.slice(0, colonIndex);
+          const value = folderName.slice(colonIndex + 1);
+          if (key && value) {
+            existingContexts.push({ key, value });
+          }
+        }
+      }
+      cursor = result.truncated ? result.cursor : undefined;
+    } while (cursor);
+
+    // Filter to contexts that match userContext
+    const matchingContexts = existingContexts.filter(
+      (ctx) =>
+        ctx.key in userContext && String(userContext[ctx.key]) === ctx.value,
+    );
+
+    // Add mounts for matching contexts
+    for (const { key, value } of matchingContexts) {
+      mounts.push({
+        type: "context",
+        key,
+        mountPath: `${DATASETS_MOUNT_PATH}/context_${key}`,
+        prefix: `/${orgId}/${agentId}/userContext/${key}:${value}/`,
+      });
+    }
+  }
+
+  return mounts;
+};
+
 /** Get or create sandbox with mounted buckets (or copy files in dev mode) */
 const getSandboxWithContext = async (
   c: AuthedContext,
@@ -274,72 +356,66 @@ const getSandboxWithContext = async (
   // S3 credentials that don't work with wrangler's local R2 emulation.
   const skipBucketMount = c.env.SKIP_BUCKET_MOUNT === "true";
 
+  // Build dataset mount configurations based on userIdentifier and userContext
+  const datasetMounts = await buildDatasetMounts(
+    c,
+    orgId,
+    agentId,
+    params.userIdentifier,
+    params.userContext,
+  );
+
   if (skipBucketMount) {
-    const conversationPrefix = `${orgId}/${agentId}/${params.userContextPath}/${params.conversationId}/`;
+    // Dev mode: copy files from R2 into sandbox
+    const conversationPrefix = `${orgId}/${agentId}/${params.userIdentifier}/${params.conversationId}/`;
 
-    // Run both copy operations in parallel
-    const copyPromises: Promise<void>[] = [
-      copyBucketFilesToSandbox(
+    // Copy conversation data
+    await copyBucketFilesToSandbox(
+      sandbox,
+      c.env.CUSTOMER_CONVERSATION_DATA,
+      conversationPrefix,
+      CONVERSATION_DATA_MOUNT_PATH,
+    );
+
+    // Copy each dataset mount
+    for (const mount of datasetMounts) {
+      // For dev mode, need to build the R2 prefix without leading slash
+      const r2Prefix = mount.prefix.replace(/^\//, "");
+      await copyBucketFilesToSandbox(
         sandbox,
-        c.env.CUSTOMER_CONVERSATION_DATA,
-        conversationPrefix,
-        CONVERSATION_DATA_MOUNT_PATH,
-      ),
-    ];
-
-    if (params.userContextPath) {
-      const datasetsPrefix = `${orgId}/${agentId}/${params.userContextPath}/`;
-      copyPromises.push(
-        copyBucketFilesToSandbox(
-          sandbox,
-          c.env.CUSTOMER_DATASETS,
-          datasetsPrefix,
-          DATASETS_MOUNT_PATH,
-        ),
+        c.env.CUSTOMER_DATASETS,
+        r2Prefix,
+        mount.mountPath,
       );
     }
-
-    await Promise.all(copyPromises);
   } else {
-    // Production mode: mount buckets via S3
-    const bucketOptions = BUCKET_OPTIONS(c);
-
-    const conversationDataPath = buildConversationDataPath(
-      c.env.CONVERSATION_DATA_BUCKET,
+    // Production mode: mount buckets via S3 with prefix
+    const conversationDataPrefix = buildConversationDataPrefix(
       orgId,
       agentId,
-      params.userContextPath,
+      params.userIdentifier,
       params.conversationId,
     );
 
-    // Run both mount operations in parallel
-    const mountPromises: Promise<void>[] = [
-      mountBucketIfNeeded(
-        sandbox,
-        conversationDataPath,
-        CONVERSATION_DATA_MOUNT_PATH,
-        bucketOptions,
-      ),
-    ];
+    // Mount conversation data
+    await mountBucketIfNeeded(
+      sandbox,
+      c.env.CONVERSATION_DATA_BUCKET,
+      CONVERSATION_DATA_MOUNT_PATH,
+      BUCKET_OPTIONS(c, conversationDataPrefix),
+    );
 
-    if (params.userContextPath) {
-      const datasetsPath = buildDatasetsPath(
-        c.env.DATASETS_BUCKET,
-        orgId,
-        agentId,
-        params.userContextPath,
-      );
-      mountPromises.push(
+    // Mount each dataset mount in parallel
+    await Promise.all(
+      datasetMounts.map((mount) =>
         mountBucketIfNeeded(
           sandbox,
-          datasetsPath,
-          DATASETS_MOUNT_PATH,
-          bucketOptions,
+          c.env.DATASETS_BUCKET,
+          mount.mountPath,
+          BUCKET_OPTIONS(c, mount.prefix),
         ),
-      );
-    }
-
-    await Promise.all(mountPromises);
+      ),
+    );
   }
 
   return sandbox;
@@ -349,12 +425,12 @@ const getSandboxWithContext = async (
 // RESTful Dataset endpoints - GET/POST/DELETE /datasets
 // ============================================================================
 
-// GET /datasets - List datasets (with optional ?context= and ?path= for filtering)
+// GET /datasets - List datasets for admin UI (folder navigation)
 // Uses R2 delimiter to list only one level at a time (lazy folder loading)
 app.get(
   "/datasets",
   requireOrgAndAgent,
-  zValidator("query", datasetsQuerySchema, (result, c) => {
+  zValidator("query", datasetsListQuerySchema, (result, c) => {
     if (!result.success) {
       const message =
         result.error.issues[0]?.message ?? "Invalid query parameters.";
@@ -364,16 +440,12 @@ app.get(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { context: userContextPath, path: subPath } = c.req.valid("query");
+    const { path: subPath } = c.req.valid("query");
 
     // Build the prefix for listing
     // Base: orgId/agentId/
-    // With context: orgId/agentId/userContextPath/
-    // With path: orgId/agentId/userContextPath/subPath/
+    // With path: orgId/agentId/subPath/
     let prefix = `${orgId}/${agentId}/`;
-    if (userContextPath) {
-      prefix += `${userContextPath}/`;
-    }
     if (subPath) {
       // Normalize: remove leading/trailing slashes
       const normalizedPath = subPath.replace(/^\/+|\/+$/g, "");
@@ -428,8 +500,8 @@ app.get(
         cursor = result.truncated ? result.cursor : undefined;
       } while (cursor);
 
-      // Fetch metadata for files (only if we have files and context is provided)
-      if (files.length > 0 && userContextPath) {
+      // Fetch metadata for files
+      if (files.length > 0) {
         await Promise.all(
           files.map(async (file) => {
             const key = `${prefix}${file.name}`;
@@ -470,10 +542,254 @@ app.get(
   },
 );
 
-// POST /datasets - Upload single dataset file (multipart/form-data)
-app.post("/datasets", requireOrgAndAgent, async (c) => {
+// GET /datasets/user/:userIdentifier - List datasets for a specific user (flat list for agent)
+// Returns all files under the user's folder without folder structure
+app.get("/datasets/user/:userIdentifier", requireOrgAndAgent, async (c) => {
   const orgId = c.get("orgId");
   const agentId = c.get("agentId");
+  const userIdentifier = c.req.param("userIdentifier");
+
+  const userIdError = validateUserIdentifier(userIdentifier ?? "");
+  if (userIdError) {
+    return c.json({ error: userIdError }, 400);
+  }
+
+  // New prefix: orgId/agentId/userIdentifier/{value}/
+  const prefix = `${orgId}/${agentId}/userIdentifier/${userIdentifier}/`;
+
+  try {
+    const files: {
+      name: string;
+      targetPath: string;
+      success: boolean;
+      error?: string;
+      schema?: string[];
+      notes?: string;
+    }[] = [];
+
+    let cursor: string | undefined;
+
+    // List all files under user's folder (no delimiter = recursive)
+    do {
+      const result = await c.env.CUSTOMER_DATASETS.list({
+        prefix,
+        cursor,
+        limit: 1000,
+      });
+
+      for (const object of result.objects ?? []) {
+        if (!isSupportedFileExtension(object.key)) continue;
+        const name = object.key.split("/").pop() ?? object.key;
+        files.push({
+          name,
+          targetPath: `${DATASETS_USER_MOUNT_PATH}/${name}`,
+          success: true,
+        });
+      }
+
+      cursor = result.truncated ? result.cursor : undefined;
+    } while (cursor);
+
+    // Fetch metadata for files
+    if (files.length > 0) {
+      await Promise.all(
+        files.map(async (file) => {
+          const key = `${prefix}${file.name}`;
+          try {
+            const headResult = await c.env.CUSTOMER_DATASETS.head(key);
+            const customMetadata = headResult?.customMetadata;
+
+            if (customMetadata?.schema) {
+              try {
+                file.schema = JSON.parse(customMetadata.schema) as string[];
+              } catch {
+                // Invalid schema JSON, ignore
+              }
+            }
+            if (customMetadata?.notes) {
+              file.notes = customMetadata.notes;
+            }
+          } catch {
+            // If head fails, continue without metadata
+          }
+        }),
+      );
+    }
+
+    return c.json({ files });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to list user dataset files:", error);
+    return c.json(
+      {
+        files: [],
+        error: message,
+      },
+      500,
+    );
+  }
+});
+
+const MAX_CONTEXT_SCOPES = 3;
+
+// GET /datasets/contexts - List all unique context scopes for an agent
+// Returns list of {key, value} pairs representing existing context folders
+app.get("/datasets/contexts", requireOrgAndAgent, async (c) => {
+  const orgId = c.get("orgId");
+  const agentId = c.get("agentId");
+
+  // Prefix for context folders: orgId/agentId/userContext/
+  const prefix = `${orgId}/${agentId}/userContext/`;
+
+  try {
+    const contexts: { key: string; value: string }[] = [];
+
+    let cursor: string | undefined;
+
+    // Use delimiter to list only context folders (not files inside them)
+    do {
+      const result = await c.env.CUSTOMER_DATASETS.list({
+        prefix,
+        delimiter: "/",
+        cursor,
+        limit: 1000,
+      });
+
+      // Folders come from delimitedPrefixes (common prefixes ending with delimiter)
+      for (const delimitedPrefix of result.delimitedPrefixes ?? []) {
+        // Extract folder name from prefix: "orgId/agentId/userContext/key:value/"
+        const folderPath = delimitedPrefix.slice(prefix.length);
+        const folderName = folderPath.replace(/\/$/, "");
+
+        // Parse "key:value" format
+        const colonIndex = folderName.indexOf(":");
+        if (colonIndex > 0) {
+          const key = folderName.slice(0, colonIndex);
+          const value = folderName.slice(colonIndex + 1);
+          if (key && value) {
+            contexts.push({ key, value });
+          }
+        }
+      }
+
+      cursor = result.truncated ? result.cursor : undefined;
+    } while (cursor);
+
+    return c.json({ contexts, limit: MAX_CONTEXT_SCOPES });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to list context scopes:", error);
+    return c.json({ contexts: [], limit: MAX_CONTEXT_SCOPES, error: message }, 500);
+  }
+});
+
+// GET /datasets/context/:contextKey/:contextValue - List datasets for a context scope
+// Returns all files under the context folder
+app.get(
+  "/datasets/context/:contextKey/:contextValue",
+  requireOrgAndAgent,
+  async (c) => {
+    const orgId = c.get("orgId");
+    const agentId = c.get("agentId");
+    const contextKey = c.req.param("contextKey");
+    const contextValue = c.req.param("contextValue");
+
+    const keyError = validateContextKey(contextKey ?? "");
+    if (keyError) {
+      return c.json({ error: keyError }, 400);
+    }
+    const valueError = validateContextValue(contextValue ?? "");
+    if (valueError) {
+      return c.json({ error: valueError }, 400);
+    }
+
+    // New prefix: orgId/agentId/userContext/{key}:{value}/
+    const prefix = `${orgId}/${agentId}/userContext/${contextKey}:${contextValue}/`;
+
+    try {
+      const files: {
+        name: string;
+        targetPath: string;
+        success: boolean;
+        error?: string;
+        schema?: string[];
+        notes?: string;
+      }[] = [];
+
+      let cursor: string | undefined;
+
+      // List all files under context folder (no delimiter = recursive)
+      do {
+        const result = await c.env.CUSTOMER_DATASETS.list({
+          prefix,
+          cursor,
+          limit: 1000,
+        });
+
+        for (const object of result.objects ?? []) {
+          if (!isSupportedFileExtension(object.key)) continue;
+          const name = object.key.split("/").pop() ?? object.key;
+          files.push({
+            name,
+            targetPath: `${DATASETS_MOUNT_PATH}/context_${contextKey}/${name}`,
+            success: true,
+          });
+        }
+
+        cursor = result.truncated ? result.cursor : undefined;
+      } while (cursor);
+
+      // Fetch metadata for files
+      if (files.length > 0) {
+        await Promise.all(
+          files.map(async (file) => {
+            const key = `${prefix}${file.name}`;
+            try {
+              const headResult = await c.env.CUSTOMER_DATASETS.head(key);
+              const customMetadata = headResult?.customMetadata;
+
+              if (customMetadata?.schema) {
+                try {
+                  file.schema = JSON.parse(customMetadata.schema) as string[];
+                } catch {
+                  // Invalid schema JSON, ignore
+                }
+              }
+              if (customMetadata?.notes) {
+                file.notes = customMetadata.notes;
+              }
+            } catch {
+              // If head fails, continue without metadata
+            }
+          }),
+        );
+      }
+
+      return c.json({ files });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Failed to list context dataset files:", error);
+      return c.json(
+        {
+          files: [],
+          error: message,
+        },
+        500,
+      );
+    }
+  },
+);
+
+// POST /datasets/user/:userIdentifier - Upload single dataset file for user (multipart/form-data)
+app.post("/datasets/user/:userIdentifier", requireOrgAndAgent, async (c) => {
+  const orgId = c.get("orgId");
+  const agentId = c.get("agentId");
+  const userIdentifier = c.req.param("userIdentifier");
+
+  const userIdError = validateUserIdentifier(userIdentifier ?? "");
+  if (userIdError) {
+    return c.json({ error: userIdError }, 400);
+  }
 
   let formData: FormData;
   try {
@@ -483,7 +799,6 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
   }
 
   const file = formData.get("file") as File | null;
-  const userContextPath = formData.get("userContextPath") as string | null;
   const contentType = formData.get("contentType") as string | null;
   const notes = formData.get("notes") as string | null;
 
@@ -491,11 +806,8 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
     return c.json({ error: "File is required" }, 400);
   }
 
-  if (!userContextPath) {
-    return c.json({ error: "userContextPath is required" }, 400);
-  }
-
-  const basePrefix = `${orgId}/${agentId}/${userContextPath}`;
+  // New path: orgId/agentId/userIdentifier/{value}/
+  const basePrefix = `${orgId}/${agentId}/userIdentifier/${userIdentifier}`;
 
   // Sanitize file name: trim and replace spaces with underscores
   const fileName = file.name.trim().replace(/ /g, "_");
@@ -593,23 +905,190 @@ app.post("/datasets", requireOrgAndAgent, async (c) => {
   }
 });
 
-// DELETE /datasets/:filename - Delete single dataset file (Public API)
-// Uses ?context=... query param for request context path
-app.delete(
-  "/datasets/:filename",
+// POST /datasets/context/:contextKey/:contextValue - Upload single dataset file for context (multipart/form-data)
+app.post(
+  "/datasets/context/:contextKey/:contextValue",
   requireOrgAndAgent,
-  zValidator("query", datasetsDeleteQuerySchema, (result, c) => {
-    if (!result.success) {
-      const message =
-        result.error.issues[0]?.message ?? "Invalid delete request.";
-      return c.json({ error: message }, 400);
-    }
-  }),
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
+    const contextKey = c.req.param("contextKey");
+    const contextValue = c.req.param("contextValue");
+
+    const keyError = validateContextKey(contextKey ?? "");
+    if (keyError) {
+      return c.json({ error: keyError }, 400);
+    }
+    const valueError = validateContextValue(contextValue ?? "");
+    if (valueError) {
+      return c.json({ error: valueError }, 400);
+    }
+
+    // Check if we're at the context scope limit
+    const contextPrefix = `${orgId}/${agentId}/userContext/`;
+    const existingContexts: string[] = [];
+
+    let cursor: string | undefined;
+    do {
+      const result = await c.env.CUSTOMER_DATASETS.list({
+        prefix: contextPrefix,
+        delimiter: "/",
+        cursor,
+        limit: 1000,
+      });
+
+      for (const delimitedPrefix of result.delimitedPrefixes ?? []) {
+        const folderPath = delimitedPrefix.slice(contextPrefix.length);
+        const folderName = folderPath.replace(/\/$/, "");
+        if (folderName) {
+          existingContexts.push(folderName);
+        }
+      }
+      cursor = result.truncated ? result.cursor : undefined;
+    } while (cursor);
+
+    // Check if this context already exists or if we're under the limit
+    const requestedContext = `${contextKey}:${contextValue}`;
+    const contextExists = existingContexts.includes(requestedContext);
+
+    if (!contextExists && existingContexts.length >= MAX_CONTEXT_SCOPES) {
+      return c.json(
+        {
+          error: `Maximum context scopes limit reached (${MAX_CONTEXT_SCOPES}). Cannot create new context scope '${contextKey}:${contextValue}'. Existing scopes: ${existingContexts.join(", ")}`,
+        },
+        400,
+      );
+    }
+
+    let formData: FormData;
+    try {
+      formData = await c.req.formData();
+    } catch {
+      return c.json({ error: "Invalid multipart/form-data request" }, 400);
+    }
+
+    const file = formData.get("file") as File | null;
+    const contentType = formData.get("contentType") as string | null;
+    const notes = formData.get("notes") as string | null;
+
+    if (!file) {
+      return c.json({ error: "File is required" }, 400);
+    }
+
+    // New path: orgId/agentId/userContext/{key}:{value}/
+    const basePrefix = `${orgId}/${agentId}/userContext/${contextKey}:${contextValue}`;
+
+    // Sanitize file name: trim and replace spaces with underscores
+    const fileName = file.name.trim().replace(/ /g, "_");
+
+    if (isUnsafeFileName(fileName)) {
+      return c.json(
+        {
+          file: {
+            name: fileName,
+            path: "",
+            size: 0,
+            error: "File name contains invalid characters",
+          },
+        },
+        400,
+      );
+    }
+
+    if (!isSupportedFileExtension(fileName)) {
+      return c.json(
+        {
+          file: {
+            name: fileName,
+            path: "",
+            size: 0,
+            error: "File must be .json or .csv",
+          },
+        },
+        400,
+      );
+    }
+
+    try {
+      // Get raw bytes directly from file - no base64 decode needed
+      const content = new Uint8Array(await file.arrayBuffer());
+
+      if (content.length > MAX_FILE_SIZE_BYTES) {
+        return c.json(
+          {
+            file: {
+              name: fileName,
+              path: "",
+              size: content.length,
+              error: `File exceeds ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit`,
+            },
+          },
+          400,
+        );
+      }
+
+      const key = `${basePrefix}/${fileName}`;
+
+      // Extract schema from file content
+      const schema = extractSchema(content, fileName);
+
+      // Build custom metadata
+      const customMetadata: Record<string, string> = {};
+      if (schema) {
+        customMetadata.schema = JSON.stringify(schema);
+      }
+      if (notes) {
+        customMetadata.notes = notes;
+      }
+
+      // Use contentType from form field, or fall back to file.type
+      const finalContentType =
+        contentType || file.type || "application/octet-stream";
+
+      await c.env.CUSTOMER_DATASETS.put(key, content, {
+        httpMetadata: { contentType: finalContentType },
+        customMetadata:
+          Object.keys(customMetadata).length > 0 ? customMetadata : undefined,
+      });
+
+      return c.json({
+        file: {
+          name: fileName,
+          path: key,
+          size: content.length,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        {
+          file: {
+            name: fileName,
+            path: "",
+            size: 0,
+            error: message,
+          },
+        },
+        500,
+      );
+    }
+  },
+);
+
+// DELETE /datasets/user/:userIdentifier/:filename - Delete single user-scoped dataset file
+app.delete(
+  "/datasets/user/:userIdentifier/:filename",
+  requireOrgAndAgent,
+  async (c) => {
+    const orgId = c.get("orgId");
+    const agentId = c.get("agentId");
+    const userIdentifier = c.req.param("userIdentifier");
     const filename = c.req.param("filename");
-    const { context: userContextPath } = c.req.valid("query");
+
+    const userIdError = validateUserIdentifier(userIdentifier ?? "");
+    if (userIdError) {
+      return c.json({ error: userIdError }, 400);
+    }
 
     const decodedFilename = decodeURIComponent(filename);
     const trimmedName = decodedFilename.trim();
@@ -621,10 +1100,54 @@ app.delete(
       );
     }
 
-    const basePrefix = userContextPath
-      ? `${orgId}/${agentId}/${userContextPath}`
-      : `${orgId}/${agentId}`;
-    const key = `${basePrefix}/${trimmedName}`;
+    // New path: orgId/agentId/userIdentifier/{value}/
+    const key = `${orgId}/${agentId}/userIdentifier/${userIdentifier}/${trimmedName}`;
+
+    try {
+      await c.env.CUSTOMER_DATASETS.delete(key);
+      return c.json({ file: decodedFilename, success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        { file: decodedFilename, success: false, error: message },
+        500,
+      );
+    }
+  },
+);
+
+// DELETE /datasets/context/:contextKey/:contextValue/:filename - Delete single context-scoped dataset file
+app.delete(
+  "/datasets/context/:contextKey/:contextValue/:filename",
+  requireOrgAndAgent,
+  async (c) => {
+    const orgId = c.get("orgId");
+    const agentId = c.get("agentId");
+    const contextKey = c.req.param("contextKey");
+    const contextValue = c.req.param("contextValue");
+    const filename = c.req.param("filename");
+
+    const keyError = validateContextKey(contextKey ?? "");
+    if (keyError) {
+      return c.json({ error: keyError }, 400);
+    }
+    const valueError = validateContextValue(contextValue ?? "");
+    if (valueError) {
+      return c.json({ error: valueError }, 400);
+    }
+
+    const decodedFilename = decodeURIComponent(filename);
+    const trimmedName = decodedFilename.trim();
+
+    if (isUnsafeFileName(trimmedName)) {
+      return c.json(
+        { file: decodedFilename, success: false, error: "Invalid filename" },
+        400,
+      );
+    }
+
+    // New path: orgId/agentId/userContext/{key}:{value}/
+    const key = `${orgId}/${agentId}/userContext/${contextKey}:${contextValue}/${trimmedName}`;
 
     try {
       await c.env.CUSTOMER_DATASETS.delete(key);
@@ -692,8 +1215,8 @@ app.post(
   async (c) => {
     const orgId = c.get("orgId");
     const agentId = c.get("agentId");
-    const { conversationId, userContextPath, files } = c.req.valid("json");
-    const pathPrefix = `${orgId}/${agentId}/${userContextPath}/${conversationId}`;
+    const { conversationId, userIdentifier, files } = c.req.valid("json");
+    const pathPrefix = `${orgId}/${agentId}/${userIdentifier}/${conversationId}`;
 
     const storedFiles = await Promise.all(
       files.map(async (file) => {
@@ -824,139 +1347,6 @@ app.post(
     return c.json({ success: true });
   },
 );
-
-// GET /sandbox/files - Describe files in sandbox
-app.get("/sandbox/files", requireOrgAndAgent, async (c) => {
-  const query = c.req.query();
-  const result = sandboxParamsSchema.safeParse(query);
-  if (!result.success) {
-    const message =
-      result.error.issues[0]?.message ?? "Invalid query parameters.";
-    throw new HTTPException(400, { message });
-  }
-  const params = result.data;
-
-  const sandbox = await getSandboxWithContext(c, params);
-  await sandbox.writeFile("/workspace/analyze_json.py", ANALYZE_JSON_SCRIPT);
-
-  const mountPaths = params.userContextPath
-    ? `${CONVERSATION_DATA_MOUNT_PATH} ${DATASETS_MOUNT_PATH}`
-    : CONVERSATION_DATA_MOUNT_PATH;
-
-  // List all JSON and CSV files in the mounted buckets
-  const listResult = await sandbox.exec(
-    `find ${mountPaths} \\( -name "*.json" -o -name "*.csv" \\) -type f 2>/dev/null || true`,
-  );
-  const filePaths = listResult.stdout
-    .split("\n")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-
-  if (filePaths.length === 0) {
-    return c.json({ files: [] });
-  }
-
-  // Read and parse all files in parallel
-  const fileData = await Promise.all(
-    filePaths.map(async (targetPath) => {
-      const fileName = targetPath.split("/").pop() ?? targetPath;
-
-      try {
-        const readResult = await sandbox.readFile(targetPath, {
-          encoding: "utf-8",
-        });
-
-        if (!readResult.success) {
-          return {
-            name: fileName,
-            targetPath,
-            sql: "",
-            error: `Failed to read file: ${fileName}`,
-            success: false,
-          };
-        }
-
-        const fileContent = readResult.content ?? "";
-        let fileSQL = "";
-        try {
-          const parsed = JSON.parse(fileContent);
-          const sql = parsed?.query?.sql;
-          if (typeof sql === "string") {
-            fileSQL = sql;
-          }
-        } catch (error) {
-          console.error(`Failed to extract SQL from ${fileName}:`, error);
-        }
-
-        return {
-          name: fileName,
-          targetPath,
-          sql: fileSQL,
-          error: "",
-          success: true,
-        };
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        console.error(`Describe failed for ${fileName}:`, error);
-        return {
-          name: fileName,
-          targetPath,
-          sql: "",
-          error: message,
-          success: false,
-        };
-      }
-    }),
-  );
-
-  // Then, run all exec commands in parallel
-  const fileDescriptions = await Promise.all(
-    fileData.map(async (file) => {
-      if (!file.success) {
-        return {
-          name: file.name,
-          targetPath: file.targetPath,
-          sql: file.sql,
-          dataSummary: "",
-          error: file.error,
-          success: false,
-        };
-      }
-
-      try {
-        const structure = await sandbox.exec(
-          `python3 /workspace/analyze_json.py ${JSON.stringify(
-            file.targetPath,
-          )}`,
-        );
-
-        return {
-          name: file.name,
-          targetPath: file.targetPath,
-          sql: file.sql,
-          dataSummary: structure.stdout,
-          error: structure.stderr,
-          success: structure.success,
-        };
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        console.error(`Exec failed for ${file.name}:`, error);
-        return {
-          name: file.name,
-          targetPath: file.targetPath,
-          sql: file.sql,
-          dataSummary: "",
-          error: message,
-          success: false,
-        };
-      }
-    }),
-  );
-
-  return c.json({ files: fileDescriptions });
-});
 
 // POST /sandbox/execute - Execute Python code
 app.post(

@@ -9,6 +9,7 @@ import assert from "assert";
 import {
   applyJoinHop,
   resolveJoinDescriptor,
+  type QualifiedColumn,
 } from "../utils/joinDescriptorHelpers";
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
 import { executeWithLogging } from "../utils/executeWithLogging";
@@ -102,8 +103,24 @@ export async function aggregate(db: Kysely<any>, query: Query) {
       }),
     ) ?? [];
 
+  // Deduplicate hops to avoid duplicate table joins (MS SQL error 1013)
+  const appliedHops = new Set<string>();
   for (const joinDescriptor of resolvedJoins) {
     for (const hop of joinDescriptor.hops) {
+      // Create a unique key for this hop based on source and target columns
+      const sourceKey = hop.source
+        .map((c: QualifiedColumn) => `${c.tableName}.${c.columnName}`)
+        .sort()
+        .join(",");
+      const targetKey = hop.target
+        .map((c: QualifiedColumn) => `${c.tableName}.${c.columnName}`)
+        .sort()
+        .join(",");
+      const hopKey = `${sourceKey}|${targetKey}`;
+      if (appliedHops.has(hopKey)) {
+        continue; // Skip duplicate hop
+      }
+      appliedHops.add(hopKey);
       dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop);
     }
   }

@@ -192,4 +192,61 @@ describe("MSSQL count Operation", () => {
       }),
     ).toThrow(/at least one metric/);
   });
+
+  test("deduplicates overlapping join hops to prevent MS SQL error 1013", async () => {
+    // This test verifies that when multiple joins share the same hop,
+    // the query doesn't fail with "same exposed names" error (MS SQL 1013)
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "count" as const,
+      operationParameters: {
+        joins: [
+          {
+            table: "products",
+            name: "productJoin1",
+            joinType: "inner",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+          {
+            // Second join with the exact same hop - should be deduplicated
+            table: "products",
+            name: "productJoin2",
+            joinType: "inner",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+        count: ["productJoin1.id"],
+        countDistinct: null,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    // This would throw MS SQL error 1013 before the fix
+    const response = await count(db, parsed);
+    const result = response.data ?? response;
+
+    // Verify the query executed successfully and returned valid results
+    const expectedRows = await db
+      .selectFrom("orders as o")
+      .innerJoin("products as p", "p.id", "o.product_id")
+      .select(sql<number>`CAST(COUNT(p.id) AS INT)`.as("count_product_id"))
+      .execute();
+
+    const expected = expectedRows[0] ?? { count_product_id: 0 };
+    expect(result._count["productJoin1.id"]).toBe(
+      Number(expected.count_product_id),
+    );
+  });
 });

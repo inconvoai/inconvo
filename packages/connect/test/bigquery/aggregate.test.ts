@@ -264,4 +264,67 @@ describe("BigQuery aggregate Operation", () => {
       6,
     );
   });
+
+  test("deduplicates overlapping join hops to prevent duplicate table joins", async () => {
+    // This test verifies that when multiple joins share the same hop,
+    // the query executes successfully without creating duplicate joins
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "aggregate" as const,
+      operationParameters: {
+        min: null,
+        max: null,
+        avg: null,
+        sum: ["orders.subtotal"],
+        count: null,
+        countDistinct: null,
+        median: null,
+        joins: [
+          {
+            table: "products",
+            name: "productJoin1",
+            joinType: "inner",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+          {
+            // Second join with the exact same hop - should be deduplicated
+            table: "products",
+            name: "productJoin2",
+            joinType: "inner",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await aggregate(db, parsed);
+    const aggregateResult =
+      "data" in response ? (response.data as any) : (response as any);
+
+    // Verify the query executed successfully and returned valid results
+    const expectedRows = await db
+      .selectFrom("orders as o")
+      .innerJoin("products as p", "p.id", "o.product_id")
+      .select((eb) => [eb.fn.sum<number>("o.subtotal").as("sum_subtotal")])
+      .execute();
+
+    const expected = expectedRows[0] ?? { sum_subtotal: 0 };
+    expect(aggregateResult._sum["orders.subtotal"]).toBeCloseTo(
+      Number(expected.sum_subtotal),
+      4,
+    );
+  });
 });

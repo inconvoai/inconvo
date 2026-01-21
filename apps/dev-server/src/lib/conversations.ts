@@ -18,11 +18,13 @@ const conversationMeta = new Map<
 >();
 
 export function createConversation(
+  userIdentifier: string,
   userContext?: Record<string, string | number> | null,
 ): Conversation {
   const id = `convo_${uuidv4()}`;
   const conversation: Conversation = {
     id,
+    userIdentifier,
     title: null,
     userContext: userContext ?? null,
   };

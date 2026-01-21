@@ -7,16 +7,16 @@ minimumReleaseAge: 180
 onlyBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
+  - better-sqlite3
   - core-js
   - esbuild
   - prisma
   - protobufjs
   - sharp
   - unrs-resolver
-  - better-sqlite3
+  - workerd
 
 patchedDependencies:
-  '@cloudflare/sandbox': patches/@cloudflare__sandbox.patch
   '@cloudflare/workers-oauth-provider@0.2.2': patches/@cloudflare__workers-oauth-provider@0.2.2.patch
   '@langchain/openai@1.2.1': patches/@langchain__openai@1.2.1.patch
   langsmith@0.4.4: patches/langsmith@0.4.4.patch

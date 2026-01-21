@@ -16,11 +16,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
-      context?: Record<string, string | number>;
+      userIdentifier?: string;
+      userContext?: Record<string, string | number>;
     };
-    const userContext = body.context;
+    const userIdentifier = body.userIdentifier ?? "dev-user";
+    const userContext = body.userContext ?? null;
 
-    const conversation = createConversation(userContext);
+    const conversation = createConversation(userIdentifier, userContext);
     return NextResponse.json(conversation, { status: 201 });
   } catch (error) {
     console.error(

@@ -157,12 +157,12 @@ export function ChatInterface() {
         const res = await fetch(`/api/conversations/${id}`);
         if (res.ok) {
           const data = (await res.json()) as {
-            context?: Record<string, string | number>;
+            userContext?: Record<string, string | number>;
           };
-          if (data.context) {
+          if (data.userContext) {
             // Convert context values to strings for the input fields
             const stringValues: Record<string, string> = {};
-            for (const [key, value] of Object.entries(data.context)) {
+            for (const [key, value] of Object.entries(data.userContext)) {
               stringValues[key] = String(value);
             }
             setContextValues(stringValues);

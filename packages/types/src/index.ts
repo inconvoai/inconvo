@@ -870,7 +870,7 @@ const baseTableSchema = z.object({
     .strict(),
 });
 
-// Vega-Lite v5 spec schema for rich visualizations
+// Vega-Lite v6 spec schema for rich visualizations
 // No validation here - full spec validation happens at runtime via vega-lite compiler
 export const vegaLiteSpecSchema = z.object({}).passthrough();
 
@@ -913,7 +913,7 @@ const baseChartSchema = z.object({
     .string()
     .describe("Explanation of the visualization highlighting key insights."),
   spec: vegaLiteSpecSchema
-    .describe("Complete Vega-Lite v5 specification for the visualization.")
+    .describe("Complete Vega-Lite v6 specification for the visualization.")
     .optional(),
   chart: legacyChartSchema
     .describe("Legacy chart format (v1/v2) for backward compatibility.")
@@ -958,6 +958,43 @@ export const inconvoUserContextSchema = z.record(
 );
 
 export type InconvoUserContext = z.infer<typeof inconvoUserContextSchema>;
+
+// User identifier validation schema
+// Allowed: alphanumeric, underscore, hyphen, period, @ symbol
+// Length: 1-256 characters
+// Note: colon is intentionally excluded to avoid confusion with context scope paths (key:value)
+export const userIdentifierSchema = z
+  .string()
+  .min(1, "userIdentifier must be at least 1 character")
+  .max(256, "userIdentifier must be at most 256 characters")
+  .regex(
+    /^[a-zA-Z0-9_\-.@]+$/,
+    "userIdentifier can only contain alphanumeric characters, underscore, hyphen, period, and @ symbol",
+  );
+
+export type UserIdentifier = z.infer<typeof userIdentifierSchema>;
+
+export const contextKeySchema = z
+  .string()
+  .min(1, "contextKey must be at least 1 character")
+  .max(256, "contextKey must be at most 256 characters")
+  .regex(
+    /^[a-zA-Z0-9_\-.]+$/,
+    "contextKey can only contain alphanumeric characters, underscore, hyphen, and period",
+  );
+
+export type ContextKey = z.infer<typeof contextKeySchema>;
+
+export const contextValueSchema = z
+  .string()
+  .min(1, "contextValue must be at least 1 character")
+  .max(256, "contextValue must be at most 256 characters")
+  .regex(
+    /^[a-zA-Z0-9_\-.@]+$/,
+    "contextValue can only contain alphanumeric characters, underscore, hyphen, period, and @ symbol",
+  );
+
+export type ContextValue = z.infer<typeof contextValueSchema>;
 
 export const inconvoExampleStatusSchema = z.enum(["PASS", "FAIL", "REVIEW"]);
 
@@ -1063,6 +1100,7 @@ export type Schema = SchemaTable[];
 export type Conversation = {
   id: string;
   title: string | null;
+  userIdentifier: string;
   userContext: Record<string, string | number> | null;
 };
 

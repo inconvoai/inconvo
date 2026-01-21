@@ -19,7 +19,7 @@ const DEFAULT_CHART_WIDTH = 500;
 const DEFAULT_CHART_HEIGHT = 350;
 
 /**
- * Renders a Vega-Lite v5 visualization.
+ * Renders a Vega-Lite v6 visualization.
  * Handles responsive sizing and error states.
  */
 export const VegaChart = memo(
@@ -35,7 +35,7 @@ export const VegaChart = memo(
     const fullSpec = useMemo(
       () =>
         ({
-          $schema: "https://vega.github.io/schema/vega-lite/v5.json",
+          $schema: "https://vega.github.io/schema/vega-lite/v6.json",
           ...spec,
           width: spec.width ?? width,
           height: spec.height ?? height,

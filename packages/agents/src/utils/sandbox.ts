@@ -2,12 +2,16 @@
  * Inconvo Sandbox SDK - Unified client for all sandbox operations.
  *
  * This SDK provides a clean interface for:
- * - Dataset operations (list, upload, delete)
+ * - Dataset operations (list, upload, delete) - both user-scoped and context-scoped
  * - Sandbox operations (start, execute, destroy)
  * - Conversation data operations (upload)
  *
  * All operations use X-Org-Id and X-Agent-Id headers for authentication.
  * The server constructs bucket paths from these headers + request params.
+ *
+ * Bucket structure:
+ * - User-scoped: /{orgId}/{agentId}/userIdentifier/{userIdentifier}/
+ * - Context-scoped: /{orgId}/{agentId}/userContext/{contextKey}:{contextValue}/
  *
  * Usage:
  * ```ts
@@ -21,26 +25,34 @@
  *   agentId: "agent-456",
  * });
  *
- * // List datasets
- * const datasets = await client.datasets.list();
- * const filtered = await client.datasets.list({ context: "organisationId=1" });
+ * // Fetch available datasets for agent context
+ * const { datasets } = await client.datasets.fetchAvailable({
+ *   userIdentifier: "user_123",
+ *   userContext: { orgId: "org_456" },
+ * });
  *
- * // Upload a dataset file
- * await client.datasets.upload({
- *   userContextPath: "organisationId=1",
+ * // List datasets (admin - folder navigation)
+ * const allDatasets = await client.datasets.list();
+ *
+ * // Upload a user-scoped dataset file
+ * await client.datasets.uploadForUser({
+ *   userIdentifier: "user_123",
  *   file: { name: "data.csv", content: Buffer.from(fileContent) },
  * });
  *
- * // Delete a dataset file
- * await client.datasets.delete({
- *   userContextPath: "organisationId=1",
- *   file: "data.csv",
+ * // Upload a context-scoped dataset file
+ * await client.datasets.uploadForContext({
+ *   contextKey: "orgId",
+ *   contextValue: "org_456",
+ *   file: { name: "shared_data.csv", content: Buffer.from(fileContent) },
  * });
  *
- * // Start sandbox and execute code
+ * // Start sandbox (mounting is handled internally based on userIdentifier/userContext)
  * const sandbox = client.sandbox({
  *   conversationId: "conv-123",
- *   userContextPath: "organisationId=1", // optional, for mounting datasets
+ *   runId: "run-456",
+ *   userIdentifier: "user_123",
+ *   userContext: { orgId: "org_456" },
  * });
  *
  * await sandbox.start();
@@ -83,7 +95,7 @@ export interface UploadDatasetFile {
 }
 
 export interface UploadDatasetsParams {
-  userContextPath: string;
+  userIdentifier: string;
   file: UploadDatasetFile;
 }
 
@@ -99,8 +111,19 @@ export interface UploadDatasetsResponse {
 }
 
 export interface DeleteDatasetsParams {
-  userContextPath: string;
+  userIdentifier: string;
   file: string;
+}
+
+export interface ContextScope {
+  key: string;
+  value: string;
+}
+
+export interface ListContextsResponse {
+  contexts: ContextScope[];
+  limit: number;
+  error?: string;
 }
 
 export interface DeleteDatasetByPathParams {
@@ -113,17 +136,33 @@ export interface DeleteDatasetsResponse {
   error?: string;
 }
 
+// Context-scoped dataset params
+export interface ContextDatasetParams {
+  contextKey: string;
+  contextValue: string;
+}
+
+export interface UploadContextDatasetParams extends ContextDatasetParams {
+  file: UploadDatasetFile;
+}
+
+export interface DeleteContextDatasetParams extends ContextDatasetParams {
+  file: string;
+}
+
 export interface SandboxParams {
   conversationId: string;
   /** Unique identifier for this run/message. Used to scope the sandbox instance. */
   runId: string;
-  /** User context path for mounting datasets bucket (e.g., "organisationId=1"). Can be empty string for root. */
-  userContextPath: string;
+  /** User identifier for scoping datasets and conversation data. */
+  userIdentifier: string;
+  /** Optional user context for context-scoped dataset mounting. */
+  userContext?: Record<string, string | number>;
 }
 
 export interface ConversationDataUploadParams {
   conversationId: string;
-  userContextPath: string;
+  userIdentifier: string;
   files: {
     name: string;
     content: string; // base64 encoded
@@ -131,24 +170,28 @@ export interface ConversationDataUploadParams {
   }[];
 }
 
-export interface DescribeFileResult {
-  name: string;
-  targetPath: string;
-  sql: string;
-  dataSummary: string;
-  error: string;
-  success: boolean;
-}
-
-export interface DescribeFilesResponse {
-  files: DescribeFileResult[];
-}
-
 export interface ExecuteResponse {
   output: string;
   error: string;
   exitCode: number;
   success: boolean;
+}
+
+// Available dataset info returned to consumers (hides internal storage details)
+export interface AvailableDataset {
+  name: string;
+  targetPath: string;
+  schema?: string[];
+  notes?: string;
+}
+
+export interface FetchAvailableDatasetsParams {
+  userIdentifier: string;
+  userContext?: Record<string, string | number> | null;
+}
+
+export interface FetchAvailableDatasetsResponse {
+  datasets: AvailableDataset[];
 }
 
 export class SandboxSDKError extends Error {
@@ -167,26 +210,23 @@ export class SandboxSDKError extends Error {
 // Dataset Client (for org-level dataset operations)
 // ============================================================================
 
+const DATASETS_MOUNT_PATH = "/datasets";
+
 class DatasetClient {
   constructor(
     private readonly baseUrl: string,
     private readonly headers: Headers,
+    private readonly orgId: string,
+    private readonly agentId: string,
     private readonly timeoutMs?: number,
   ) {}
 
   /**
-   * List datasets. Optionally filter by request context and navigate folders.
-   * @param options.context - User context path to filter by (e.g., "organisationId=1")
-   * @param options.path - Subfolder path within the context (e.g., "folder1/folder2")
+   * List datasets for admin UI (folder navigation).
+   * @param options.path - Subfolder path to navigate (e.g., "user_123/folder1")
    */
-  async list(options?: {
-    context?: string;
-    path?: string;
-  }): Promise<ListDatasetsResponse> {
+  async list(options?: { path?: string }): Promise<ListDatasetsResponse> {
     const url = new URL(`${this.baseUrl}/datasets`);
-    if (options?.context) {
-      url.searchParams.set("context", options.context);
-    }
     if (options?.path) {
       url.searchParams.set("path", options.path);
     }
@@ -197,9 +237,129 @@ class DatasetClient {
   }
 
   /**
-   * Upload dataset files using multipart/form-data.
+   * List datasets for a specific user (flat list for agent).
+   * @param options.userIdentifier - User identifier (required)
    */
-  async upload(params: UploadDatasetsParams): Promise<UploadDatasetsResponse> {
+  async listForUser(options: {
+    userIdentifier: string;
+  }): Promise<ListDatasetsResponse> {
+    const url = `${this.baseUrl}/datasets/user/${encodeURIComponent(options.userIdentifier)}`;
+
+    return this.request<ListDatasetsResponse>(url, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * List datasets for a specific context (flat list for agent).
+   * @param options.contextKey - Context key (e.g., "orgId")
+   * @param options.contextValue - Context value (e.g., "org_123")
+   */
+  async listForContext(options: {
+    contextKey: string;
+    contextValue: string;
+  }): Promise<ListDatasetsResponse> {
+    const url = `${this.baseUrl}/datasets/context/${encodeURIComponent(options.contextKey)}/${encodeURIComponent(options.contextValue)}`;
+
+    return this.request<ListDatasetsResponse>(url, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * List all unique context scopes for this agent.
+   * Returns the list of {key, value} pairs representing existing context folders,
+   * and the maximum limit allowed.
+   */
+  async listContexts(): Promise<ListContextsResponse> {
+    return this.request<ListContextsResponse>(`${this.baseUrl}/datasets/contexts`, {
+      method: "GET",
+    });
+  }
+
+  /**
+   * Fetch all available datasets for injection into agent context.
+   *
+   * Handles both user-scoped and context-scoped datasets:
+   * - User-scoped: datasets uploaded for this specific userIdentifier
+   * - Context-scoped: datasets uploaded for context values matching the user's userContext
+   *
+   * Returns dataset metadata including file paths where the sandbox will mount them.
+   * The actual mounting is handled by the sandbox based on userIdentifier and userContext.
+   */
+  async fetchAvailable(
+    params: FetchAvailableDatasetsParams,
+  ): Promise<FetchAvailableDatasetsResponse> {
+    const { userIdentifier, userContext } = params;
+    const allDatasets: AvailableDataset[] = [];
+
+    try {
+      // 1. Fetch user-scoped datasets
+      const userResult = await this.listForUser({ userIdentifier });
+      const userFiles = userResult.files
+        .filter((f) => f.success && f.targetPath)
+        .map((f) => ({
+          name: f.name,
+          targetPath: f.targetPath,
+          schema: f.schema,
+          notes: f.notes,
+        }));
+
+      allDatasets.push(...userFiles);
+
+      // 2. Fetch context-scoped datasets based on existing contexts
+      if (userContext && typeof userContext === "object") {
+        // Get all existing context scopes for this agent
+        const { contexts: existingContexts } = await this.listContexts();
+
+        // Filter to contexts that match the user's userContext
+        const matchingContexts = existingContexts.filter(
+          (ctx) =>
+            ctx.key in userContext &&
+            String(userContext[ctx.key]) === ctx.value,
+        );
+
+        await Promise.all(
+          matchingContexts.map(async ({ key, value }) => {
+            try {
+              const contextResult = await this.listForContext({
+                contextKey: key,
+                contextValue: value,
+              });
+
+              const contextFiles = contextResult.files
+                .filter((f) => f.success && f.targetPath)
+                .map((f) => ({
+                  name: f.name,
+                  // Context datasets are mounted at /datasets/context_{key}/
+                  targetPath: `${DATASETS_MOUNT_PATH}/context_${key}/${f.name}`,
+                  schema: f.schema,
+                  notes: f.notes,
+                }));
+
+              allDatasets.push(...contextFiles);
+            } catch (error) {
+              console.error(
+                `Error fetching context datasets for ${key}=${value}:`,
+                error,
+              );
+            }
+          }),
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching datasets:", error);
+    }
+
+    return { datasets: allDatasets };
+  }
+
+  /**
+   * Upload dataset file for a user using multipart/form-data.
+   */
+  async uploadForUser(
+    params: UploadDatasetsParams,
+  ): Promise<UploadDatasetsResponse> {
     const formData = new FormData();
 
     // Convert Buffer/Uint8Array to a new Uint8Array with its own ArrayBuffer
@@ -211,7 +371,6 @@ class DatasetClient {
       type: params.file.contentType || "application/octet-stream",
     });
     formData.append("file", blob, params.file.name);
-    formData.append("userContextPath", params.userContextPath);
 
     if (params.file.contentType) {
       formData.append("contentType", params.file.contentType);
@@ -220,30 +379,92 @@ class DatasetClient {
       formData.append("notes", params.file.notes);
     }
 
-    return this.request<UploadDatasetsResponse>(`${this.baseUrl}/datasets`, {
-      method: "POST",
-      // Don't set Content-Type header - let fetch set multipart boundary automatically
-      body: formData,
-    });
+    return this.request<UploadDatasetsResponse>(
+      `${this.baseUrl}/datasets/user/${encodeURIComponent(params.userIdentifier)}`,
+      {
+        method: "POST",
+        // Don't set Content-Type header - let fetch set multipart boundary automatically
+        body: formData,
+      },
+    );
   }
 
   /**
-   * Delete a single dataset file (public API - requires context).
+   * Upload dataset file for a context using multipart/form-data.
    */
-  async delete(params: DeleteDatasetsParams): Promise<DeleteDatasetsResponse> {
-    const url = new URL(
-      `${this.baseUrl}/datasets/${encodeURIComponent(params.file)}`,
-    );
-    url.searchParams.set("context", params.userContextPath);
+  async uploadForContext(
+    params: UploadContextDatasetParams,
+  ): Promise<UploadDatasetsResponse> {
+    const formData = new FormData();
 
-    return this.request<DeleteDatasetsResponse>(url.toString(), {
+    // Convert Buffer/Uint8Array to a new Uint8Array with its own ArrayBuffer
+    const bytes = Uint8Array.from(params.file.content);
+
+    // Create a Blob from the raw bytes
+    const blob = new Blob([bytes], {
+      type: params.file.contentType || "application/octet-stream",
+    });
+    formData.append("file", blob, params.file.name);
+
+    if (params.file.contentType) {
+      formData.append("contentType", params.file.contentType);
+    }
+    if (params.file.notes) {
+      formData.append("notes", params.file.notes);
+    }
+
+    return this.request<UploadDatasetsResponse>(
+      `${this.baseUrl}/datasets/context/${encodeURIComponent(params.contextKey)}/${encodeURIComponent(params.contextValue)}`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+  }
+
+  /**
+   * @deprecated Use uploadForUser instead
+   */
+  async upload(params: UploadDatasetsParams): Promise<UploadDatasetsResponse> {
+    return this.uploadForUser(params);
+  }
+
+  /**
+   * Delete a single user-scoped dataset file.
+   */
+  async deleteForUser(
+    params: DeleteDatasetsParams,
+  ): Promise<DeleteDatasetsResponse> {
+    const url = `${this.baseUrl}/datasets/user/${encodeURIComponent(params.userIdentifier)}/${encodeURIComponent(params.file)}`;
+
+    return this.request<DeleteDatasetsResponse>(url, {
       method: "DELETE",
     });
   }
 
   /**
-   * Delete a dataset file by full path (admin API - no context validation).
-   * Path is relative to orgId/agentId (e.g., "userId:123/data.csv").
+   * Delete a single context-scoped dataset file.
+   */
+  async deleteForContext(
+    params: DeleteContextDatasetParams,
+  ): Promise<DeleteDatasetsResponse> {
+    const url = `${this.baseUrl}/datasets/context/${encodeURIComponent(params.contextKey)}/${encodeURIComponent(params.contextValue)}/${encodeURIComponent(params.file)}`;
+
+    return this.request<DeleteDatasetsResponse>(url, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * @deprecated Use deleteForUser instead
+   */
+  async delete(params: DeleteDatasetsParams): Promise<DeleteDatasetsResponse> {
+    return this.deleteForUser(params);
+  }
+
+  /**
+   * Delete a dataset file by full path (admin API - no userIdentifier validation).
+   * Path is relative to orgId/agentId (e.g., "user_123/data.csv").
    */
   async deleteByPath(
     params: DeleteDatasetByPathParams,
@@ -334,18 +555,6 @@ class SandboxSession {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(this.params),
-    });
-  }
-
-  /**
-   * Analyzes all JSON/CSV files in the mounted buckets.
-   */
-  async describeFiles(): Promise<DescribeFilesResponse> {
-    const url = new URL(`${this.baseUrl}/sandbox/files`);
-    url.searchParams.set("conversationId", this.params.conversationId);
-    url.searchParams.set("userContextPath", this.params.userContextPath);
-    return this.request<DescribeFilesResponse>(url.toString(), {
-      method: "GET",
     });
   }
 
@@ -482,6 +691,8 @@ export class SandboxClient {
     this.datasets = new DatasetClient(
       this.baseUrl,
       this.headers,
+      options.orgId,
+      options.agentId,
       this.timeoutMs,
     );
   }
@@ -492,7 +703,7 @@ export class SandboxClient {
    *
    * @param params.conversationId - The conversation ID (required)
    * @param params.runId - Unique run/message ID (required, scopes the sandbox instance)
-   * @param params.userContextPath - User context for mounting datasets (optional)
+   * @param params.userIdentifier - User context for mounting datasets (optional)
    */
   sandbox(params: SandboxParams): SandboxSession {
     if (!params.conversationId) {

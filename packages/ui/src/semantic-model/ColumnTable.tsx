@@ -418,13 +418,13 @@ export function ColumnTable({
       >
         <Table.Thead>
           <Table.Tr>
-            <Table.Th style={{ width: 40 }}>On</Table.Th>
+            <Table.Th w={40}>On</Table.Th>
             <Table.Th style={{ whiteSpace: "nowrap" }}>Name</Table.Th>
             <Table.Th style={{ whiteSpace: "nowrap", minWidth: 100 }}>
               Type
             </Table.Th>
-            <Table.Th style={{ width: "99%" }}>Notes</Table.Th>
-            <Table.Th style={{ width: 80 }}>Actions</Table.Th>
+            <Table.Th>Notes</Table.Th>
+            <Table.Th w={80}>Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>

@@ -5,8 +5,8 @@ packages:
 minimumReleaseAge: 180
 
 onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
+  - "@prisma/client"
+  - "@prisma/engines"
   - better-sqlite3
   - core-js
   - esbuild
@@ -17,6 +17,5 @@ onlyBuiltDependencies:
   - workerd
 
 patchedDependencies:
-  '@cloudflare/workers-oauth-provider@0.2.2': patches/@cloudflare__workers-oauth-provider@0.2.2.patch
-  '@langchain/openai@1.2.1': patches/@langchain__openai@1.2.1.patch
+  "@cloudflare/workers-oauth-provider@0.2.2": patches/@cloudflare__workers-oauth-provider@0.2.2.patch
   langsmith@0.4.4: patches/langsmith@0.4.4.patch

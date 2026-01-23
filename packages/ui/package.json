@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat": "./src/chat/index.ts",
+    "./chat/VegaChart": "./src/chat/VegaChart.tsx",
     "./user-context": "./src/user-context/index.ts",
     "./semantic-model": "./src/semantic-model/index.ts"
   },
@@ -33,6 +34,10 @@
   },
   "devDependencies": {
     "fast-deep-equal": "3.1.3",
+    "react-vega": "8.0.0",
+    "vega": "6.2.0",
+    "vega-embed": "7.1.0",
+    "vega-lite": "6.4.2",
     "@mantine/charts": "8.3.13",
     "@mantine/core": "8.3.13",
     "@mantine/form": "8.3.13",
@@ -48,10 +53,6 @@
     "eslint": "9.39.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "react-vega": "8.0.0",
-    "vega": "^6.2.0",
-    "vega-embed": "^7.1.0",
-    "vega-lite": "^6.4.2",
     "typescript": "5.9.3"
   }
 }

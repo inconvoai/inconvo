@@ -2,15 +2,21 @@
 
 import { Stack, Table, Text, Box } from "@mantine/core";
 import { BarChart, LineChart } from "@mantine/charts";
-import type { InconvoMessage, LegacyChart } from "@repo/types";
+import type { InconvoMessage, LegacyChart, VegaLiteSpec } from "@repo/types";
 import { buildChartPresentation, getChartMeta } from "./chartUtils";
-import { VegaChart } from "./VegaChart";
+import type { ReactNode } from "react";
 
 export interface MessageContentProps {
   /** The message to render */
   message: InconvoMessage;
   /** Whether the message is still streaming (shows dimmed text) */
   isStreaming?: boolean;
+  /**
+   * Render function for Vega-Lite charts. Required for chart messages with specs.
+   * This allows consuming apps to provide their own VegaChart implementation
+   * with proper dynamic imports to avoid RSC serialization errors.
+   */
+  renderVegaChart?: (spec: VegaLiteSpec) => ReactNode;
 }
 
 /**
@@ -22,6 +28,7 @@ export interface MessageContentProps {
 export function MessageContent({
   message,
   isStreaming = false,
+  renderVegaChart,
 }: MessageContentProps) {
   if (message.type === "text") {
     return (
@@ -71,7 +78,11 @@ export function MessageContent({
         <Stack>
           <Text mb="md">{message.message}</Text>
           <Box w="100%" style={{ overflowX: "auto" }}>
-            <VegaChart spec={message.spec} />
+            {renderVegaChart ? (
+              renderVegaChart(message.spec)
+            ) : (
+              <Text c="dimmed">[Chart rendering not available]</Text>
+            )}
           </Box>
         </Stack>
       );

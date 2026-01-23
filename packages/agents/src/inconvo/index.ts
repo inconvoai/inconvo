@@ -40,8 +40,7 @@ import { createSandboxClientFromEnv } from "../utils/sandbox";
 import { extractTextFromMessage } from "../utils/langchainMessageUtils";
 
 import type { VegaLiteSpec } from "@repo/types";
-import * as vegaLite from "vega-lite";
-import * as vega from "vega";
+import type { TopLevelSpec } from "vega-lite";
 
 type Table = {
   head: string[];
@@ -176,13 +175,21 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
  * Validates a Vega-Lite spec by compiling it to Vega and parsing.
  * This catches both structural issues and invalid expression functions.
  * Returns an array of error messages if validation fails.
+ *
+ * Uses dynamic imports to avoid module-level evaluation that causes
+ * RSC serialization errors with Next.js Turbopack.
+ * See: https://github.com/vercel/next.js/issues/73323
  */
-function validateVegaLiteSpec(
+async function validateVegaLiteSpec(
   response: z.infer<typeof inconvoResponseSchema>,
-): string[] {
+): Promise<string[]> {
   if (response.type !== "chart") {
     return [];
   }
+
+  // Dynamic imports to avoid module-level Sets causing RSC errors
+  const vegaLite = await import("vega-lite");
+  const vega = await import("vega");
 
   // First, try to compile the Vega-Lite spec to a Vega spec.
   // Cast through unknown because our Zod schema is minimal (only validates data.values);
@@ -190,7 +197,7 @@ function validateVegaLiteSpec(
   let compiled;
   try {
     compiled = vegaLite.compile(
-      response.spec as unknown as vegaLite.TopLevelSpec,
+      response.spec as unknown as TopLevelSpec,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1092,7 +1099,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       const zodResult = inconvoResponseSchema.safeParse(parsed);
       if (zodResult.success) {
         // Additional validation for vega specs
-        const vegaErrors = validateVegaLiteSpec(zodResult.data);
+        const vegaErrors = await validateVegaLiteSpec(zodResult.data);
         if (vegaErrors.length > 0) {
           parseResults.errors.push(...vegaErrors);
         } else {

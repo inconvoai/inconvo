@@ -9,9 +9,9 @@ import type { VisualizationSpec } from "vega-embed";
 export interface VegaChartProps {
   /** Vega-Lite specification */
   spec: VegaLiteSpec;
-  /** Chart width - defaults to "container" for responsive sizing */
-  width?: number | "container";
-  /** Chart height - defaults to DEFAULT_CHART_HEIGHT (350) */
+  /** Chart width in pixels - defaults to 500 */
+  width?: number;
+  /** Chart height in pixels - defaults to 350 */
   height?: number;
 }
 
@@ -20,7 +20,7 @@ const DEFAULT_CHART_HEIGHT = 350;
 
 /**
  * Renders a Vega-Lite v6 visualization.
- * Handles responsive sizing and error states.
+ * Handles error states gracefully.
  */
 export const VegaChart = memo(
   function VegaChart({
@@ -39,11 +39,6 @@ export const VegaChart = memo(
           ...spec,
           width: spec.width ?? width,
           height: spec.height ?? height,
-          autosize:
-            spec.autosize ??
-            (width === "container"
-              ? { type: "fit", contains: "padding" }
-              : undefined),
         }) as VisualizationSpec,
       [spec, width, height],
     );
@@ -78,7 +73,7 @@ export const VegaChart = memo(
     }
 
     return (
-      <Box style={{ width: "100%" }}>
+      <Box style={{ width: "100%", minHeight: height }}>
         <VegaEmbed
           spec={fullSpec}
           options={{ actions: false }}

@@ -1,11 +1,13 @@
 import { getColumnFromTable } from "./computedColumns";
 import assert from "assert";
 import type { SchemaResponse } from "../../types/types";
+import type { DatabaseDialect } from "../types";
 
 export function createAggregationFields(
   columns: string[] | null | undefined,
   aggregationFn: (column: any) => any,
   schema: SchemaResponse,
+  dialect: DatabaseDialect,
 ): [string, any][] | undefined {
   if (!columns || columns.length === 0) return undefined;
   return columns.map((columnIdentifier) => {
@@ -24,6 +26,7 @@ export function createAggregationFields(
           columnName,
           tableName,
           schema,
+          dialect,
         }),
       ),
     ];

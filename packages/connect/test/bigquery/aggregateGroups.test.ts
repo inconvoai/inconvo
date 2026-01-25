@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery aggregateGroups Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let aggregateGroups: (typeof import("~/operations/aggregateGroups"))["aggregateGroups"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -19,6 +20,7 @@ describe("BigQuery aggregateGroups Operation", () => {
       .aggregateGroups;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -48,7 +50,7 @@ describe("BigQuery aggregateGroups Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregateGroups(db, parsed);
+    const response = await aggregateGroups(db, parsed, ctx);
 
     const expectedGroups = await db
       .selectFrom("orders")
@@ -88,7 +90,7 @@ describe("BigQuery aggregateGroups Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregateGroups(db, parsed);
+    const response = await aggregateGroups(db, parsed, ctx);
 
     const grouped = await db
       .selectFrom("orders")
@@ -153,7 +155,7 @@ describe("BigQuery aggregateGroups Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregateGroups(db, parsed);
+    const response = await aggregateGroups(db, parsed, ctx);
 
     // Should return a count of groups matching the criteria
     expect(typeof response.data?.groupCount).toBe("number");
@@ -189,7 +191,7 @@ describe("BigQuery aggregateGroups Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregateGroups(db, parsed);
+    const response = await aggregateGroups(db, parsed, ctx);
 
     // Should return group count and reduced count
     expect(typeof response.data?.groupCount).toBe("number");

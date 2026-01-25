@@ -1,12 +1,13 @@
 // @ts-nocheck
 import { sql } from "kysely";
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MySQL findMany Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mysql");
@@ -18,6 +19,7 @@ describe("MySQL findMany Operation", () => {
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -62,7 +64,7 @@ describe("MySQL findMany Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await findMany(db, parsed);
+    const response = await findMany(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders as o")

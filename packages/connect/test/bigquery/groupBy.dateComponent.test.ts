@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 const DAY_ORDER = [
   "Monday",
@@ -31,6 +31,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -43,6 +44,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
     groupBy = (await import("~/operations/groupBy")).groupBy;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -81,7 +83,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const rows = "data" in response ? response.data : response;
     expect(Array.isArray(rows)).toBe(true);
@@ -128,7 +130,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const rows = "data" in response ? response.data : response;
     expect(Array.isArray(rows)).toBe(true);
@@ -175,7 +177,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const rows = "data" in response ? response.data : response;
     expect(Array.isArray(rows)).toBe(true);
@@ -231,7 +233,7 @@ describe("BigQuery groupBy dateComponent buckets", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const rows = "data" in response ? response.data : response;
     expect(Array.isArray(rows)).toBe(true);

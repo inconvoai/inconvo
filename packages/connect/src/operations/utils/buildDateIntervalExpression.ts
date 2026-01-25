@@ -1,13 +1,14 @@
 import { sql } from "kysely";
-import { env } from "../../env";
+import type { DatabaseDialect } from "../types";
 
 type SupportedInterval = "day" | "week" | "month" | "quarter" | "year" | "hour";
 
 export function buildDateIntervalExpression(
   column: any,
   interval: SupportedInterval,
+  dialect: DatabaseDialect,
 ) {
-  if (env.DATABASE_DIALECT === "postgresql") {
+  if (dialect === "postgresql" || dialect === "redshift") {
     switch (interval) {
       case "day":
         return sql`to_char(${column}::date, 'YYYY-MM-DD')`;
@@ -22,7 +23,7 @@ export function buildDateIntervalExpression(
       case "year":
         return sql`to_char(${column}::date, 'YYYY')`;
     }
-  } else if (env.DATABASE_DIALECT === "mysql") {
+  } else if (dialect === "mysql") {
     switch (interval) {
       case "day":
         return sql`DATE_FORMAT(${column}, '%Y-%m-%d')`;
@@ -37,7 +38,7 @@ export function buildDateIntervalExpression(
       case "year":
         return sql`YEAR(${column})`;
     }
-  } else if (env.DATABASE_DIALECT === "mssql") {
+  } else if (dialect === "mssql") {
     switch (interval) {
       case "day":
         // Style 23 = yyyy-mm-dd
@@ -55,7 +56,7 @@ export function buildDateIntervalExpression(
       case "year":
         return sql`YEAR(${column})`;
     }
-  } else if (env.DATABASE_DIALECT === "bigquery") {
+  } else if (dialect === "bigquery") {
     switch (interval) {
       case "day":
         return sql`FORMAT_TIMESTAMP('%Y-%m-%d', TIMESTAMP(${column}))`;
@@ -73,6 +74,6 @@ export function buildDateIntervalExpression(
   }
 
   throw new Error(
-    "Unsupported database provider. URL must start with 'mysql', 'postgres', 'mssql', or 'bigquery'",
+    `Unsupported database dialect: ${dialect}`,
   );
 }

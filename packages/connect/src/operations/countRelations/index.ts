@@ -1,7 +1,6 @@
 import { Kysely, sql } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import assert from "assert";
@@ -10,6 +9,7 @@ import {
   parseQualifiedColumn,
 } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import type { OperationContext } from "../types";
 
 type RelationCountPlan = {
   cteName: string;
@@ -21,12 +21,16 @@ type RelationCountPlan = {
   cteQuery: any;
 };
 
-export async function countRelations(db: Kysely<any>, query: Query) {
+export async function countRelations(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "countRelations", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
   const { columns, relationsToCount, orderBy, limit } = operationParameters;
 
-  const schema = await getAugmentedSchema();
+  const { schema, dialect } = ctx;
 
   const joinDescriptors = new Map(
     (operationParameters.joins ?? []).map((join) => [
@@ -142,6 +146,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
       columnName: column,
       tableName: table,
       schema,
+      dialect,
     });
     baseSelections.push(columnRef.as(column));
   }
@@ -157,12 +162,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     );
   }
 
-  const whereExpr = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema,
-    query.tableConditions,
-  );
+  const whereExpr = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
   if (whereExpr) {
     selectBuilder = selectBuilder.where(whereExpr);
   }
@@ -196,7 +196,7 @@ export async function countRelations(db: Kysely<any>, query: Query) {
     );
   }
 
-  selectBuilder = applyLimit(selectBuilder, limit);
+  selectBuilder = applyLimit(selectBuilder, limit, dialect);
 
   const { rows, compiled } = await executeWithLogging<Record<string, unknown>>(
     selectBuilder,

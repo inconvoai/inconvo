@@ -1,7 +1,7 @@
 import { Kysely } from "kysely";
 import type { Query } from "../../types/querySchema";
+import type { OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import assert from "assert";
@@ -21,12 +21,15 @@ interface ColumnInfo {
   column: string;
 }
 
-export async function findMany(db: Kysely<any>, query: Query) {
+export async function findMany(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "findMany", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
   const { select, orderBy, limit } = operationParameters;
-
-  const schema = await getAugmentedSchema();
+  const { schema, dialect } = ctx;
 
   const selectMap: Record<string, string[] | undefined> = { ...select };
   if (!selectMap[table]) {
@@ -94,6 +97,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
       columnName: col,
       tableName: table,
       schema,
+      dialect,
     });
     const alias = `${table}__${col}`;
     selections.push(colRef.as(alias));
@@ -108,6 +112,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
         columnName: col,
         tableName: joinInfo.tableName,
         schema,
+        dialect,
         tableAlias: joinInfo.alias, // Use SQL alias for the column reference
       });
       const colAlias = `${alias.replace(/\./g, "__")}__${col}`;
@@ -143,6 +148,7 @@ export async function findMany(db: Kysely<any>, query: Query) {
     whereAndArray,
     table,
     schema,
+    dialect,
     query.tableConditions,
   );
   if (whereCondition) {
@@ -155,12 +161,13 @@ export async function findMany(db: Kysely<any>, query: Query) {
       columnName: orderBy.column,
       tableName: table,
       schema,
+      dialect,
     });
     dbQuery = dbQuery.orderBy(columnRef, orderBy.direction ?? "asc");
   }
 
   // LIMIT
-  dbQuery = applyLimit(dbQuery, limit);
+  dbQuery = applyLimit(dbQuery, limit, dialect);
 
   // Execute
   const { rows: rawRows, compiled } = await executeWithLogging(dbQuery, {

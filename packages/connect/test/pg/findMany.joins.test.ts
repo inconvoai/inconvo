@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 /**
  * Tests for findMany join edge cases:
@@ -12,6 +12,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -26,6 +27,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -73,7 +75,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       // Verify the query executed successfully
       expect(response.data).toBeDefined();
@@ -131,7 +133,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -171,7 +173,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(response.data.length).toBeGreaterThan(0);
@@ -217,7 +219,7 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       // Verify the SQL contains proper JOIN
       const sql = response.query.sql.toLowerCase();

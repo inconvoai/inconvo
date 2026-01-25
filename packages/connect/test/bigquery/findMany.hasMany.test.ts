@@ -1,11 +1,12 @@
 // @ts-nocheck
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery findMany hasMany joins", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -18,6 +19,7 @@ describe("BigQuery findMany hasMany joins", () => {
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -57,7 +59,7 @@ describe("BigQuery findMany hasMany joins", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await findMany(db, parsed);
+    const response = await findMany(db, parsed, ctx);
 
     const rows = response.data ?? [];
     expect(rows.length).toBeGreaterThan(0);

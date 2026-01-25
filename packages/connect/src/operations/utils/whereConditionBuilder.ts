@@ -5,8 +5,8 @@ import type {
   TableConditionsMap,
 } from "../../types/querySchema";
 import { getColumnFromTable } from "./computedColumns";
-import { env } from "../../env";
 import type { SchemaResponse } from "../../types/types";
+import type { DatabaseDialect } from "../types";
 
 type _FilterObject = Record<string, unknown>;
 
@@ -40,7 +40,8 @@ export function buildWhereConditions(
   whereAndArray: WhereConditions,
   tableName: string,
   schema: SchemaResponse,
-  tableConditions: TableConditionsMap,
+  dialect: DatabaseDialect,
+  tableConditions?: TableConditionsMap,
 ): Expression<SqlBool> | undefined {
   if (!whereAndArray || whereAndArray.length === 0) {
     return undefined;
@@ -57,6 +58,7 @@ export function buildWhereConditions(
       whereGroup,
       tableName,
       schema,
+      dialect,
       tableConditions,
     );
     if (condition) {
@@ -86,7 +88,8 @@ function parseConditionObject(
   condition: any,
   tableName: string,
   schema: SchemaResponse,
-  tableConditions: TableConditionsMap,
+  dialect: DatabaseDialect,
+  tableConditions?: TableConditionsMap,
   insideRelationFilter: boolean = false,
 ): Expression<SqlBool> | undefined {
   if (!condition || typeof condition !== "object") {
@@ -102,6 +105,7 @@ function parseConditionObject(
         subCondition,
         tableName,
         schema,
+        dialect,
         tableConditions,
         insideRelationFilter,
       );
@@ -131,6 +135,7 @@ function parseConditionObject(
         subCondition,
         tableName,
         schema,
+        dialect,
         tableConditions,
         insideRelationFilter,
       );
@@ -160,6 +165,7 @@ function parseConditionObject(
         subCondition,
         tableName,
         schema,
+        dialect,
         tableConditions,
         insideRelationFilter,
       );
@@ -238,7 +244,7 @@ function parseConditionObject(
     if (operators === null) {
       // Column IS NULL
       columnConditions.push(
-        buildOperatorCondition(resolvedColumnName, "equals", null, resolvedTableName, schema),
+        buildOperatorCondition(resolvedColumnName, "equals", null, resolvedTableName, schema, dialect),
       );
     } else if (typeof operators === "object" && !Array.isArray(operators)) {
       if (isRelation) {
@@ -248,6 +254,7 @@ function parseConditionObject(
           operators,
           tableName,
           schema,
+          dialect,
           tableConditions,
         );
         if (relationCondition) {
@@ -263,6 +270,7 @@ function parseConditionObject(
               value,
               resolvedTableName,
               schema,
+              dialect,
             ),
           );
         }
@@ -270,7 +278,7 @@ function parseConditionObject(
     } else {
       // Direct value comparison (implicit equals)
       columnConditions.push(
-        buildOperatorCondition(resolvedColumnName, "equals", operators, resolvedTableName, schema),
+        buildOperatorCondition(resolvedColumnName, "equals", operators, resolvedTableName, schema, dialect),
       );
     }
   }
@@ -292,7 +300,8 @@ function buildRelationFilter(
   filterObj: Record<string, any>,
   currentTableName: string,
   schema: SchemaResponse,
-  tableConditions: TableConditionsMap,
+  dialect: DatabaseDialect,
+  tableConditions?: TableConditionsMap,
 ): Expression<SqlBool> | undefined {
   // Use the schema passed from above
   const currentTable = schema.tables.find((t) => t.name === currentTableName);
@@ -405,6 +414,7 @@ function buildRelationFilter(
       nestedCondition,
       targetTable,
       schema,
+      dialect,
       tableConditions,
       true, // insideRelationFilter
     );
@@ -519,6 +529,7 @@ function buildRelationFilter(
           nestedCondition,
           targetTable,
           schema,
+          dialect,
           tableConditions,
         );
         if (nestedWhere) {
@@ -552,6 +563,7 @@ function buildRelationFilter(
           nestedCondition,
           targetTable,
           schema,
+          dialect,
           tableConditions,
         );
         if (nestedWhere) {
@@ -579,25 +591,18 @@ function buildOperatorCondition(
   value: any,
   tableName: string,
   schema: SchemaResponse,
+  dialect: DatabaseDialect,
 ): Expression<SqlBool> {
   const columnRef = getColumnFromTable({
     columnName: column,
     tableName,
     schema,
+    dialect,
   });
 
   // Handle date strings - parse them properly for SQL
-  let processedValue = value;
-  if (typeof value === "string" && isDateString(value)) {
-    // For date strings, we need to handle them based on the database dialect
-    if (env.DATABASE_DIALECT === "mssql") {
-      // MSSQL can handle ISO date strings directly
-      processedValue = value;
-    } else {
-      // PostgreSQL and MySQL also handle ISO strings well
-      processedValue = value;
-    }
-  }
+  // All supported dialects handle ISO date strings correctly
+  const processedValue = value;
 
   switch (operator) {
     case "equals":

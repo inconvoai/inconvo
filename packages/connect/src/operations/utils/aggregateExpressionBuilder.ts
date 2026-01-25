@@ -2,6 +2,7 @@ import assert from "assert";
 import { sql, type Expression } from "kysely";
 import { getColumnFromTable } from "./computedColumns";
 import type { SchemaResponse } from "../../types/types";
+import type { DatabaseDialect } from "../types";
 
 export type AggregateFn =
   | "count"
@@ -15,6 +16,7 @@ export function buildAggregateExpression(
   fn: AggregateFn,
   columnRef: string,
   schema: SchemaResponse,
+  dialect: DatabaseDialect,
 ): Expression<unknown> {
   assert(
     columnRef.split(".").length === 2,
@@ -25,6 +27,7 @@ export function buildAggregateExpression(
     columnName,
     tableName,
     schema,
+    dialect,
   });
 
   switch (fn) {

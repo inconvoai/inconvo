@@ -53,6 +53,8 @@ export const InconvoOptionsSchema = z
     baseURL: z.string().url(),
     signingSecret: z.string(),
     augmentationsHash: z.string().optional(),
+    /** Connection ID for Lambda-based connectors. Required for shared Lambda, not needed for AppRunner. */
+    connectionId: z.string().optional(),
   })
   .strict();
 

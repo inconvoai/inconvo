@@ -19,6 +19,7 @@ export class UserDatabaseConnector {
   private client: AxiosInstance;
   private signingSecret: string;
   private augmentationsHash?: string;
+  private connectionId?: string;
 
   constructor(options: InconvoOptions) {
     const parsedOptions = InconvoOptionsSchema.parse(options);
@@ -30,6 +31,7 @@ export class UserDatabaseConnector {
     });
     this.signingSecret = parsedOptions.signingSecret;
     this.augmentationsHash = parsedOptions.augmentationsHash;
+    this.connectionId = parsedOptions.connectionId;
   }
 
   private generateHeaders(
@@ -52,6 +54,10 @@ export class UserDatabaseConnector {
       "inconvo-timestamp": timestamp,
       "inconvo-random": random,
     };
+    // Include connection ID for Lambda-based connectors
+    if (this.connectionId) {
+      headers["inconvo-connection-id"] = this.connectionId;
+    }
     // Include augmentations hash on POST requests (queries)
     if (method === "POST" && this.augmentationsHash) {
       headers["inconvo-augmentations-hash"] = this.augmentationsHash;
@@ -96,6 +102,18 @@ export class UserDatabaseConnector {
   ): Promise<void> {
     const body = unifiedAugmentationsSyncSchema.parse(payload);
     const requestUrl = "/sync/augmentations";
+    const headers = this.generateHeaders("POST", requestUrl, body);
+    await this.client.post(requestUrl, body, { headers });
+  }
+
+  /**
+   * Sync schema to Lambda storage (S3).
+   * Called by Platform after introspecting the database schema.
+   * Only needed for Lambda-based connectors, not AppRunner.
+   */
+  public async syncSchema(schema: SchemaResponse): Promise<void> {
+    const body = SchemaResponseSchema.parse(schema);
+    const requestUrl = "/sync/schema";
     const headers = this.generateHeaders("POST", requestUrl, body);
     await this.client.post(requestUrl, body, { headers });
   }

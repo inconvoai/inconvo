@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MySQL findDistinct Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findDistinct: (typeof import("~/operations/findDistinct"))["findDistinct"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mysql");
@@ -17,6 +18,7 @@ describe("MySQL findDistinct Operation", () => {
     findDistinct = (await import("~/operations/findDistinct")).findDistinct;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -35,7 +37,7 @@ describe("MySQL findDistinct Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await findDistinct(db, parsed);
+    const response = await findDistinct(db, parsed, ctx);
 
     const { rows: sqlRows } = await sql`
       SELECT DISTINCT city

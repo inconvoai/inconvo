@@ -1,17 +1,13 @@
 import { sql } from "kysely";
-import { env } from "../../env";
+import type { DatabaseDialect } from "../types";
 
-const getDialect = () => process.env.DATABASE_DIALECT || env.DATABASE_DIALECT;
-
-export function buildJsonObject(fields: [string, any][]): any {
+export function buildJsonObject(fields: [string, any][], dialect: DatabaseDialect): any {
   if (fields.length === 0) return null;
 
   const params: any[] = [];
   fields.forEach(([name, value]) => {
     params.push(sql.lit(name), value);
   });
-
-  const dialect = getDialect();
 
   if (dialect === "postgresql") {
     return sql`json_build_object(${sql.join(params, sql`, `)})`;
@@ -33,12 +29,10 @@ export function buildJsonObject(fields: [string, any][]): any {
     });
     return sql`JSON_OBJECT(${sql.join(kvPairs, sql`, `)})`;
   }
-  throw new Error(`Unsupported database dialect: ${env.DATABASE_DIALECT}`);
+  throw new Error(`Unsupported database dialect: ${dialect}`);
 }
 
-export function jsonAggregate(jsonObject: any): any {
-  const dialect = getDialect();
-
+export function jsonAggregate(jsonObject: any, dialect: DatabaseDialect): any {
   if (dialect === "postgresql") {
     return sql`COALESCE(json_agg(${jsonObject}), '[]')`;
   } else if (dialect === "redshift") {
@@ -50,11 +44,11 @@ export function jsonAggregate(jsonObject: any): any {
   } else if (dialect === "bigquery") {
     return sql`IFNULL(TO_JSON(ARRAY_AGG(${jsonObject})), JSON '[]')`;
   }
-  throw new Error(`Unsupported database dialect: ${env.DATABASE_DIALECT}`);
+  throw new Error(`Unsupported database dialect: ${dialect}`);
 }
 
-export function buildJsonObjectSelect(fields: [string, any][]): any {
-  return buildJsonObject(fields);
+export function buildJsonObjectSelect(fields: [string, any][], dialect: DatabaseDialect): any {
+  return buildJsonObject(fields, dialect);
 }
 
 /**
@@ -62,8 +56,8 @@ export function buildJsonObjectSelect(fields: [string, any][]): any {
  * MSSQL needs flat columns because the FOR JSON PATH subquery doesn't work
  * properly in GROUP BY contexts.
  */
-export function shouldUseFlatAggregates(): boolean {
-  return getDialect() === "mssql";
+export function shouldUseFlatAggregates(dialect: DatabaseDialect): boolean {
+  return dialect === "mssql";
 }
 
 /**

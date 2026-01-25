@@ -1,10 +1,10 @@
 import { Kysely, sql } from "kysely";
 import type { Query } from "../../types/querySchema";
+import type { SchemaResponse } from "../../types/types";
+import type { DatabaseDialect, OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { buildJsonObject } from "../utils/jsonBuilderHelpers";
-import { env } from "../../env";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -14,11 +14,15 @@ import {
 import { parseJsonStrings, flattenObjectKeys } from "../utils/jsonParsing";
 import { executeWithLogging } from "../utils/executeWithLogging";
 
-export async function aggregate(db: Kysely<any>, query: Query) {
+export async function aggregate(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "aggregate", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
+  const { schema, dialect } = ctx;
 
-  const schema = await getAugmentedSchema();
   const aliasToTable = buildAliasToTable(table, operationParameters.joins);
 
   const createAggregateFields = (
@@ -30,6 +34,7 @@ export async function aggregate(db: Kysely<any>, query: Query) {
         columnName,
         baseTable: table,
         schema,
+        dialect,
         aliasToTable,
       });
       return [columnName, aggregateFn(column)];
@@ -64,31 +69,31 @@ export async function aggregate(db: Kysely<any>, query: Query) {
   );
   const medianFields = createAggregateFields(
     operationParameters.median ?? undefined,
-    (column) => buildMedianExpression(column),
+    (column) => buildMedianExpression(column, dialect),
   );
 
   if (avgFields) {
-    selectFields.push(buildJsonObject(avgFields).as("_avg"));
+    selectFields.push(buildJsonObject(avgFields, dialect).as("_avg"));
   }
   if (sumFields) {
-    selectFields.push(buildJsonObject(sumFields).as("_sum"));
+    selectFields.push(buildJsonObject(sumFields, dialect).as("_sum"));
   }
   if (minFields) {
-    selectFields.push(buildJsonObject(minFields).as("_min"));
+    selectFields.push(buildJsonObject(minFields, dialect).as("_min"));
   }
   if (maxFields) {
-    selectFields.push(buildJsonObject(maxFields).as("_max"));
+    selectFields.push(buildJsonObject(maxFields, dialect).as("_max"));
   }
   if (countFields) {
-    selectFields.push(buildJsonObject(countFields).as("_count"));
+    selectFields.push(buildJsonObject(countFields, dialect).as("_count"));
   }
   if (countDistinctFields) {
     selectFields.push(
-      buildJsonObject(countDistinctFields).as("_countDistinct"),
+      buildJsonObject(countDistinctFields, dialect).as("_countDistinct"),
     );
   }
   if (medianFields) {
-    selectFields.push(buildJsonObject(medianFields).as("_median"));
+    selectFields.push(buildJsonObject(medianFields, dialect).as("_median"));
   }
 
   let dbQuery = db.selectFrom(table);
@@ -129,12 +134,7 @@ export async function aggregate(db: Kysely<any>, query: Query) {
     dbQuery = dbQuery.select(selectFields);
   }
 
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema,
-    query.tableConditions,
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -208,11 +208,13 @@ function resolveColumnReference({
   columnName,
   baseTable: _baseTable,
   schema,
+  dialect,
   aliasToTable,
 }: {
   columnName: string;
   baseTable: string;
-  schema: import("../../types/types").SchemaResponse;
+  schema: SchemaResponse;
+  dialect: DatabaseDialect;
   aliasToTable: Map<string, string>;
 }) {
   const { alias, column } = splitColumnReference(columnName);
@@ -225,11 +227,12 @@ function resolveColumnReference({
     columnName: column,
     tableName: targetTable,
     schema,
+    dialect,
   });
 }
 
-function buildMedianExpression(column: any) {
-  if (env.DATABASE_DIALECT === "bigquery") {
+function buildMedianExpression(column: any, dialect: DatabaseDialect) {
+  if (dialect === "bigquery") {
     return sql`APPROX_QUANTILES(${column}, 2)[OFFSET(1)]`;
   }
 

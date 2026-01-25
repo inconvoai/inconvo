@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 /**
  * Tests for relation filters (some, every, none) with tableConditions.
@@ -15,6 +15,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let count: (typeof import("~/operations/count"))["count"];
   let getCachedSchema: (typeof import("~/util/schemaCache"))["getCachedSchema"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -28,6 +29,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
     getCachedSchema = (await import("~/util/schemaCache")).getCachedSchema;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -97,7 +99,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       // Verify that we got results
       expect(response.data).toBeDefined();
@@ -180,7 +182,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -238,7 +240,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -323,7 +325,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -384,7 +386,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await count(db, parsed);
+      const response = await count(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(response.data._count).toBeDefined();
@@ -460,7 +462,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       // Should succeed without errors
       expect(response.data).toBeDefined();
@@ -508,7 +510,7 @@ describe("PostgreSQL Relation Filters with tableConditions", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);

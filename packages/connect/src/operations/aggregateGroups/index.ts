@@ -3,7 +3,6 @@ import { Kysely, sql } from "kysely";
 import type { Expression, SqlBool } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { getColumnFromTable } from "../utils/computedColumns";
@@ -12,23 +11,27 @@ import { buildDateComponentExpressions } from "../utils/buildDateComponentExpres
 import { applyJoinHop, normaliseJoinHop } from "../utils/joinDescriptorHelpers";
 import { buildJsonObject } from "../utils/jsonBuilderHelpers";
 import { parseJsonStrings } from "../utils/jsonParsing";
-import { env } from "../../env";
 import { buildAggregateExpression } from "../utils/aggregateExpressionBuilder";
 import { applyHavingComparison } from "../utils/havingComparison";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import type { OperationContext } from "../types";
 
 type Reducer = "sum" | "min" | "max" | "avg";
 
-export async function aggregateGroups(db: Kysely<any>, query: Query) {
+export async function aggregateGroups(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "aggregateGroups", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
-  const schema = await getAugmentedSchema();
-  const dbForQuery = getSchemaBoundDb(db, schema);
+  const { schema, dialect } = ctx;
+  const dbForQuery = getSchemaBoundDb(db, schema, dialect);
   const { groupBy: groupByList, joins, having } = operationParameters;
 
   const aliasRenameMap = new Map<string, string>();
   const getDialectAlias = (alias: string) => {
-    if (env.DATABASE_DIALECT === "bigquery") {
+    if (dialect === "bigquery") {
       let sanitized = alias.replace(/[^a-zA-Z0-9_]/g, "__");
       sanitized = sanitized.replace(/_{3,}/g, "__");
       aliasRenameMap.set(sanitized, alias);
@@ -54,6 +57,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         columnName: columnName!,
         tableName: tableName!,
         schema,
+        dialect,
       });
       const alias = key.alias ?? `${tableName!}.${columnName!}`;
       const dialectAlias = getDialectAlias(alias);
@@ -73,17 +77,19 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         columnName: columnName!,
         tableName: tableName!,
         schema,
+        dialect,
       });
       const alias = key.alias ?? `${tableName!}.${columnName!}|${key.interval}`;
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
         key.interval,
+        dialect,
       );
       groupByColumns.push(intervalExpression);
       // MySQL and BigQuery support alias in HAVING; PostgreSQL/MSSQL require the expression
       const havingExpr =
-        env.DATABASE_DIALECT === "mysql" || env.DATABASE_DIALECT === "bigquery"
+        dialect === "mysql" || dialect === "bigquery"
           ? sql.ref(dialectAlias)
           : intervalExpression;
       groupKeyExpressions.set(alias, {
@@ -101,6 +107,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         columnName: columnName!,
         tableName: tableName!,
         schema,
+        dialect,
       });
       const alias =
         key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
@@ -108,12 +115,13 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       const { select, order } = buildDateComponentExpressions(
         column,
         key.component,
+        dialect,
       );
       groupByColumns.push(select);
       groupByColumns.push(order);
       // BigQuery requires using alias in HAVING clause for computed expressions
       const havingExpr =
-        env.DATABASE_DIALECT === "bigquery" ? sql.ref(dialectAlias) : order;
+        dialect === "bigquery" ? sql.ref(dialectAlias) : order;
       groupKeyExpressions.set(alias, {
         select: select.as(dialectAlias),
         order,
@@ -127,31 +135,37 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
       operationParameters.aggregates.count ?? undefined,
       (column) => sql`COUNT(${column})`,
       schema,
+      dialect,
     ),
     countDistinct: createAggregationFields(
       operationParameters.aggregates.countDistinct ?? undefined,
       (column) => sql`COUNT(DISTINCT ${column})`,
       schema,
+      dialect,
     ),
     min: createAggregationFields(
       operationParameters.aggregates.min ?? undefined,
       (column) => sql`MIN(${column})`,
       schema,
+      dialect,
     ),
     max: createAggregationFields(
       operationParameters.aggregates.max ?? undefined,
       (column) => sql`MAX(${column})`,
       schema,
+      dialect,
     ),
     sum: createAggregationFields(
       operationParameters.aggregates.sum ?? undefined,
       (column) => sql`SUM(${column})`,
       schema,
+      dialect,
     ),
     avg: createAggregationFields(
       operationParameters.aggregates.avg ?? undefined,
       (column) => sql`AVG(${column})`,
       schema,
+      dialect,
     ),
   };
 
@@ -167,7 +181,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
   };
 
   const getJsonKeyForReducer = (column: string) => {
-    if (env.DATABASE_DIALECT !== "mssql") return column;
+    if (dialect !== "mssql") return column;
     const existing = mssqlJsonKeyMap.get(column);
     if (existing) return existing;
     const sanitized = `json_${mssqlJsonKeyMap.size}`;
@@ -208,12 +222,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     }
   }
 
-  const whereExpr = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema,
-    query.tableConditions,
-  );
+  const whereExpr = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
   if (whereExpr) {
     groupQuery = groupQuery.where(whereExpr);
   }
@@ -250,6 +259,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
           condition.function,
           condition.column,
           schema,
+          dialect,
         );
         havingExpressions.push(
           applyHavingComparison(
@@ -296,7 +306,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
     switch (reducer) {
       case "sum":
         if (
-          env.DATABASE_DIALECT === "mssql" &&
+          dialect === "mssql" &&
           (family === "count" || family === "countDistinct")
         ) {
           return sql`SUM(CAST(${ref} AS BIGINT))`;
@@ -314,7 +324,7 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
   const selectFields: any[] = [];
 
   if (operationParameters.aggregates.groupCount) {
-    if (env.DATABASE_DIALECT === "mssql") {
+    if (dialect === "mssql") {
       selectFields.push(sql`COUNT_BIG(*)`.as("groupCount"));
     } else {
       selectFields.push(sql`COUNT(*)`.as("groupCount"));
@@ -342,10 +352,10 @@ export async function aggregateGroups(db: Kysely<any>, query: Query) {
         ),
       ]);
       const jsonKey = getJsonKeyForReducer(column);
-      columnObjects.push([jsonKey, buildJsonObject(reducerFields)]);
+      columnObjects.push([jsonKey, buildJsonObject(reducerFields, dialect)]);
     }
     if (columnObjects.length === 0) return undefined;
-    return buildJsonObject(columnObjects);
+    return buildJsonObject(columnObjects, dialect);
   };
 
   const countReduced = buildReducerObjects("count", baseAggregations.count);

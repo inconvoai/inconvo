@@ -5,7 +5,8 @@ export {
   writeUnifiedAugmentation,
   computeAugmentationsHash,
 } from "./util/schemaAugmentationStore";
-export { clearAugmentedSchemaCache } from "./util/augmentedSchemaCache";
+export { clearAugmentedSchemaCache, getAugmentedSchema } from "./util/augmentedSchemaCache";
+export { env } from "./env";
 // Note: Express middleware exported separately from "@repo/connect/express"
 export { BigQueryDialect } from "./dialects/bigquery";
 export type { BigQueryDialectConfig } from "./dialects/bigquery";

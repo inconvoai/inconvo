@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery countRelations Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -19,6 +20,7 @@ describe("BigQuery countRelations Operation", () => {
       .countRelations;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -60,7 +62,7 @@ describe("BigQuery countRelations Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await countRelations(db, parsed);
+    const response = await countRelations(db, parsed, ctx);
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
@@ -120,7 +122,7 @@ describe("BigQuery countRelations Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await countRelations(db, parsed);
+    const response = await countRelations(db, parsed, ctx);
 
     const resultRows = Array.isArray(response) ? response : response.data;
     expect(resultRows.length).toBeLessThanOrEqual(5);

@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MySQL aggregate Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mysql");
@@ -17,6 +18,7 @@ describe("MySQL aggregate Operation", () => {
     aggregate = (await import("~/operations/aggregate")).aggregate;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -41,7 +43,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -101,7 +103,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -193,7 +195,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 
@@ -258,7 +260,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 
@@ -300,7 +302,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 
@@ -371,7 +373,7 @@ describe("MySQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 

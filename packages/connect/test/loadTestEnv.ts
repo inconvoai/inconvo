@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { config as loadDotenv } from "dotenv";
+import type { OperationContext, DatabaseDialect } from "../src/operations/types";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,4 +74,15 @@ export function loadTestEnv(dialect: SupportedDialect) {
       );
     }
   }
+}
+
+/**
+ * Get the OperationContext for tests.
+ * Must be called after loadTestEnv() and after importing getAugmentedSchema.
+ */
+export async function getTestContext(): Promise<OperationContext> {
+  const { getAugmentedSchema } = await import("../src/util/augmentedSchemaCache");
+  const schema = await getAugmentedSchema();
+  const dialect = process.env.DATABASE_DIALECT as DatabaseDialect;
+  return { schema, dialect };
 }

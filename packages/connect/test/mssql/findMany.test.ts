@@ -1,13 +1,14 @@
 // @ts-nocheck
 import { sql } from "kysely";
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MSSQL findMany Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -22,6 +23,7 @@ describe("MSSQL findMany Operation", () => {
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -67,7 +69,7 @@ describe("MSSQL findMany Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await findMany(db, parsed);
+    const response = await findMany(db, parsed, ctx);
 
     const revenueExpr = sql`((o.subtotal - o.discount) + o.tax) * o.quantity`;
 

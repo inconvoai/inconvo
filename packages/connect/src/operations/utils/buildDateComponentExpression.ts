@@ -1,5 +1,5 @@
 import { sql } from "kysely";
-import { env } from "../../env";
+import type { DatabaseDialect } from "../types";
 
 export type SupportedDateComponent =
   | "dayOfWeek"
@@ -9,8 +9,9 @@ export type SupportedDateComponent =
 export function buildDateComponentExpressions(
   column: any,
   component: SupportedDateComponent,
+  dialect: DatabaseDialect,
 ) {
-  if (env.DATABASE_DIALECT === "postgresql") {
+  if (dialect === "postgresql" || dialect === "redshift") {
     switch (component) {
       case "dayOfWeek": {
         const order = sql`(((EXTRACT(DOW FROM ${column})::int + 6) % 7) + 1)`;
@@ -32,7 +33,7 @@ export function buildDateComponentExpressions(
     }
   }
 
-  if (env.DATABASE_DIALECT === "mysql") {
+  if (dialect === "mysql") {
     switch (component) {
       case "dayOfWeek": {
         const order = sql`((DAYOFWEEK(${column}) + 5) % 7) + 1`;
@@ -54,7 +55,7 @@ export function buildDateComponentExpressions(
     }
   }
 
-  if (env.DATABASE_DIALECT === "mssql") {
+  if (dialect === "mssql") {
     switch (component) {
       case "dayOfWeek": {
         const order = sql`((DATEPART(weekday, ${column}) + 5) % 7) + 1`;
@@ -76,7 +77,7 @@ export function buildDateComponentExpressions(
     }
   }
 
-  if (env.DATABASE_DIALECT === "bigquery") {
+  if (dialect === "bigquery") {
     switch (component) {
       case "dayOfWeek": {
         const order = sql`MOD(EXTRACT(DAYOFWEEK FROM TIMESTAMP(${column})) + 5, 7) + 1`;
@@ -98,7 +99,5 @@ export function buildDateComponentExpressions(
     }
   }
 
-  throw new Error(
-    "Unsupported database provider. URL must start with  'postgresql', 'mysql', 'mssql', or 'bigquery'",
-  );
+  throw new Error(`Unsupported database dialect: ${dialect}`);
 }

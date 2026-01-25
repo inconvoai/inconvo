@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MSSQL aggregate Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -17,6 +18,7 @@ describe("MSSQL aggregate Operation", () => {
     aggregate = (await import("~/operations/aggregate")).aggregate;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -41,7 +43,7 @@ describe("MSSQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -101,7 +103,7 @@ describe("MSSQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -156,7 +158,7 @@ describe("MSSQL aggregate Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 
@@ -228,7 +230,7 @@ describe("MSSQL aggregate Operation", () => {
 
     const parsed = QuerySchema.parse(iql);
     // This would throw MS SQL error 1013 before the fix
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
     const aggregateResult =
       "data" in response ? (response.data as any) : (response as any);
 

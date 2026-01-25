@@ -1,19 +1,23 @@
 import { Kysely } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import type { OperationContext } from "../types";
 import assert from "assert";
 
-export async function findDistinct(db: Kysely<any>, query: Query) {
+export async function findDistinct(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "findDistinct", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
 
-  const schema = await getAugmentedSchema();
-  const dbForQuery = getSchemaBoundDb(db, schema);
+  const { schema, dialect } = ctx;
+  const dbForQuery = getSchemaBoundDb(db, schema, dialect);
 
   // Handle qualified column name (table.column format)
   const columnParts = operationParameters.column.split(".");
@@ -24,6 +28,7 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
     columnName,
     tableName: table,
     schema,
+    dialect,
   });
 
   let dbQuery = dbForQuery
@@ -36,6 +41,7 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
     whereAndArray,
     table,
     schema,
+    dialect,
     query.tableConditions,
   );
   if (whereCondition) {
@@ -44,7 +50,7 @@ export async function findDistinct(db: Kysely<any>, query: Query) {
 
   // Apply limit - hardcoded to 500
   const limit = 500;
-  dbQuery = applyLimit(dbQuery, limit);
+  dbQuery = applyLimit(dbQuery, limit, dialect);
 
   const { rows: response, compiled } = await executeWithLogging(dbQuery, {
     operation: "findDistinct",

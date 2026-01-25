@@ -21,13 +21,16 @@
   "exports": {
     ".": "./src/index.ts",
     "./express": "./src/express/index.ts",
-    "./client": "./src/client/index.ts"
+    "./client": "./src/client/index.ts",
+    "./hono": "./src/hono/index.ts",
+    "./dialects": "./src/dialects/index.ts"
   },
   "author": "",
   "license": "UNLICENSED",
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
     "@repo/types": "workspace:*",
+    "hono": "^4.6.0",
     "@t3-oss/env-core": "^0.13.8",
     "axios": "^1.13.2",
     "date-fns": "^4.1.0",

@@ -1,11 +1,11 @@
 import { Kysely } from "kysely";
 import type { SchemaResponse } from "../../types/types";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
-import { env } from "../../env";
+import type { DatabaseDialect } from "../types";
 
-export async function getRelatedTableNameFromPath(
+export function getRelatedTableNameFromPath(
   path: string[],
-): Promise<string> {
+  schema: SchemaResponse,
+): string {
   if (path.length < 2) {
     if (!path[0]) {
       throw new Error("Path is empty");
@@ -13,7 +13,6 @@ export async function getRelatedTableNameFromPath(
     return path[0];
   }
 
-  const schema = await getAugmentedSchema();
   let currentTable = path[0]!;
 
   for (let i = 0; i < path.length - 1; i++) {
@@ -43,8 +42,10 @@ export async function getRelatedTableNameFromPath(
   return currentTable;
 }
 
-export async function getAUniqueKeyInTable(tableName: string): Promise<string> {
-  const schema = await getAugmentedSchema();
+export function getAUniqueKeyInTable(
+  tableName: string,
+  schema: SchemaResponse,
+): string {
   const table = schema.tables.find((t: any) => t.name === tableName);
 
   if (!table) {
@@ -63,8 +64,9 @@ export async function getAUniqueKeyInTable(tableName: string): Promise<string> {
 export function getSchemaBoundDb<DB>(
   db: Kysely<DB>,
   schema: SchemaResponse,
+  dialect: DatabaseDialect,
 ): Kysely<DB> {
-  if (!schema.databaseSchema || env.DATABASE_DIALECT === "bigquery") {
+  if (!schema.databaseSchema || dialect === "bigquery") {
     return db;
   }
 

@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MSSQL findDistinctByEditDistance Operation", () => {
   let db: Kysely<any>;
   let findDistinctByEditDistance: (typeof import("~/operations/findDistinctByEditDistance"))["findDistinctByEditDistance"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -16,6 +17,7 @@ describe("MSSQL findDistinctByEditDistance Operation", () => {
     ).findDistinctByEditDistance;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -34,7 +36,7 @@ describe("MSSQL findDistinctByEditDistance Operation", () => {
       },
     };
 
-    const response = await findDistinctByEditDistance(db, query);
+    const response = await findDistinctByEditDistance(db, query, ctx);
     expect(response).toHaveProperty("data");
     expect(Array.isArray(response.data)).toBe(true);
     expect(response.data[0]).toContain("Model");

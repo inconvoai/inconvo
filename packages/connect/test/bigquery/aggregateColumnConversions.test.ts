@@ -1,7 +1,7 @@
 // @ts-nocheck
 import fs from "fs/promises";
 import path from "path";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 import {
   resolveAugmentationsDir,
   writeAugmentationFile,
@@ -16,6 +16,7 @@ describe("BigQuery aggregate with column conversions", () => {
   let getSchemaColumnConversions: (typeof import("~/util/columnConversions"))["getSchemaColumnConversions"];
   let db: import("kysely").Kysely<any>;
   let originalAugmentations: string | null = null;
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   // Use the runtime augmentations dir configured by jest.setup (falls back to a temp under /test)
   const augmentDir = resolveAugmentationsDir("");
@@ -78,6 +79,7 @@ describe("BigQuery aggregate with column conversions", () => {
       .getSchemaColumnConversions;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -119,7 +121,7 @@ describe("BigQuery aggregate with column conversions", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await aggregate(db, parsed);
+    const response = await aggregate(db, parsed, ctx);
 
     expect(response.data).toBeDefined();
     const sumValue = response.data?._sum?.["events.properties#total_price"];

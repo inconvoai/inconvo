@@ -8,7 +8,7 @@ import {
   getCachedSchema,
   preloadSchema,
 } from "../util/schemaCache";
-import { clearAugmentedSchemaCache } from "../util/augmentedSchemaCache";
+import { clearAugmentedSchemaCache, getAugmentedSchema } from "../util/augmentedSchemaCache";
 import { getDb } from "../dbConnection";
 import packageJson from "../../package.json" with { type: "json" };
 import { logger } from "../util/logger";
@@ -24,6 +24,8 @@ import { writeUnifiedAugmentation } from "../util/schemaAugmentationStore";
 import { unifiedAugmentationSchema } from "../types/customSchema";
 import { checkDatabaseHealth } from "../util/healthCheck";
 import { logDatabaseHealthCheckHint } from "../util/databaseDiagnostics";
+import { env } from "../env";
+import type { OperationContext } from "../operations/types";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {
@@ -169,32 +171,34 @@ export async function inconvo(): Promise<Router> {
       const { operation } = parsedQuery;
       logger.info({ operation }, "POST / - Executing operation");
       const db = await getDb();
+      const schema = await getAugmentedSchema();
+      const ctx: OperationContext = { schema, dialect: env.DATABASE_DIALECT };
 
       let response;
       switch (operation) {
         case "aggregate":
-          response = await aggregate(db, parsedQuery);
+          response = await aggregate(db, parsedQuery, ctx);
           break;
         case "count":
-          response = await count(db, parsedQuery);
+          response = await count(db, parsedQuery, ctx);
           break;
         case "countRelations":
-          response = await countRelations(db, parsedQuery);
+          response = await countRelations(db, parsedQuery, ctx);
           break;
         case "findDistinct":
-          response = await findDistinct(db, parsedQuery);
+          response = await findDistinct(db, parsedQuery, ctx);
           break;
         case "findDistinctByEditDistance":
-          response = await findDistinctByEditDistance(db, parsedQuery);
+          response = await findDistinctByEditDistance(db, parsedQuery, ctx);
           break;
         case "findMany":
-          response = await findMany(db, parsedQuery);
+          response = await findMany(db, parsedQuery, ctx);
           break;
         case "aggregateGroups":
-          response = await aggregateGroups(db, parsedQuery);
+          response = await aggregateGroups(db, parsedQuery, ctx);
           break;
         case "groupBy":
-          response = await groupBy(db, parsedQuery);
+          response = await groupBy(db, parsedQuery, ctx);
           break;
         default:
           throw new Error("Invalid inconvo operation");

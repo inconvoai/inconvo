@@ -1,11 +1,11 @@
 import { Kysely } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import type { OperationContext } from "../types";
 import levenshtein from "fast-levenshtein";
 import assert from "assert";
 
@@ -27,12 +27,13 @@ function filterStringByEditDistance(
 export async function findDistinctByEditDistance(
   db: Kysely<any>,
   query: Query,
+  ctx: OperationContext,
 ) {
   assert(query.operation === "findDistinctByEditDistance", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
 
-  const schema = await getAugmentedSchema();
-  const dbForQuery = getSchemaBoundDb(db, schema);
+  const { schema, dialect } = ctx;
+  const dbForQuery = getSchemaBoundDb(db, schema, dialect);
 
   // Handle qualified column name (table.column format)
   const columnParts = operationParameters.column.split(".");
@@ -43,6 +44,7 @@ export async function findDistinctByEditDistance(
     columnName,
     tableName: table,
     schema,
+    dialect,
   });
 
   let dbQuery = dbForQuery
@@ -50,15 +52,10 @@ export async function findDistinctByEditDistance(
     .select(distinctColumn.as(operationParameters.column))
     .distinct();
 
-  dbQuery = applyLimit(dbQuery, 5000);
+  dbQuery = applyLimit(dbQuery, 5000, dialect);
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema,
-    query.tableConditions,
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

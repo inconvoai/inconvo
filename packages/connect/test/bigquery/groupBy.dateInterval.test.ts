@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 function parseAggregateCell(value: unknown): Record<string, number> {
   if (typeof value === "string") {
@@ -13,6 +13,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -25,6 +26,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
     groupBy = (await import("~/operations/groupBy")).groupBy;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -59,7 +61,7 @@ describe("BigQuery groupBy dateInterval buckets", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const rows = "data" in response ? response.data : response;
     const byMonth: Record<string, { count: number }> = Object.fromEntries(

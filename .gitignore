@@ -29,6 +29,10 @@ next-env.d.ts
 # turbo
 .turbo
 
+# cdk
+cdk.out
+cdk.context.json
+
 # production
 build
 dist

@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("PostgreSQL groupBy Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -17,6 +18,7 @@ describe("PostgreSQL groupBy Operation", () => {
     groupBy = (await import("~/operations/groupBy")).groupBy;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -64,7 +66,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders as o")
@@ -130,7 +132,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -212,7 +214,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -283,7 +285,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -354,7 +356,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     // Validate the response has rows (or is empty if no data matches)
     const resultRows = Array.isArray(response) ? response : response.data;
@@ -407,7 +409,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const resultRows = Array.isArray(response) ? response : response.data;
     expect(Array.isArray(resultRows)).toBe(true);
@@ -459,7 +461,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const resultRows = Array.isArray(response) ? response : response.data;
     expect(Array.isArray(resultRows)).toBe(true);
@@ -511,7 +513,7 @@ describe("PostgreSQL groupBy Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await groupBy(db, parsed);
+    const response = await groupBy(db, parsed, ctx);
 
     const resultRows = Array.isArray(response) ? response : response.data;
     expect(Array.isArray(resultRows)).toBe(true);

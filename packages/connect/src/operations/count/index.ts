@@ -1,10 +1,9 @@
 import { Kysely, sql } from "kysely";
 import type { Query } from "../../types/querySchema";
+import type { OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
-import { env } from "../../env";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -13,13 +12,17 @@ import {
 } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
 
-export async function count(db: Kysely<any>, query: Query) {
+export async function count(
+  db: Kysely<any>,
+  query: Query,
+  ctx: OperationContext,
+) {
   assert(query.operation === "count", "Invalid operation");
   const { table, whereAndArray, operationParameters } = query;
   const { count: countColumns, countDistinct, joins } = operationParameters;
+  const { schema, dialect } = ctx;
 
-  const schema = await getAugmentedSchema();
-  const dbForQuery = getSchemaBoundDb(db, schema);
+  const dbForQuery = getSchemaBoundDb(db, schema, dialect);
 
   let dbQuery = dbForQuery.selectFrom(table);
 
@@ -80,6 +83,7 @@ export async function count(db: Kysely<any>, query: Query) {
       columnName: column,
       tableName: targetTable,
       schema,
+      dialect,
     });
   };
 
@@ -91,7 +95,7 @@ export async function count(db: Kysely<any>, query: Query) {
     "Count operation requires at least one metric",
   );
 
-  if (env.DATABASE_DIALECT === "mssql") {
+  if (dialect === "mssql") {
     const selections: any[] = [];
     for (const columnName of normalizedCountColumns) {
       if (columnName === "_all") {
@@ -132,7 +136,7 @@ export async function count(db: Kysely<any>, query: Query) {
 
     const selectExpressions: any[] = [];
     if (countPairs.length > 0) {
-      if (env.DATABASE_DIALECT === "postgresql") {
+      if (dialect === "postgresql" || dialect === "redshift") {
         selectExpressions.push(
           sql`json_build_object(${sql.join(countPairs, sql`, `)})`.as("_count"),
         );
@@ -143,7 +147,7 @@ export async function count(db: Kysely<any>, query: Query) {
       }
     }
     if (distinctPairs.length > 0) {
-      if (env.DATABASE_DIALECT === "postgresql") {
+      if (dialect === "postgresql" || dialect === "redshift") {
         selectExpressions.push(
           sql`json_build_object(${sql.join(distinctPairs, sql`, `)})`.as(
             "_countDistinct",
@@ -162,12 +166,7 @@ export async function count(db: Kysely<any>, query: Query) {
     }
   }
 
-  const whereCondition = buildWhereConditions(
-    whereAndArray,
-    table,
-    schema,
-    query.tableConditions,
-  );
+  const whereCondition = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -177,7 +176,7 @@ export async function count(db: Kysely<any>, query: Query) {
   });
 
   let data: any;
-  if (env.DATABASE_DIALECT === "mssql") {
+  if (dialect === "mssql") {
     const counts: Record<string, number> = {};
     const distinctCounts: Record<string, number> = {};
     const firstRow = result[0] as Record<string, number> | undefined;

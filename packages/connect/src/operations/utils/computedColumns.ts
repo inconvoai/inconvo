@@ -4,18 +4,20 @@ import type {
   SQLCastExpressionAst,
   SQLComputedColumnAst,
 } from "../../types/querySchema";
-import { env } from "../../env";
 import type { SchemaResponse } from "../../types/types";
+import type { DatabaseDialect } from "../types";
 
 export function getColumnFromTable({
   columnName,
   tableName,
   schema,
+  dialect,
   tableAlias,
 }: {
   columnName: string;
   tableName: string;
   schema: SchemaResponse;
+  dialect: DatabaseDialect;
   tableAlias?: string; // Optional SQL alias for when same table is joined multiple times
 }): RawBuilder<unknown> {
   const table = schema.tables.find((t) => t.name === tableName);
@@ -36,6 +38,7 @@ export function getColumnFromTable({
       computedColumn.ast,
       sqlTableRef,
       schema,
+      dialect,
       false,
     );
   }
@@ -45,20 +48,21 @@ export function getColumnFromTable({
   );
 
   if (columnConversion) {
-    return generateColumnConversionAsSQL(columnConversion.ast, sqlTableRef);
+    return generateColumnConversionAsSQL(columnConversion.ast, sqlTableRef, dialect);
   }
 
-  return buildColumnReference(sqlTableRef, columnName);
+  return buildColumnReference(sqlTableRef, columnName, dialect);
 }
 
 function buildColumnReference(
   tableName: string,
   columnName: string,
+  dialect: DatabaseDialect,
 ): RawBuilder<unknown> {
   // BigQuery STRUCT field handling: columns with # separator represent nested STRUCT fields
   // Column name format: "structColumn#fieldPath" or "structColumn#nested#field"
   // Converts to BigQuery SQL: table.structColumn.fieldPath or table.structColumn.nested.field
-  if (env.DATABASE_DIALECT === "bigquery" && columnName.includes("#")) {
+  if (dialect === "bigquery" && columnName.includes("#")) {
     // Convert # separators back to dots for BigQuery STRUCT field access
     const structPath = columnName.replace(/#/g, ".");
     // Validate structPath contains only safe identifier characters (defense-in-depth)
@@ -77,29 +81,30 @@ function buildColumnReference(
 function generateColumnConversionAsSQL(
   ast: SQLCastExpressionAst,
   tableName: string,
+  dialect: DatabaseDialect,
 ): RawBuilder<unknown> {
   switch (ast.type) {
     case "column":
-      return buildColumnReference(tableName, ast.name);
+      return buildColumnReference(tableName, ast.name, dialect);
     case "value":
       return sql`${ast.value}`;
     case "cast": {
-      const inner = generateColumnConversionAsSQL(ast.expression, tableName);
-      const castKeyword =
-        env.DATABASE_DIALECT === "bigquery" ? "SAFE_CAST" : "CAST";
-      const target = resolveLogicalType(ast.as);
+      const inner = generateColumnConversionAsSQL(ast.expression, tableName, dialect);
+      const castKeyword = dialect === "bigquery" ? "SAFE_CAST" : "CAST";
+      const target = resolveLogicalType(ast.as, dialect);
       return sql`${sql.raw(castKeyword)}(${inner} AS ${sql.raw(target)})`;
     }
     case "coalesce": {
       const expression = generateColumnConversionAsSQL(
         ast.expression,
         tableName,
+        dialect,
       );
-      const fallback = generateColumnConversionAsSQL(ast.fallback, tableName);
+      const fallback = generateColumnConversionAsSQL(ast.fallback, tableName, dialect);
       return sql`COALESCE(${expression}, ${fallback})`;
     }
     case "brackets": {
-      const inner = generateColumnConversionAsSQL(ast.expression, tableName);
+      const inner = generateColumnConversionAsSQL(ast.expression, tableName, dialect);
       return sql`(${inner})`;
     }
     default:
@@ -113,6 +118,7 @@ function generateComputedColumnAsSQL(
   ast: SQLComputedColumnAst,
   tableName: string,
   schema: SchemaResponse,
+  dialect: DatabaseDialect,
   numericRequired: boolean,
 ): RawBuilder<unknown> {
   switch (ast.type) {
@@ -123,7 +129,7 @@ function generateComputedColumnAsSQL(
         (c) => c.column === ast.name,
       );
       if (conversion) {
-        return generateColumnConversionAsSQL(conversion.ast, tableName);
+        return generateColumnConversionAsSQL(conversion.ast, tableName, dialect);
       }
       if (numericRequired) {
         const columnType = table?.columns.find(
@@ -142,7 +148,7 @@ function generateComputedColumnAsSQL(
 
     case "operation": {
       const operands = ast.operands.map((operand) =>
-        generateComputedColumnAsSQL(operand, tableName, schema, true),
+        generateComputedColumnAsSQL(operand, tableName, schema, dialect, true),
       );
 
       switch (ast.operator) {
@@ -166,6 +172,7 @@ function generateComputedColumnAsSQL(
         ast.expression,
         tableName,
         schema,
+        dialect,
         numericRequired,
       );
       return sql`(${inner})`;
@@ -175,9 +182,9 @@ function generateComputedColumnAsSQL(
   }
 }
 
-function resolveLogicalType(logical: LogicalCastType): string {
+function resolveLogicalType(logical: LogicalCastType, dialect: DatabaseDialect): string {
   const DIALECT_TYPE_MAP: Record<
-    typeof env.DATABASE_DIALECT,
+    DatabaseDialect,
     Partial<Record<LogicalCastType, string>>
   > = {
     bigquery: {
@@ -217,7 +224,6 @@ function resolveLogicalType(logical: LogicalCastType): string {
     },
   };
 
-  const dialect = env.DATABASE_DIALECT;
   const target = logical.toLowerCase() as LogicalCastType;
   const mapping = DIALECT_TYPE_MAP[dialect];
 

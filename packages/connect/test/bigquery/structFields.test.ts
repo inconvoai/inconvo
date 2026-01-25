@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery STRUCT Field Support", () => {
   let db: Kysely<any>;
@@ -10,6 +10,7 @@ describe("BigQuery STRUCT Field Support", () => {
   let count: (typeof import("~/operations/count"))["count"];
   let getCachedSchema: (typeof import("~/util/schemaCache"))["getCachedSchema"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -28,6 +29,7 @@ describe("BigQuery STRUCT Field Support", () => {
     count = (await import("~/operations/count")).count;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -119,7 +121,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -157,7 +159,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(response.data.length).toBeGreaterThan(0);
@@ -187,7 +189,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(response.data.length).toBeGreaterThan(0);
@@ -219,7 +221,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await findMany(db, parsed);
+      const response = await findMany(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);
@@ -255,7 +257,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await count(db, parsed);
+      const response = await count(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(response.data._count).toBeDefined();
@@ -291,7 +293,7 @@ describe("BigQuery STRUCT Field Support", () => {
       };
 
       const parsed = QuerySchema.parse(iql);
-      const response = await groupBy(db, parsed);
+      const response = await groupBy(db, parsed, ctx);
 
       expect(response.data).toBeDefined();
       expect(Array.isArray(response.data)).toBe(true);

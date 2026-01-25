@@ -1,11 +1,12 @@
 // @ts-nocheck
 import type { Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery findDistinctByEditDistance Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findDistinctByEditDistance: (typeof import("~/operations/findDistinctByEditDistance"))["findDistinctByEditDistance"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -20,6 +21,7 @@ describe("BigQuery findDistinctByEditDistance Operation", () => {
     ).findDistinctByEditDistance;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -39,7 +41,7 @@ describe("BigQuery findDistinctByEditDistance Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await findDistinctByEditDistance(db, parsed);
+    const response = await findDistinctByEditDistance(db, parsed, ctx);
     expect(response).toHaveProperty("data");
     expect(Array.isArray(response.data)).toBe(true);
     expect(response.data[0]).toContain("Model");

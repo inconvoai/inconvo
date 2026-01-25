@@ -1,11 +1,11 @@
-import { getAugmentedSchema } from "../../util/augmentedSchemaCache";
+import type { SchemaResponse } from "../../types/types";
 
-export async function findRelationsBetweenTables(
+export function findRelationsBetweenTables(
   sourceTableName: string,
   targetTableName: string,
   relationName: string,
-): Promise<[string, string, boolean]> {
-  const schema = await getAugmentedSchema();
+  schema: SchemaResponse,
+): [string, string, boolean] {
   const sourceTable = schema.tables.find(
     (t: any) => t.name === sourceTableName,
   );

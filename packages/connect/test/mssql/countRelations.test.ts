@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("MSSQL countRelations Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     loadTestEnv("mssql");
@@ -18,6 +19,7 @@ describe("MSSQL countRelations Operation", () => {
       .countRelations;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -59,7 +61,7 @@ describe("MSSQL countRelations Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await countRelations(db, parsed);
+    const response = await countRelations(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("products as p")
@@ -119,7 +121,7 @@ describe("MSSQL countRelations Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await countRelations(db, parsed);
+    const response = await countRelations(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("users as u")

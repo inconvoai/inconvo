@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
-import { loadTestEnv } from "../loadTestEnv";
+import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 describe("BigQuery count Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let count: (typeof import("~/operations/count"))["count"];
+  let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -18,6 +19,7 @@ describe("BigQuery count Operation", () => {
     count = (await import("~/operations/count")).count;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    ctx = await getTestContext();
   });
 
   afterAll(async () => {
@@ -37,7 +39,7 @@ describe("BigQuery count Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await count(db, parsed);
+    const response = await count(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -73,7 +75,7 @@ describe("BigQuery count Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await count(db, parsed);
+    const response = await count(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -117,7 +119,7 @@ describe("BigQuery count Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await count(db, parsed);
+    const response = await count(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders as o")
@@ -158,7 +160,7 @@ describe("BigQuery count Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await count(db, parsed);
+    const response = await count(db, parsed, ctx);
 
     const expectedRows = await db
       .selectFrom("orders")
@@ -231,7 +233,7 @@ describe("BigQuery count Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    const response = await count(db, parsed);
+    const response = await count(db, parsed, ctx);
     const result = response.data ?? response;
 
     // Verify the query executed successfully and returned valid results

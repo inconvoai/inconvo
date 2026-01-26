@@ -1,0 +1,36 @@
+name: notify-cloud
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ten-dev
+          repositories: inconvo-cloud
+
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=%ae)" >> $GITHUB_OUTPUT
+
+      - name: Trigger cloud repo sync
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: ten-dev/inconvo-cloud
+          event-type: oss-updated
+          client-payload: '{"sha": "${{ steps.commit.outputs.sha }}", "message": "${{ steps.commit.outputs.message }}", "author": "${{ steps.commit.outputs.author }}", "email": "${{ steps.commit.outputs.email }}"}'

@@ -34,18 +34,18 @@
     "@t3-oss/env-core": "^0.13.8",
     "axios": "^1.13.2",
     "date-fns": "^4.1.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "catalog:",
     "express": "^4.21.1",
     "fast-levenshtein": "^3.0.0",
-    "kysely": "^0.27.4",
+    "kysely": "catalog:",
     "mysql2": "^3.15.1",
-    "pg": "^8.13.1",
+    "pg": "catalog:",
     "pino": "^9.9.0",
     "pino-pretty": "^13.1.1",
     "tarn": "^3.0.2",
     "tedious": "^18.0.0",
-    "typescript": "^5.9.2",
-    "zod": "4.2.1"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
@@ -53,11 +53,11 @@
     "@types/express": "^4.17.21",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^30.0.0",
-    "@types/pg": "^8.11.10",
-    "eslint": "^9.39.1",
+    "@types/pg": "catalog:",
+    "eslint": "catalog:",
     "jest": "^30.0.5",
     "node-fetch": "^3.3.2",
     "ts-jest": "^29.4.1",
-    "tsx": "^4.20.4"
+    "tsx": "catalog:"
   }
 }

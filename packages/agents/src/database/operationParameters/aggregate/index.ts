@@ -21,6 +21,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineAggregateOperationParametersParams {
   schema: Schema;
@@ -30,6 +31,7 @@ export interface DefineAggregateOperationParametersParams {
   operation: "aggregate";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineAggregateOperationParameters(
@@ -89,6 +91,7 @@ export async function defineAggregateOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyAggregateOperationParametersTool,
     toolName: "applyAggregateOperationParametersTool",
     onComplete: (artifact) => {

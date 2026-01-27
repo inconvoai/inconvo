@@ -7,7 +7,7 @@ import { questionConditionsSchema, type QuestionConditions } from "@repo/types";
 import type { Operation } from "../types";
 import type { ContextCondition } from "../index";
 import type { Schema } from "@repo/types";
-import { getAIModel } from "../../utils/getAIModel";
+import { getAIModel, type AIProvider } from "../../utils/getAIModel";
 import { buildTableSchemaStringFromTableSchema } from "../utils/schemaFormatters";
 import { generateJoinGraph } from "../utils/tableRelations";
 import { getPrompt } from "../../utils/getPrompt";
@@ -48,10 +48,11 @@ interface RequestParams {
   joinedTableNames: string[];
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel("azure:gpt-5.1", {
+  const llm = getAIModel(params.provider, "gpt-5.1", {
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
       userContext: params.userContext,

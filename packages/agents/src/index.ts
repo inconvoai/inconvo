@@ -4,6 +4,7 @@ export { inconvoAgent } from "./inconvo";
 
 // Re-export types
 export type { Operation, DBQuery } from "./database/types";
+export type { AIProvider } from "./utils/getAIModel";
 
 // Re-export utilities
 export { getAIModel } from "./utils/getAIModel";

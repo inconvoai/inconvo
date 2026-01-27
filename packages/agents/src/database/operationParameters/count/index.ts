@@ -16,6 +16,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineCountOperationParametersParams {
   schema: Schema;
@@ -25,6 +26,7 @@ export interface DefineCountOperationParametersParams {
   operation: "count";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineCountOperationParameters(
@@ -85,6 +87,7 @@ export async function defineCountOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyCountOperationParametersTool,
     toolName: "applyCountOperationParametersTool",
     onComplete: (artifact) => {

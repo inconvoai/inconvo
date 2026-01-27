@@ -6,9 +6,7 @@ import { getCheckpointer } from "~/lib/checkpointer";
 import { getSchema } from "~/lib/schema";
 import { getConversation, updateConversation } from "~/lib/conversations";
 import type { InconvoResponse } from "@repo/types";
-
-const DEV_ORGANISATION_ID = "dev-org";
-const DEV_AGENT_ID = "dev-agent";
+import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
 
 interface ResponseCreateParams {
   message: string;

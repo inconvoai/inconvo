@@ -110,7 +110,7 @@ async function testDatabaseConnection(
 async function initializeLocalDatabase(): Promise<void> {
   // Initialize the SQLite database for semantic model config
   // Use stdio: "pipe" to suppress Prisma's verbose output
-  execSync("npx prisma db push --skip-generate", {
+  execSync("npx prisma db push", {
     stdio: "pipe",
     cwd: process.cwd(),
   });

@@ -17,22 +17,12 @@ export type OpenAIModel =
   | "gpt-5-nano"
   | "gpt-5.1"
   | "gpt-5.2";
-export type ModelString = `azure:${AzureModel}` | `openai:${OpenAIModel}`;
 
 export function getAIModel(
-  modelString: ModelString,
+  provider: AIProvider,
+  model: AzureModel | OpenAIModel | string,
   options?: ChatOpenAIFields,
 ) {
-  if (!modelString.includes(":")) {
-    throw new Error(
-      `Invalid model string format. Expected "provider:model", got "${modelString}"`,
-    );
-  }
-
-  // Github Copilot PR Review Let me know if you see the provider overwritten. It should come from the modelString.
-  const [provider, model] = modelString.split(":") as [string, string];
-  //provider = "openai"; // Temporary override for testing
-
   const isGPT5 = model.startsWith("gpt-5");
   const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {
     azure: {
@@ -57,14 +47,8 @@ export function getAIModel(
     },
   };
 
-  if (!provider || !model) {
-    throw new Error(
-      `Invalid model string format. Expected "provider:model", got "${modelString}"`,
-    );
-  }
-
   const mergedOptions = {
-    ...DEFAULT_OPTIONS[provider as AIProvider],
+    ...DEFAULT_OPTIONS[provider],
     ...options,
   };
 

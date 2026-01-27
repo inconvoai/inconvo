@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { DatabaseConnector, Query, QueryResponse } from "@repo/types";
-import { getAIModel } from "../utils/getAIModel";
+import { getAIModel, type AIProvider } from "../utils/getAIModel";
 import assert from "assert";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { querySchema, whereAndArraySchema } from "@repo/types";
@@ -39,6 +39,7 @@ interface RequestParams {
   userContext: Record<string, string | number>;
   connector: DatabaseConnector;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 // Context condition for RLS/tenant filtering
@@ -119,7 +120,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   });
 
   const selectTableName = async (state: typeof DatabaseAgentState.State) => {
-    const model = getAIModel("azure:gpt-5.1", {
+    const model = getAIModel(params.provider, "gpt-5.1", {
       promptCacheKey,
     });
     const selectTablePrompt = await getPrompt("select_table:dbe22856");
@@ -147,7 +148,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const selectDatabaseOperation = async (
     state: typeof DatabaseAgentState.State,
   ) => {
-    const model = getAIModel("azure:gpt-5.2", {
+    const model = getAIModel(params.provider, "gpt-5.2", {
       promptCacheKey,
     });
     const operationSelectorPrompt = await getPrompt(
@@ -219,6 +220,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       question: state.question,
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     }).invoke({});
 
     const operationParams = operationParamsResponse.operationParameters;
@@ -296,6 +298,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       joinedTableNames: state.joinedTableNames,
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     return { questionConditions: questionWhereAgentResponse };
   };

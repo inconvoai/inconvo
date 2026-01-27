@@ -17,6 +17,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineCountRelationsOperationParametersParams {
   schema: Schema;
@@ -26,6 +27,7 @@ export interface DefineCountRelationsOperationParametersParams {
   operation: "countRelations";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineCountRelationsOperationParameters(
@@ -147,6 +149,7 @@ export async function defineCountRelationsOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyCountRelationsOperationParametersTool,
     toolName: "applyCountRelationsOperationParametersTool",
     jsonDetectedMessage:

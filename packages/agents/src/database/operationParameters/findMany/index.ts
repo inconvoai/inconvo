@@ -14,6 +14,7 @@ import {
   type FindManyValidationResult,
 } from "./findManyValidator";
 import type { Schema } from "@repo/types";
+import type { AIProvider } from "../../../utils/getAIModel";
 import {
   findManySchema,
   joinDescriptorSchema,
@@ -29,6 +30,7 @@ export interface DefineFindManyOperationParametersParams {
   operation: "findMany";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineFindManyOperationParameters(
@@ -172,6 +174,7 @@ export async function defineFindManyOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyFindManyOperationParametersTool,
     toolName: "applyFindManyOperationParametersTool",
     jsonDetectedMessage,

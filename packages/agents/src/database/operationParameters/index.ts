@@ -2,6 +2,7 @@ import assert from "assert";
 import { Annotation, START, StateGraph } from "@langchain/langgraph";
 import type { Schema } from "@repo/types";
 import type { Operation } from "../types";
+import type { AIProvider } from "../../utils/getAIModel";
 import type {
   AggregateQuery,
   AggregateGroupsQuery,
@@ -27,6 +28,7 @@ interface RequestParams {
   question: string;
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export function operationParametersAgent(params: RequestParams) {
@@ -124,6 +126,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "findMany",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     assert(operationParams, "Failed to define findMany operation parameters");
     return {
@@ -142,6 +145,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "groupBy",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     assert(
       operationParameters,
@@ -165,6 +169,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "countRelations",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     assert(
       operationParameters,
@@ -186,6 +191,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "aggregate",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     return {
       operationParameters:
@@ -204,6 +210,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "aggregateGroups",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     assert(
       operationParameters,
@@ -224,6 +231,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "count",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     return {
       operationParameters:
@@ -242,6 +250,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "findDistinct",
       userContext: params.userContext,
       agentId: params.agentId,
+      provider: params.provider,
     });
     return {
       operationParameters:

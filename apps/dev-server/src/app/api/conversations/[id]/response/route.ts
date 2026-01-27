@@ -81,6 +81,7 @@ export async function POST(
       agentId: DEV_AGENT_ID,
       runId,
       userIdentifier: conversation.userIdentifier,
+      provider: "openai",
     });
 
     // Helper to format response for SDK

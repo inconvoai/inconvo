@@ -15,6 +15,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineFindDistinctOperationParametersParams {
   schema: Schema;
@@ -24,6 +25,7 @@ export interface DefineFindDistinctOperationParametersParams {
   operation: "findDistinct";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineFindDistinctOperationParameters(
@@ -88,6 +90,7 @@ export async function defineFindDistinctOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyFindDistinctOperationParametersTool,
     toolName: "applyFindDistinctOperationParametersTool",
     onComplete: (artifact) => {

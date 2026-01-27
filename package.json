@@ -3,19 +3,14 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev:all": "turbo watch dev",
-    "dev": "turbo watch dev --filter=platform... --filter=dev-server... --filter=connect-server... --filter=sandbox...",
-    "dev:local": "turbo watch dev --filter=dev-server...",
-    "dev:run": "turbo run dev --filter=platform... --filter=dev-server... --filter=connect-server... --filter=sandbox...",
-    "dev:local:run": "turbo run dev --filter=dev-server...",
-    "dev:connect": "turbo run dev --filter=connect-server...",
+    "dev": "turbo watch dev",
+    "dev:connect": "turbo watch dev --filter=connect-server...",
+    "dev:sandbox": "turbo watch dev --filter=sandbox...",
     "lint": "turbo run lint --ui=stream",
-    "lint:platform": "turbo run lint --filter=platform --ui=stream",
     "check-types": "turbo run check-types",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "cf-typegen": "turbo run cf-typegen",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo",
-    "clean:ts-cache": "rm -f apps/*/tsconfig.tsbuildinfo apps/*/.next/cache/.tsbuildinfo"
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

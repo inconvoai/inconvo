@@ -7,6 +7,7 @@ import {
   Space,
   Stack,
   Text,
+  TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import classes from "./Shell.module.css";
@@ -18,6 +19,8 @@ import {
   IconSettings,
 } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
+import Copy from "~/components/Copy";
+import { DEV_AGENT_ID } from "~/lib/constants";
 
 interface ShellSideNavProps {
   onNavClick?: () => void;
@@ -28,6 +31,28 @@ export function ShellSideNav({ onNavClick }: ShellSideNavProps) {
 
   return (
     <AppShell.Navbar p="md">
+      <div className={classes.section}>
+        <Stack gap="xs" px="sm" mb="sm">
+          <Text size="xs" c="dimmed" fw={500}>
+            Agent ID
+          </Text>
+          <TextInput
+            value={DEV_AGENT_ID}
+            readOnly
+            size="xs"
+            styles={{
+              input: {
+                fontFamily: "monospace",
+                fontSize: "11px",
+                cursor: "pointer",
+              },
+            }}
+            rightSection={<Copy value={DEV_AGENT_ID} />}
+            onClick={() => navigator.clipboard.writeText(DEV_AGENT_ID)}
+          />
+        </Stack>
+      </div>
+
       <ScrollArea className={classes.section}>
         <Stack gap="0">
           <Text className={classes.collectionText}>Configure</Text>

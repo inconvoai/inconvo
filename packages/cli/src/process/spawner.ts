@@ -55,7 +55,7 @@ export function checkDockerRunning(): boolean {
 
 export function initializePrismaDb(monorepoRoot: string): void {
   const devServerDir = path.join(monorepoRoot, "apps", "dev-server");
-  execSync("npx prisma db push --skip-generate", {
+  execSync("npx prisma db push", {
     cwd: devServerDir,
     stdio: "pipe",
   });

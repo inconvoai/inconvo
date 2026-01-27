@@ -30,8 +30,8 @@ export function getAIModel(
   }
 
   // Github Copilot PR Review Let me know if you see the provider overwritten. It should come from the modelString.
-  const [provider, model] = modelString.split(":") as [string, string];
-  //provider = "openai"; // Temporary override for testing
+  let [provider, model] = modelString.split(":") as [string, string];
+  provider = "openai"; // Temporary override for testing
 
   const isGPT5 = model.startsWith("gpt-5");
   const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {

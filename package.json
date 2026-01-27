@@ -4,7 +4,6 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo watch dev",
-    "dev:connect": "turbo watch dev --filter=connect-server...",
     "dev:sandbox": "turbo watch dev --filter=sandbox...",
     "lint": "turbo run lint --ui=stream",
     "check-types": "turbo run check-types",

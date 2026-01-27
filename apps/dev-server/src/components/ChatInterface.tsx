@@ -242,9 +242,38 @@ export function ChatInterface() {
 
   const handleSendMessage = useCallback(
     async (message: string) => {
-      if (!activeConversationId) {
-        setError("No active conversation");
-        return;
+      // Auto-create conversation if none exists
+      let conversationId = activeConversationId;
+      if (!conversationId) {
+        setIsCreatingConversation(true);
+        setError(undefined);
+        try {
+          const context = buildUserContext();
+          const res = await fetch("/api/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ context }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`Failed to create conversation: ${res.status}`);
+          }
+
+          const data = (await res.json()) as { id: string };
+          conversationId = data.id;
+          setActiveConversationId(conversationId);
+          setContextConfirmed(true);
+          await fetchConversations();
+        } catch (err) {
+          console.error("Failed to create conversation:", err);
+          setError(
+            err instanceof Error ? err.message : "Failed to create conversation",
+          );
+          setIsCreatingConversation(false);
+          return;
+        } finally {
+          setIsCreatingConversation(false);
+        }
       }
 
       setError(undefined);
@@ -260,7 +289,7 @@ export function ChatInterface() {
 
       try {
         const response = await fetch(
-          `/api/conversations/${activeConversationId}/response`,
+          `/api/conversations/${conversationId}/response`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -328,7 +357,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId],
+    [activeConversationId, buildUserContext],
   );
 
   // Count active context values

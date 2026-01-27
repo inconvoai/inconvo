@@ -13,7 +13,7 @@ import {
   StateGraph,
 } from "@langchain/langgraph";
 import type { Schema } from "@repo/types";
-import { getAIModel } from "../../../utils/getAIModel";
+import { getAIModel, type AIProvider } from "../../../utils/getAIModel";
 import { getPrompt } from "../../../utils/getPrompt";
 import { aiMessageContainsJsonLikeText } from "../../../utils/langchainMessageUtils";
 import { buildTableSchemaStringFromTableSchema } from "../../utils/schemaFormatters";
@@ -23,6 +23,7 @@ interface CreateOperationParametersAgentOptions<Result, Artifact> {
   tool: StructuredTool;
   toolName: string;
   promptCacheKey: string;
+  provider: AIProvider;
   isValidArtifact?: (artifact: Artifact | undefined) => boolean;
   onComplete: (artifact: Artifact | undefined) => Result | Promise<Result>;
   jsonDetectedMessage?: string;
@@ -44,7 +45,7 @@ export function createOperationParametersAgent<Result, Artifact>(
       return status === "valid";
     });
 
-  const modelWithTools = getAIModel("azure:gpt-5.2", {
+  const modelWithTools = getAIModel(options.provider, "gpt-5.2", {
     // reasoning: { effort: "low", summary: "detailed" },
     promptCacheKey: options.promptCacheKey,
   }).bindTools([options.tool]);

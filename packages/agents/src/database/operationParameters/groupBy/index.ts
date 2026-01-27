@@ -20,6 +20,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineGroupByOperationParametersParams {
   schema: Schema;
@@ -29,6 +30,7 @@ export interface DefineGroupByOperationParametersParams {
   operation: "groupBy";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineGroupByOperationParameters(
@@ -281,6 +283,7 @@ export async function defineGroupByOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyGroupByOperationParametersTool,
     toolName: "applyGroupByOperationParametersTool",
     jsonDetectedMessage,

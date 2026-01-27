@@ -30,7 +30,7 @@ import { databaseRetrieverAgent } from "../database";
 import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
-import { getAIModel } from "../utils/getAIModel";
+import { getAIModel, type AIProvider } from "../utils/getAIModel";
 import { buildPromptCacheKey } from "../utils/promptCacheKey";
 import { inconvoResponseSchema } from "@repo/types";
 import { tryCatchSync } from "../utils/tryCatch";
@@ -87,6 +87,8 @@ interface QuestionAgentParams {
     conversationId: string,
     message: string,
   ) => Promise<void>;
+  /** AI provider to use for model calls */
+  provider: AIProvider;
 }
 
 const messageReducer = (
@@ -372,6 +374,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       reducer: (x, y) => y,
       default: () => false,
     }),
+    provider: Annotation<AIProvider>({
+      reducer: (x, y) => y ?? x,
+      default: () => params.provider,
+    }),
   });
 
   const tools: (StructuredToolInterface | DynamicTool | RunnableToolLike)[] =
@@ -386,7 +392,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     >,
   });
 
-  const model = getAIModel("azure:gpt-5.2", {
+  const model = getAIModel(params.provider, "gpt-5.2", {
     promptCacheKey,
     // reasoning: { effort: "low", summary: "detailed" },
   });
@@ -468,6 +474,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               userContext: state.userContext,
               agentId: params.agentId,
               connector: dbConfig.connector,
+              provider: params.provider,
             })
           ).invoke({});
 

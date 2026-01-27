@@ -20,6 +20,7 @@ import {
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
+import type { AIProvider } from "../../../utils/getAIModel";
 
 export interface DefineAggregateGroupsOperationParametersParams {
   schema: Schema;
@@ -29,6 +30,7 @@ export interface DefineAggregateGroupsOperationParametersParams {
   operation: "aggregateGroups";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  provider: AIProvider;
 }
 
 export async function defineAggregateGroupsOperationParameters(
@@ -302,6 +304,7 @@ export async function defineAggregateGroupsOperationParameters(
       agentId: params.agentId,
       userContext: params.userContext,
     }),
+    provider: params.provider,
     tool: applyAggregateGroupsOperationParametersTool,
     toolName: "applyAggregateGroupsOperationParametersTool",
     jsonDetectedMessage,

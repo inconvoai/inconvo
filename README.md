@@ -22,6 +22,10 @@ Use Inconvo to build and deploy data agents that query real production databases
 - **Observability & monitoring:** Every run is traceable. Inspect generated queries, execution logs, and failures to understand exactly what happened.
 - **Semantic modeling:** Start querying immediately, then layer in business context—metrics, terminology, computed fields, join rules—over time.
 
+## Demo
+
+https://github.com/user-attachments/assets/cbb468a6-3711-4ad1-92d6-d3871456ae08
+
 ## Call agents from your codebase
 
 ```typescript

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:cli": "turbo run build --filter=inconvo",
     "dev": "turbo watch dev",
     "dev:sandbox": "turbo watch dev --filter=sandbox...",
     "lint": "turbo run lint --ui=stream",

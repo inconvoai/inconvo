@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx src/index.ts dev",
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit"
   },

@@ -1,10 +1,10 @@
 <p align="center">
-  <img width="768" height="512" alt="github-banner" src="https://github.com/user-attachments/assets/0e731dc1-054a-4660-8592-b9180f203533" />
+<img width="1532" height="511" alt="ChatGPT Image Jan 27, 2026, 10_47_13 AM (1)" src="https://github.com/user-attachments/assets/93018d0d-164c-4d47-a3b0-2b4aba60c66a" />
 </p>
 
 <h1 align="center">Inconvo</h1>
 
-<p align="center">Build chat-with-data agents for customer-facing applications</p>
+<p align="center"> 💬📊 Build chat-with-data agents for customer-facing applications 📊💬 </p>
 
 ## About Inconvo
 

@@ -1,18 +1,14 @@
-import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
-import path from "path";
+import { MemorySaver } from "@langchain/langgraph";
 
 /**
- * SQLite-based checkpointer for LangGraph conversation state
- * Persists state across server restarts
+ * In-memory checkpointer for LangGraph conversation state
+ * State is lost on server restart
  */
 
-let checkpointerInstance: SqliteSaver | null = null;
+// Singleton instance
+let checkpointerInstance: MemorySaver | null = null;
 
-export function getCheckpointer(): SqliteSaver {
-  if (!checkpointerInstance) {
-    // Use same database as Prisma - SqliteSaver creates its own tables
-    const dbPath = path.join(process.cwd(), "prisma", ".inconvo.db");
-    checkpointerInstance = SqliteSaver.fromConnString(dbPath);
-  }
+export function getCheckpointer(): MemorySaver {
+  checkpointerInstance ??= new MemorySaver();
   return checkpointerInstance;
 }

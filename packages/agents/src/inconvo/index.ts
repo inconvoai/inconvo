@@ -24,7 +24,6 @@ import {
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import type { Schema, DatabaseConnector } from "@repo/types";
 import { getPrompt } from "../utils/getPrompt";
 import { databaseRetrieverAgent } from "../database";
@@ -71,7 +70,7 @@ interface DatabaseConfig {
 
 interface QuestionAgentParams {
   databases: DatabaseConfig[];
-  checkpointer: PostgresSaver | MemorySaver | SqliteSaver;
+  checkpointer: PostgresSaver | MemorySaver;
   conversation: Conversation;
   orgId: string;
   agentId: string;

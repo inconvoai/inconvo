@@ -4,12 +4,7 @@ import { inconvoAgent } from "@repo/agents";
 import { getConnector } from "~/lib/connector";
 import { getCheckpointer } from "~/lib/checkpointer";
 import { getSchema } from "~/lib/schema";
-import {
-  getConversation,
-  updateConversation,
-  appendMessages,
-  type ChatMessage,
-} from "~/lib/conversations";
+import { getConversation, updateConversation } from "~/lib/conversations";
 import type { InconvoResponse } from "@repo/types";
 import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
 
@@ -57,7 +52,7 @@ export async function POST(
     }
 
     // Get existing conversation
-    const conversation = await getConversation(conversationId);
+    const conversation = getConversation(conversationId);
     if (!conversation) {
       return new Response(JSON.stringify({ error: "Conversation not found" }), {
         status: 404,
@@ -66,16 +61,6 @@ export async function POST(
     }
 
     const runId = uuidv4();
-    const userMessageId = `user-${Date.now()}`;
-
-    // Save user message immediately
-    const userMessage: ChatMessage = {
-      id: userMessageId,
-      type: "user",
-      content: message,
-    };
-    await appendMessages(conversationId, [userMessage]);
-
     const schema = await getSchema();
     const connector = getConnector();
     const checkpointer = getCheckpointer();
@@ -151,17 +136,9 @@ export async function POST(
         }
 
         if (lastResponse) {
-          // Save assistant response
-          const assistantMessage: ChatMessage = {
-            id: runId,
-            type: lastResponse.type,
-            content: lastResponse,
-          };
-          await appendMessages(conversationId, [assistantMessage]);
-
           // Update conversation title if first message
           if (!conversation.title && lastResponse.type === "text") {
-            await updateConversation(conversationId, {
+            updateConversation(conversationId, {
               title: message.slice(0, 100),
             });
           }
@@ -289,14 +266,6 @@ export async function POST(
 
           // Send completed event with final response
           if (lastResponse) {
-            // Save assistant response
-            const assistantMessage: ChatMessage = {
-              id: runId,
-              type: lastResponse.type,
-              content: lastResponse,
-            };
-            await appendMessages(conversationId, [assistantMessage]);
-
             sendEvent({
               type: "response.completed",
               id: runId,
@@ -305,7 +274,7 @@ export async function POST(
 
             // Update conversation title if first message
             if (!conversation.title && lastResponse.type === "text") {
-              await updateConversation(conversationId, {
+              updateConversation(conversationId, {
                 title: message.slice(0, 100),
               });
             }

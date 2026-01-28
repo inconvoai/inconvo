@@ -1,4 +1,4 @@
-[![Inconvo](https://github.com/tendev/.github/raw/main/profile/inconvo-banner.png)](https://inconvo.com)
+[![Inconvo](https://github.com/ten-dev/.github/raw/main/profile/inconvo-banner.png)](https://inconvo.com)
 
 <h1 align="center">Inconvo</h1>
 

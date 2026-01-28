@@ -79,11 +79,12 @@ jobs:
           tar -czf inconvo-${{ github.ref_name }}-bundle.tar.gz -C release-bundle .
           ls -lh inconvo-${{ github.ref_name }}-bundle.tar.gz
 
-      - name: Publish CLI to npm
-        working-directory: packages/cli
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # TODO: Uncomment when ready to publish to npm
+      # - name: Publish CLI to npm
+      #   working-directory: packages/cli
+      #   run: npm publish --provenance --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1

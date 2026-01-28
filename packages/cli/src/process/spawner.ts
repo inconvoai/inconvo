@@ -1,10 +1,19 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
+import * as path from "path";
+import * as os from "os";
 import type { ReleaseInfo } from "../release/downloader.js";
 
 export interface RuntimeMode {
   type: "release";
   devServerDir: string;
   sandboxDir: string;
+}
+
+/**
+ * Get the path to the local SQLite database (persists across CLI versions)
+ */
+function getLocalDbPath(): string {
+  return path.join(os.homedir(), ".inconvo", "inconvo.db");
 }
 
 /**
@@ -33,6 +42,7 @@ export function initializePrismaDb(mode: RuntimeMode): void {
     stdio: "pipe",
     env: {
       ...process.env,
+      INCONVO_LOCAL_DB_PATH: getLocalDbPath(),
       SKIP_ENV_VALIDATION: "true",
     },
   });
@@ -52,6 +62,7 @@ export function spawnDevServer(
   const env = {
     ...process.env,
     ...configEnv,
+    INCONVO_LOCAL_DB_PATH: getLocalDbPath(),
     INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
     INCONVO_SANDBOX_API_KEY: sandboxApiKey,
     SKIP_ENV_VALIDATION: "true",

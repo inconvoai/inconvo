@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:cli": "turbo run build --filter=inconvo",
+    "cli": "pnpm --filter inconvo exec tsx src/index.ts",
     "dev": "turbo watch dev",
     "dev:sandbox": "turbo watch dev --filter=sandbox...",
     "lint": "turbo run lint --ui=stream",

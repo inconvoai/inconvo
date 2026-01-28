@@ -1,0 +1,48 @@
+{
+  "name": "inconvo",
+  "version": "0.1.0",
+  "description": "CLI for Inconvo development environment",
+  "type": "module",
+  "bin": {
+    "inconvo": "./bin/inconvo.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev:local": "tsx src/index.ts dev",
+    "lint": "eslint --color .",
+    "check-types": "tsc --noEmit",
+    "prepublishOnly": "node scripts/resolve-catalog.js && pnpm build",
+    "postpublish": "git checkout package.json"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "commander": "^13.1.0",
+    "yaml": "^2.7.0",
+    "zod": "catalog:",
+    "kysely": "catalog:",
+    "pg": "catalog:",
+    "mysql2": "^3.16.1"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

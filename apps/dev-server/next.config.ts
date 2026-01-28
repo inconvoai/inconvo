@@ -7,18 +7,12 @@ import * as path from "path";
 dotenv.config({ path: path.join(process.cwd(), ".inconvo.env") });
 
 const config: NextConfig = {
+  output: "standalone",
   transpilePackages: [
     "@repo/ui",
     "@repo/types",
     "@repo/agents",
     "@repo/connect",
-  ],
-  serverExternalPackages: [
-    "pino",
-    "pino-pretty",
-    "thread-stream",
-    "better-sqlite3",
-    "@prisma/adapter-better-sqlite3",
   ],
 };
 

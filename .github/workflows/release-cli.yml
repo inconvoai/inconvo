@@ -1,0 +1,95 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build dev-server
+        run: pnpm --filter dev-server build
+        env:
+          SKIP_ENV_VALIDATION: 'true'
+
+      - name: Build CLI
+        run: pnpm --filter inconvo build
+
+      - name: Resolve catalog versions for CLI
+        working-directory: packages/cli
+        run: node scripts/resolve-catalog.js
+
+      - name: Create release bundle
+        run: |
+          mkdir -p release-bundle
+
+          # Copy the ENTIRE standalone output (includes node_modules with resolved deps)
+          # Use -L to dereference symlinks (important for pnpm)
+          cp -rL apps/dev-server/.next/standalone/* release-bundle/
+
+          # Copy static assets (required for Next.js)
+          cp -r apps/dev-server/.next/static release-bundle/apps/dev-server/.next/
+
+          # Copy public folder
+          cp -r apps/dev-server/public release-bundle/apps/dev-server/ 2>/dev/null || true
+
+          # Copy prisma schema (needed for migrations)
+          cp -r apps/dev-server/prisma release-bundle/apps/dev-server/
+
+          # Copy sandbox source (wrangler compiles on the fly)
+          mkdir -p release-bundle/apps/sandbox
+          cp -r apps/sandbox/src release-bundle/apps/sandbox/
+          cp -r apps/sandbox/scripts release-bundle/apps/sandbox/
+          cp apps/sandbox/wrangler.jsonc release-bundle/apps/sandbox/
+          cp apps/sandbox/Dockerfile release-bundle/apps/sandbox/
+          cp apps/sandbox/package.json release-bundle/apps/sandbox/
+          cp apps/sandbox/tsconfig.json release-bundle/apps/sandbox/
+          cp apps/sandbox/worker-configuration.d.ts release-bundle/apps/sandbox/
+
+          # Create version marker
+          echo "${{ github.ref_name }}" > release-bundle/.version
+
+          # Check size
+          du -sh release-bundle/
+
+          # Create tarball
+          tar -czf inconvo-${{ github.ref_name }}-bundle.tar.gz -C release-bundle .
+          ls -lh inconvo-${{ github.ref_name }}-bundle.tar.gz
+
+      # TODO: Uncomment when ready to publish to npm
+      # - name: Publish CLI to npm
+      #   working-directory: packages/cli
+      #   run: npm publish --provenance --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          generate_release_notes: true
+          draft: false
+          files: |
+            inconvo-${{ github.ref_name }}-bundle.tar.gz

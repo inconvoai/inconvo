@@ -3,7 +3,7 @@ name: Release CLI
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build-release:
@@ -19,13 +19,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Install dependencies
         run: pnpm install
@@ -33,7 +31,7 @@ jobs:
       - name: Build dev-server
         run: pnpm --filter dev-server build
         env:
-          SKIP_ENV_VALIDATION: 'true'
+          SKIP_ENV_VALIDATION: "true"
 
       - name: Build CLI
         run: pnpm --filter inconvo build

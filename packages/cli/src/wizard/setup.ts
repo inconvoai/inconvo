@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import * as fs from "fs/promises";
 import * as path from "path";
+import * as os from "os";
 import { Kysely, PostgresDialect, MysqlDialect, MssqlDialect } from "kysely";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";
@@ -138,28 +139,58 @@ async function writeEnvFile(
   await fs.writeFile(envPath, lines.join("\n"));
 }
 
-export function getEnvPath(monorepoRoot: string): string {
-  return path.join(monorepoRoot, "apps", "dev-server", ".inconvo.env");
+export function getInconvoDir(): string {
+  return path.join(os.homedir(), ".inconvo");
 }
 
-export async function envExists(monorepoRoot: string): Promise<boolean> {
+export function getEnvPath(): string {
+  return path.join(getInconvoDir(), "config.env");
+}
+
+export async function envExists(): Promise<boolean> {
   try {
-    await fs.access(getEnvPath(monorepoRoot));
+    await fs.access(getEnvPath());
     return true;
   } catch {
     return false;
   }
 }
 
-export async function runSetupWizard(
-  monorepoRoot: string
-): Promise<boolean> {
+export async function ensureInconvoDir(): Promise<void> {
+  const dir = getInconvoDir();
+  await fs.mkdir(dir, { recursive: true });
+}
+
+export async function readEnvFile(): Promise<Record<string, string>> {
+  const envPath = getEnvPath();
+  try {
+    const content = await fs.readFile(envPath, "utf-8");
+    const env: Record<string, string> = {};
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        const [key, ...valueParts] = trimmed.split("=");
+        if (key) {
+          env[key] = valueParts.join("=");
+        }
+      }
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
+export async function runSetupWizard(): Promise<boolean> {
   p.intro("Inconvo Configuration Setup");
 
-  const envPath = getEnvPath(monorepoRoot);
+  const envPath = getEnvPath();
 
-  // Check if .inconvo.env already exists
-  if (await envExists(monorepoRoot)) {
+  // Ensure ~/.inconvo directory exists
+  await ensureInconvoDir();
+
+  // Check if config already exists
+  if (await envExists()) {
     const shouldOverwrite = await p.confirm({
       message: `Configuration already exists at ${envPath}. Do you want to overwrite it?`,
       initialValue: false,
@@ -249,7 +280,7 @@ export async function runSetupWizard(
       return false;
     }
 
-    return runSetupWizard(monorepoRoot);
+    return runSetupWizard();
   }
 
   // OpenAI API key

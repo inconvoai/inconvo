@@ -1,6 +1,46 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
+import type { ReleaseInfo } from "../release/downloader.js";
+
+function getInconvoDir(): string {
+  return path.join(os.homedir(), ".inconvo");
+}
+
+export interface RuntimeMode {
+  type: "monorepo" | "release";
+  devServerDir: string;
+  sandboxDir: string;
+}
+
+/**
+ * Detect whether we're running from monorepo source or a downloaded release
+ */
+export function detectRuntimeMode(release?: ReleaseInfo): RuntimeMode {
+  // If a release is provided, use it
+  if (release) {
+    return {
+      type: "release",
+      devServerDir: release.devServerDir,
+      sandboxDir: release.sandboxDir,
+    };
+  }
+
+  // Check if we're in the monorepo
+  const monorepoRoot = findMonorepoRoot();
+  if (monorepoRoot) {
+    return {
+      type: "monorepo",
+      devServerDir: path.join(monorepoRoot, "apps", "dev-server"),
+      sandboxDir: path.join(monorepoRoot, "apps", "sandbox"),
+    };
+  }
+
+  throw new Error(
+    "Could not detect runtime mode. Run from monorepo or use --download flag."
+  );
+}
 
 export function findMonorepoRoot(): string | null {
   let currentDir = process.cwd();
@@ -16,6 +56,13 @@ export function findMonorepoRoot(): string | null {
   return null;
 }
 
+/**
+ * Check if we're inside the monorepo
+ */
+export function isInMonorepo(): boolean {
+  return findMonorepoRoot() !== null;
+}
+
 export function checkDockerRunning(): boolean {
   try {
     execSync("docker info", { stdio: "pipe" });
@@ -25,55 +72,89 @@ export function checkDockerRunning(): boolean {
   }
 }
 
-export function initializePrismaDb(monorepoRoot: string): void {
-  const devServerDir = path.join(monorepoRoot, "apps", "dev-server");
-  execSync("npx prisma db push --accept-data-loss", {
-    cwd: devServerDir,
+export function initializePrismaDb(mode: RuntimeMode): void {
+  const command =
+    mode.type === "monorepo"
+      ? "npx prisma db push --accept-data-loss"
+      : "npx prisma db push --accept-data-loss";
+
+  execSync(command, {
+    cwd: mode.devServerDir,
     stdio: "pipe",
+    env: {
+      ...process.env,
+      SKIP_ENV_VALIDATION: "true",
+    },
   });
 }
-
-const SANDBOX_BASE_URL = "http://localhost:8787";
 
 export function generateSandboxApiKey(): string {
   return crypto.randomUUID();
 }
 
-export function spawnDevServer(
-  monorepoRoot: string,
-  sandboxApiKey: string
-): ChildProcess {
-  const devServerDir = path.join(monorepoRoot, "apps", "dev-server");
+const SANDBOX_BASE_URL = "http://localhost:8787";
 
-  return spawn("pnpm", ["next", "dev", "--port", "26686", "--turbopack"], {
-    cwd: devServerDir,
-    env: {
-      ...process.env,
-      INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
-      INCONVO_SANDBOX_API_KEY: sandboxApiKey,
-    },
-    stdio: ["inherit", "pipe", "pipe"],
-    shell: true,
-  });
+export function spawnDevServer(
+  mode: RuntimeMode,
+  sandboxApiKey: string,
+  configEnv: Record<string, string>
+): ChildProcess {
+  const env = {
+    ...process.env,
+    ...configEnv,
+    INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
+    INCONVO_SANDBOX_API_KEY: sandboxApiKey,
+    SKIP_ENV_VALIDATION: "true",
+  };
+
+  if (mode.type === "monorepo") {
+    return spawn("pnpm", ["next", "dev", "--port", "26686", "--turbopack"], {
+      cwd: mode.devServerDir,
+      env,
+      stdio: ["inherit", "pipe", "pipe"],
+      shell: true,
+    });
+  } else {
+    // Release mode: run the standalone server.js
+    return spawn("node", ["server.js"], {
+      cwd: mode.devServerDir,
+      env: {
+        ...env,
+        PORT: "26686",
+        HOSTNAME: "localhost",
+      },
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+  }
 }
 
 export function spawnSandbox(
-  monorepoRoot: string,
+  mode: RuntimeMode,
   sandboxApiKey: string
 ): ChildProcess {
-  const sandboxDir = path.join(monorepoRoot, "apps", "sandbox");
+  const env = {
+    ...process.env,
+    INTERNAL_API_KEY: sandboxApiKey,
+    SKIP_BUCKET_MOUNT: "true",
+    WRANGLER_SEND_METRICS: "false",
+  };
 
-  return spawn("pnpm", ["wrangler", "dev"], {
-    cwd: sandboxDir,
-    env: {
-      ...process.env,
-      INTERNAL_API_KEY: sandboxApiKey,
-      SKIP_BUCKET_MOUNT: "true",
-      WRANGLER_SEND_METRICS: "false",
-    },
-    stdio: ["inherit", "pipe", "pipe"],
-    shell: true,
-  });
+  if (mode.type === "monorepo") {
+    return spawn("pnpm", ["wrangler", "dev"], {
+      cwd: mode.sandboxDir,
+      env,
+      stdio: ["inherit", "pipe", "pipe"],
+      shell: true,
+    });
+  } else {
+    // Release mode: use npx wrangler
+    return spawn("npx", ["wrangler", "dev"], {
+      cwd: mode.sandboxDir,
+      env,
+      stdio: ["inherit", "pipe", "pipe"],
+      shell: true,
+    });
+  }
 }
 
 export function setupShutdownHandler(processes: ChildProcess[]): void {

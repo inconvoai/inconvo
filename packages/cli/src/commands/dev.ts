@@ -1,8 +1,9 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
-import { envExists, runSetupWizard } from "../wizard/setup.js";
+import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import {
-  findMonorepoRoot,
+  detectRuntimeMode,
+  isInMonorepo,
   checkDockerRunning,
   initializePrismaDb,
   spawnDevServer,
@@ -10,6 +11,7 @@ import {
   setupShutdownHandler,
   generateSandboxApiKey,
 } from "../process/spawner.js";
+import { ensureRelease } from "../release/downloader.js";
 import {
   createOutputHandler,
   logInfo,
@@ -19,26 +21,41 @@ import {
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
-  .action(async () => {
-    // Find monorepo root first (needed for config check)
-    const monorepoRoot = findMonorepoRoot();
-    if (!monorepoRoot) {
-      logError(
-        "Could not find monorepo root. Make sure you are running this command from within the Inconvo repository."
-      );
-      process.exit(1);
+  .option("--version <version>", "Use a specific release version")
+  .action(async (options: { version?: string }) => {
+    let mode;
+
+    // Determine runtime mode
+    if (isInMonorepo()) {
+      // Running from within the monorepo - use local source
+      logInfo("Running in monorepo mode (using local source)");
+      mode = detectRuntimeMode();
+    } else {
+      // Running outside monorepo - download release
+      logInfo("Downloading Inconvo release...");
+      try {
+        const release = await ensureRelease(options.version);
+        logInfo(`Using Inconvo v${release.version}`);
+        mode = detectRuntimeMode(release);
+      } catch (error) {
+        logError(
+          `Failed to download release: ${error instanceof Error ? error.message : String(error)}`
+        );
+        process.exit(1);
+      }
     }
 
-    logInfo(`Found monorepo at ${monorepoRoot}`);
-
     // Check for config, run wizard if missing
-    if (!(await envExists(monorepoRoot))) {
+    if (!(await envExists())) {
       p.intro("Welcome to Inconvo! Let's set up your configuration first.");
-      const success = await runSetupWizard(monorepoRoot);
+      const success = await runSetupWizard();
       if (!success) {
         process.exit(1);
       }
     }
+
+    // Read config from ~/.inconvo/config.env
+    const configEnv = await readEnvFile();
 
     // Check Docker is running (required for sandbox containers)
     if (!checkDockerRunning()) {
@@ -55,7 +72,7 @@ export const devCommand = new Command("dev")
     spinner.start("Initializing local database...");
 
     try {
-      initializePrismaDb(monorepoRoot);
+      initializePrismaDb(mode);
       spinner.stop("Local database initialized");
     } catch (error) {
       spinner.stop("Failed to initialize local database");
@@ -75,8 +92,8 @@ export const devCommand = new Command("dev")
     logGray("─".repeat(50));
 
     // Spawn processes with shared API key
-    const devServer = spawnDevServer(monorepoRoot, sandboxApiKey);
-    const sandbox = spawnSandbox(monorepoRoot, sandboxApiKey);
+    const devServer = spawnDevServer(mode, sandboxApiKey, configEnv);
+    const sandbox = spawnSandbox(mode, sandboxApiKey);
 
     // Setup output handlers
     devServer.stdout?.on("data", createOutputHandler("dev-server", "cyan"));

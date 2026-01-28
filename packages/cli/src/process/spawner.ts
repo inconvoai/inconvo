@@ -71,7 +71,6 @@ export function initializePrismaDb(mode: RuntimeMode): void {
   execSync(`node "${prismaIndex}" db push --accept-data-loss`, {
     cwd: mode.devServerDir,
     stdio: "pipe",
-    shell: true,
     env: {
       ...getCleanEnv(),
       INCONVO_LOCAL_DB_PATH: getLocalDbPath(),

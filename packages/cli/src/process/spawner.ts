@@ -1,7 +1,6 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import type { InconvoConfig } from "../config/schema.js";
 
 export function findMonorepoRoot(): string | null {
   let currentDir = process.cwd();
@@ -17,31 +16,24 @@ export function findMonorepoRoot(): string | null {
   return null;
 }
 
-export function buildDevServerEnv(
-  config: InconvoConfig
-): Record<string, string> {
-  return {
-    ...process.env,
-    DATABASE_DIALECT: config.database.dialect,
-    INCONVO_DATABASE_URL: config.database.url,
-    ...(config.database.schema && {
-      INCONVO_DATABASE_SCHEMA: config.database.schema,
-    }),
-    OPENAI_API_KEY: config.apiKeys.openai,
-    LANGCHAIN_API_KEY: config.apiKeys.langchain,
-    INCONVO_SECRET_KEY: config.secrets.inconvoSecretKey,
-    INCONVO_SANDBOX_BASE_URL: "http://localhost:8787",
-    INCONVO_SANDBOX_API_KEY: config.secrets.internalApiKey,
-  } as Record<string, string>;
-}
+export function loadEnvFile(monorepoRoot: string): Record<string, string> {
+  const envPath = path.join(monorepoRoot, "apps", "dev-server", ".inconvo.env");
+  const content = fs.readFileSync(envPath, "utf-8");
+  const vars: Record<string, string> = {};
 
-export function buildSandboxEnv(config: InconvoConfig): Record<string, string> {
-  return {
-    ...process.env,
-    INTERNAL_API_KEY: config.secrets.internalApiKey,
-    SKIP_BUCKET_MOUNT: "true",
-    WRANGLER_SEND_METRICS: "false",
-  } as Record<string, string>;
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex > 0) {
+      const key = trimmed.slice(0, eqIndex);
+      const value = trimmed.slice(eqIndex + 1);
+      vars[key] = value;
+    }
+  }
+
+  return vars;
 }
 
 export function checkDockerRunning(): boolean {
@@ -61,20 +53,12 @@ export function initializePrismaDb(monorepoRoot: string): void {
   });
 }
 
-export interface SpawnedProcess {
-  name: string;
-  process: ChildProcess;
-}
-
-export function spawnDevServer(
-  monorepoRoot: string,
-  env: Record<string, string>
-): ChildProcess {
+export function spawnDevServer(monorepoRoot: string): ChildProcess {
   const devServerDir = path.join(monorepoRoot, "apps", "dev-server");
 
   return spawn("pnpm", ["next", "dev", "--port", "26686", "--turbopack"], {
     cwd: devServerDir,
-    env,
+    env: process.env,
     stdio: ["inherit", "pipe", "pipe"],
     shell: true,
   });
@@ -82,13 +66,18 @@ export function spawnDevServer(
 
 export function spawnSandbox(
   monorepoRoot: string,
-  env: Record<string, string>
+  envVars: Record<string, string>
 ): ChildProcess {
   const sandboxDir = path.join(monorepoRoot, "apps", "sandbox");
 
   return spawn("pnpm", ["wrangler", "dev"], {
     cwd: sandboxDir,
-    env,
+    env: {
+      ...process.env,
+      INTERNAL_API_KEY: envVars.INCONVO_SANDBOX_API_KEY,
+      SKIP_BUCKET_MOUNT: "true",
+      WRANGLER_SEND_METRICS: "false",
+    },
     stdio: ["inherit", "pipe", "pipe"],
     shell: true,
   });

@@ -1,34 +1,26 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
-import { configExists, loadConfig } from "../config/manager.js";
-import { runSetupWizard } from "../wizard/setup.js";
+import { envExists, runSetupWizard } from "../wizard/setup.js";
 import {
   findMonorepoRoot,
-  buildDevServerEnv,
-  buildSandboxEnv,
   checkDockerRunning,
   initializePrismaDb,
   spawnDevServer,
   spawnSandbox,
   setupShutdownHandler,
+  loadEnvFile,
 } from "../process/spawner.js";
-import { createOutputHandler, logInfo, logError, logGray } from "../process/output.js";
+import {
+  createOutputHandler,
+  logInfo,
+  logError,
+  logGray,
+} from "../process/output.js";
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
   .action(async () => {
-    // Check for config, run wizard if missing
-    if (!(await configExists())) {
-      p.intro("Welcome to Inconvo! Let's set up your configuration first.");
-      const config = await runSetupWizard();
-      if (!config) {
-        process.exit(1);
-      }
-    }
-
-    const config = await loadConfig();
-
-    // Find monorepo root
+    // Find monorepo root first (needed for config check)
     const monorepoRoot = findMonorepoRoot();
     if (!monorepoRoot) {
       logError(
@@ -38,6 +30,15 @@ export const devCommand = new Command("dev")
     }
 
     logInfo(`Found monorepo at ${monorepoRoot}`);
+
+    // Check for config, run wizard if missing
+    if (!(await envExists(monorepoRoot))) {
+      p.intro("Welcome to Inconvo! Let's set up your configuration first.");
+      const success = await runSetupWizard(monorepoRoot);
+      if (!success) {
+        process.exit(1);
+      }
+    }
 
     // Check Docker is running (required for sandbox containers)
     if (!checkDockerRunning()) {
@@ -64,9 +65,8 @@ export const devCommand = new Command("dev")
       process.exit(1);
     }
 
-    // Build environment variables
-    const devServerEnv = buildDevServerEnv(config);
-    const sandboxEnv = buildSandboxEnv(config);
+    // Load env file for sandbox API key
+    const envVars = loadEnvFile(monorepoRoot);
 
     logGray("─".repeat(50));
     logInfo("Starting development environment...");
@@ -75,8 +75,8 @@ export const devCommand = new Command("dev")
     logGray("─".repeat(50));
 
     // Spawn processes
-    const devServer = spawnDevServer(monorepoRoot, devServerEnv);
-    const sandbox = spawnSandbox(monorepoRoot, sandboxEnv);
+    const devServer = spawnDevServer(monorepoRoot);
+    const sandbox = spawnSandbox(monorepoRoot, envVars);
 
     // Setup output handlers
     devServer.stdout?.on("data", createOutputHandler("dev-server", "cyan"));
@@ -88,13 +88,13 @@ export const devCommand = new Command("dev")
     setupShutdownHandler([devServer, sandbox]);
 
     // Handle process exits
-    devServer.on("exit", (code) => {
+    devServer.on("exit", (code: number | null) => {
       if (code !== 0 && code !== null) {
         logError(`dev-server exited with code ${code}`);
       }
     });
 
-    sandbox.on("exit", (code) => {
+    sandbox.on("exit", (code: number | null) => {
       if (code !== 0 && code !== null) {
         logError(`sandbox exited with code ${code}`);
       }

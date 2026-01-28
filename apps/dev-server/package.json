@@ -17,6 +17,7 @@
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@langchain/langgraph": "catalog:",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.0",
     "@mantine/charts": "catalog:",
     "@prisma/adapter-better-sqlite3": "^7.3.0",
     "@prisma/client": "catalog:",

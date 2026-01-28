@@ -8,7 +8,7 @@ import {
 
 // GET /api/conversations - List all conversations
 export async function GET() {
-  const conversations = listConversations();
+  const conversations = await listConversations();
   return NextResponse.json({ conversations });
 }
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const userIdentifier = body.userIdentifier ?? "dev-user";
     const userContext = body.userContext ?? null;
 
-    const conversation = createConversation(userIdentifier, userContext);
+    const conversation = await createConversation(userIdentifier, userContext);
     return NextResponse.json(conversation, { status: 201 });
   } catch (error) {
     console.error(
@@ -48,7 +48,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const existing = getConversation(id);
+  const existing = await getConversation(id);
   if (!existing) {
     return NextResponse.json(
       { error: "Conversation not found" },
@@ -56,6 +56,6 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  deleteConversation(id);
+  await deleteConversation(id);
   return NextResponse.json({ success: true });
 }

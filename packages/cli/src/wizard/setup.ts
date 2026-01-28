@@ -108,7 +108,6 @@ async function writeEnvFile(
   envPath: string
 ): Promise<void> {
   const localSecretKey = `local-dev-${crypto.randomUUID()}`;
-  const internalApiKey = crypto.randomUUID();
 
   const lines: string[] = [
     "# Inconvo Dev Server Configuration",
@@ -127,9 +126,6 @@ async function writeEnvFile(
     "",
     "# Connect Configuration (for local query execution)",
     `INCONVO_SECRET_KEY=${localSecretKey}`,
-    "",
-    "# Sandbox Configuration",
-    `INCONVO_SANDBOX_API_KEY=${internalApiKey}`,
     "",
     "# LLM Configuration",
     `OPENAI_API_KEY=${config.openaiApiKey}`,

@@ -16,26 +16,6 @@ export function findMonorepoRoot(): string | null {
   return null;
 }
 
-export function loadEnvFile(monorepoRoot: string): Record<string, string> {
-  const envPath = path.join(monorepoRoot, "apps", "dev-server", ".inconvo.env");
-  const content = fs.readFileSync(envPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex > 0) {
-      const key = trimmed.slice(0, eqIndex);
-      const value = trimmed.slice(eqIndex + 1);
-      vars[key] = value;
-    }
-  }
-
-  return vars;
-}
-
 export function checkDockerRunning(): boolean {
   try {
     execSync("docker info", { stdio: "pipe" });
@@ -53,12 +33,25 @@ export function initializePrismaDb(monorepoRoot: string): void {
   });
 }
 
-export function spawnDevServer(monorepoRoot: string): ChildProcess {
+const SANDBOX_BASE_URL = "http://localhost:8787";
+
+export function generateSandboxApiKey(): string {
+  return crypto.randomUUID();
+}
+
+export function spawnDevServer(
+  monorepoRoot: string,
+  sandboxApiKey: string
+): ChildProcess {
   const devServerDir = path.join(monorepoRoot, "apps", "dev-server");
 
   return spawn("pnpm", ["next", "dev", "--port", "26686", "--turbopack"], {
     cwd: devServerDir,
-    env: process.env,
+    env: {
+      ...process.env,
+      INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
+      INCONVO_SANDBOX_API_KEY: sandboxApiKey,
+    },
     stdio: ["inherit", "pipe", "pipe"],
     shell: true,
   });
@@ -66,7 +59,7 @@ export function spawnDevServer(monorepoRoot: string): ChildProcess {
 
 export function spawnSandbox(
   monorepoRoot: string,
-  envVars: Record<string, string>
+  sandboxApiKey: string
 ): ChildProcess {
   const sandboxDir = path.join(monorepoRoot, "apps", "sandbox");
 
@@ -74,7 +67,7 @@ export function spawnSandbox(
     cwd: sandboxDir,
     env: {
       ...process.env,
-      INTERNAL_API_KEY: envVars.INCONVO_SANDBOX_API_KEY,
+      INTERNAL_API_KEY: sandboxApiKey,
       SKIP_BUCKET_MOUNT: "true",
       WRANGLER_SEND_METRICS: "false",
     },

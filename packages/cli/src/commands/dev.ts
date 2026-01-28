@@ -8,7 +8,7 @@ import {
   spawnDevServer,
   spawnSandbox,
   setupShutdownHandler,
-  loadEnvFile,
+  generateSandboxApiKey,
 } from "../process/spawner.js";
 import {
   createOutputHandler,
@@ -65,8 +65,8 @@ export const devCommand = new Command("dev")
       process.exit(1);
     }
 
-    // Load env file for sandbox API key
-    const envVars = loadEnvFile(monorepoRoot);
+    // Generate shared API key for sandbox communication
+    const sandboxApiKey = generateSandboxApiKey();
 
     logGray("─".repeat(50));
     logInfo("Starting development environment...");
@@ -74,9 +74,9 @@ export const devCommand = new Command("dev")
     logGray("  sandbox:    http://localhost:8787");
     logGray("─".repeat(50));
 
-    // Spawn processes
-    const devServer = spawnDevServer(monorepoRoot);
-    const sandbox = spawnSandbox(monorepoRoot, envVars);
+    // Spawn processes with shared API key
+    const devServer = spawnDevServer(monorepoRoot, sandboxApiKey);
+    const sandbox = spawnSandbox(monorepoRoot, sandboxApiKey);
 
     // Setup output handlers
     devServer.stdout?.on("data", createOutputHandler("dev-server", "cyan"));

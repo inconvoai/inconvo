@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process */
 
 /**
  * Resolve catalog: references in package.json before npm publish.
@@ -12,42 +13,13 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import YAML from "yaml";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const CLI_ROOT = path.resolve(__dirname, "..");
 const MONOREPO_ROOT = path.resolve(CLI_ROOT, "../..");
-
-function parseYamlCatalog(yamlContent) {
-  // Simple YAML parser for the catalog section
-  const lines = yamlContent.split("\n");
-  const catalog = {};
-  let inCatalog = false;
-
-  for (const line of lines) {
-    if (line.trim() === "catalog:") {
-      inCatalog = true;
-      continue;
-    }
-
-    if (inCatalog) {
-      // Check if we've left the catalog section (new top-level key)
-      if (line.match(/^\S/) && !line.startsWith(" ") && !line.startsWith("#")) {
-        break;
-      }
-
-      // Parse catalog entries
-      const match = line.match(/^\s+["']?([^"':]+)["']?:\s*["']?([^"'\s#]+)["']?/);
-      if (match) {
-        const [, pkg, version] = match;
-        catalog[pkg] = version;
-      }
-    }
-  }
-
-  return catalog;
-}
 
 function main() {
   console.log("Resolving catalog: references for npm publish...");
@@ -60,7 +32,8 @@ function main() {
   }
 
   const workspaceContent = fs.readFileSync(workspacePath, "utf-8");
-  const catalog = parseYamlCatalog(workspaceContent);
+  const workspace = YAML.parse(workspaceContent);
+  const catalog = workspace.catalog || {};
 
   console.log(`Found ${Object.keys(catalog).length} packages in catalog`);
 

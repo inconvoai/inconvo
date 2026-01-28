@@ -34,9 +34,10 @@ async function testDatabaseConnection(
         ? [url.username, url.password]
         : url.pathname.slice(1).split(":");
 
-    /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+    /* eslint-disable @typescript-eslint/no-require-imports */
     const tedious = require("tedious");
     const tarn = require("tarn");
+    /* eslint-enable @typescript-eslint/no-require-imports */
 
     db = new Kysely({
       dialect: new MssqlDialect({
@@ -80,7 +81,6 @@ async function testDatabaseConnection(
         },
       }),
     });
-    /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
   } else {
     const _exhaustiveCheck: never = dialect;
     throw new Error(`Unsupported dialect: ${String(_exhaustiveCheck)}`);

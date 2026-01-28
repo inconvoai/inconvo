@@ -41,34 +41,26 @@ export async function isVersionInstalled(version: string): Promise<boolean> {
  * Get the latest release version from GitHub
  */
 export async function getLatestVersion(): Promise<string> {
-  try {
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
-      {
-        headers: {
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "inconvo-cli",
-        },
-      }
-    );
-
-    if (response.ok) {
-      const data = (await response.json()) as { tag_name: string };
-      return data.tag_name.replace(/^v/, "");
+  const response = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+    {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "inconvo-cli",
+      },
     }
-  } catch {
-    // Fall through to fallback
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch latest release from GitHub (${response.status}).\n` +
+        `The repository may be private or no releases exist yet.\n` +
+        `Repo: ${GITHUB_REPO}`
+    );
   }
 
-  // Fallback: use CLI version if no releases exist yet
-  return getCliVersion();
-}
-
-/**
- * Get the CLI package version
- */
-export function getCliVersion(): string {
-  return "0.1.0";
+  const data = (await response.json()) as { tag_name: string };
+  return data.tag_name.replace(/^v/, "");
 }
 
 /**
@@ -105,56 +97,26 @@ export async function downloadRelease(version: string): Promise<ReleaseInfo> {
     const bundleUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-v${version}-bundle.tar.gz`;
     const tarballPath = path.join(RELEASES_DIR, `${version}.tar.gz`);
 
-    let downloaded = false;
+    // Download the pre-built bundle from GitHub Releases
     const bundleResponse = await fetch(bundleUrl, { redirect: "follow" });
 
-    if (bundleResponse.ok) {
-      await downloadToFile(bundleResponse, tarballPath);
-      downloaded = true;
-    } else {
-      // Try alternate URL patterns
-      const altUrls = [
-        `https://github.com/${GITHUB_REPO}/releases/download/${version}/inconvo-${version}-bundle.tar.gz`,
-        `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-${version}-bundle.tar.gz`,
-      ];
+    if (!bundleResponse.ok) {
+      // Try alternate URL pattern without 'v' prefix
+      const altUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-${version}-bundle.tar.gz`;
+      const altResponse = await fetch(altUrl, { redirect: "follow" });
 
-      for (const url of altUrls) {
-        const response = await fetch(url, { redirect: "follow" });
-        if (response.ok) {
-          await downloadToFile(response, tarballPath);
-          downloaded = true;
-          break;
-        }
-      }
-    }
-
-    // Fall back to downloading source if no bundle exists
-    if (!downloaded) {
-      spinner.message("No pre-built bundle found, downloading source...");
-
-      const sourceUrls = [
-        `https://github.com/${GITHUB_REPO}/archive/refs/tags/v${version}.tar.gz`,
-        `https://github.com/${GITHUB_REPO}/archive/refs/tags/${version}.tar.gz`,
-        `https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz`,
-      ];
-
-      for (const url of sourceUrls) {
-        const response = await fetch(url, { redirect: "follow" });
-        if (response.ok) {
-          await downloadToFile(response, tarballPath);
-          downloaded = true;
-          break;
-        }
-      }
-
-      if (!downloaded) {
+      if (!altResponse.ok) {
         throw new Error(
-          `Could not download release from GitHub.\n` +
-            `The repository may be private or the release doesn't exist.\n` +
-            `Tried: ${GITHUB_REPO}\n` +
+          `Could not download release bundle for v${version}.\n` +
+            `The release may not exist or the repository may be private.\n` +
+            `Repo: ${GITHUB_REPO}\n` +
             `To use a different repo, set INCONVO_GITHUB_REPO environment variable.`
         );
       }
+
+      await downloadToFile(altResponse, tarballPath);
+    } else {
+      await downloadToFile(bundleResponse, tarballPath);
     }
 
     spinner.message("Extracting...");
@@ -169,43 +131,17 @@ export async function downloadRelease(version: string): Promise<ReleaseInfo> {
     // Clean up tarball
     await fs.rm(tarballPath);
 
-    // Check if this is a pre-built standalone bundle (has server.js) or source
+    // Verify this is a pre-built standalone bundle (has server.js)
     const isStandalone = await checkFileExists(
       path.join(versionDir, "apps", "dev-server", "server.js")
     );
 
     if (!isStandalone) {
-      // Source download - need to install and build
-      spinner.message("Installing dependencies (this may take a few minutes)...");
-
-      // Check if pnpm is available
-      try {
-        execSync("pnpm --version", { stdio: "pipe" });
-      } catch {
-        throw new Error(
-          "pnpm is required but not installed.\n" +
-            "Install it with: npm install -g pnpm"
-        );
-      }
-
-      // Install all dependencies from the monorepo root using pnpm
-      execSync("pnpm install", {
-        cwd: versionDir,
-        stdio: "pipe",
-      });
-
-      // Build the dev-server
-      spinner.message("Building dev-server...");
-      execSync("npx next build", {
-        cwd: path.join(versionDir, "apps", "dev-server"),
-        stdio: "pipe",
-        env: {
-          ...process.env,
-          SKIP_ENV_VALIDATION: "true",
-        },
-      });
+      throw new Error(
+        `Downloaded bundle for v${version} is not a valid pre-built release.\n` +
+          `Expected to find apps/dev-server/server.js in the bundle.`
+      );
     }
-    // Pre-built standalone bundle - no install needed, deps are bundled
 
     const devServerDir = path.join(versionDir, "apps", "dev-server");
     const sandboxDir = path.join(versionDir, "apps", "sandbox");
@@ -309,14 +245,47 @@ export async function removeVersion(version: string): Promise<void> {
 }
 
 /**
+ * Compare two semver version strings
+ */
+function compareSemver(a: string, b: string): number {
+  const parseVersion = (v: string) => {
+    const dashIndex = v.indexOf("-");
+    const main = dashIndex === -1 ? v : v.slice(0, dashIndex);
+    const prerelease = dashIndex === -1 ? undefined : v.slice(dashIndex + 1);
+    const parts = main.split(".").map((n) => parseInt(n, 10) || 0);
+    return { parts, prerelease };
+  };
+
+  const va = parseVersion(a);
+  const vb = parseVersion(b);
+
+  // Compare major.minor.patch
+  for (let i = 0; i < Math.max(va.parts.length, vb.parts.length); i++) {
+    const diff = (va.parts[i] || 0) - (vb.parts[i] || 0);
+    if (diff !== 0) return diff;
+  }
+
+  // If one has prerelease and other doesn't, non-prerelease is newer
+  if (va.prerelease && !vb.prerelease) return -1;
+  if (!va.prerelease && vb.prerelease) return 1;
+
+  // Both have prerelease, compare lexically
+  if (va.prerelease && vb.prerelease) {
+    return va.prerelease.localeCompare(vb.prerelease);
+  }
+
+  return 0;
+}
+
+/**
  * Clean up old versions, keeping the N most recent
  */
 export async function cleanOldVersions(keep: number = 2): Promise<void> {
   const versions = await listInstalledVersions();
   if (versions.length <= keep) return;
 
-  // Sort by semver (simple string sort works for most cases)
-  versions.sort().reverse();
+  // Sort by semver (newest first)
+  versions.sort((a, b) => compareSemver(b, a));
 
   // Remove old versions
   for (const version of versions.slice(keep)) {

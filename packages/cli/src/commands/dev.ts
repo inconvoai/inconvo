@@ -2,8 +2,7 @@ import { Command } from "commander";
 import * as p from "@clack/prompts";
 import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import {
-  detectRuntimeMode,
-  isInMonorepo,
+  createRuntimeMode,
   checkDockerRunning,
   initializePrismaDb,
   spawnDevServer,
@@ -21,28 +20,20 @@ import {
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
-  .option("--version <version>", "Use a specific release version")
+  .option("--version <version>", "Use a specific release version (default: latest)")
   .action(async (options: { version?: string }) => {
+    // Download the release (uses latest if no version specified)
+    logInfo("Checking for Inconvo release...");
     let mode;
-
-    // Determine runtime mode
-    if (isInMonorepo()) {
-      // Running from within the monorepo - use local source
-      logInfo("Running in monorepo mode (using local source)");
-      mode = detectRuntimeMode();
-    } else {
-      // Running outside monorepo - download release
-      logInfo("Downloading Inconvo release...");
-      try {
-        const release = await ensureRelease(options.version);
-        logInfo(`Using Inconvo v${release.version}`);
-        mode = detectRuntimeMode(release);
-      } catch (error) {
-        logError(
-          `Failed to download release: ${error instanceof Error ? error.message : String(error)}`
-        );
-        process.exit(1);
-      }
+    try {
+      const release = await ensureRelease(options.version);
+      logInfo(`Using Inconvo v${release.version}`);
+      mode = createRuntimeMode(release);
+    } catch (error) {
+      logError(
+        `Failed to download release: ${error instanceof Error ? error.message : String(error)}`
+      );
+      process.exit(1);
     }
 
     // Check for config, run wizard if missing
@@ -104,19 +95,20 @@ export const devCommand = new Command("dev")
     // Setup shutdown handler
     setupShutdownHandler([devServer, sandbox]);
 
-    // Handle process exits
-    devServer.on("exit", (code: number | null) => {
-      if (code !== 0 && code !== null) {
-        logError(`dev-server exited with code ${code}`);
-      }
-    });
+    // Wait for either process to exit
+    await new Promise<void>((resolve) => {
+      let exited = 0;
+      const onExit = (name: string) => (code: number | null) => {
+        if (code !== 0 && code !== null) {
+          logError(`${name} exited with code ${code}`);
+        }
+        exited++;
+        if (exited === 2) {
+          resolve();
+        }
+      };
 
-    sandbox.on("exit", (code: number | null) => {
-      if (code !== 0 && code !== null) {
-        logError(`sandbox exited with code ${code}`);
-      }
+      devServer.on("exit", onExit("dev-server"));
+      sandbox.on("exit", onExit("sandbox"));
     });
-
-    // Keep the process running
-    await new Promise(() => {});
   });

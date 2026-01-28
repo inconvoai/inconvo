@@ -406,7 +406,7 @@ export function ChatInterface() {
                   <Group gap="xs">
                     <IconBraces size={14} />
                     <Text size="sm" c="dimmed">
-                      context:
+                      userContext:
                     </Text>
                     <Text size="sm" ff="monospace">
                       {JSON.stringify(buildUserContext())}

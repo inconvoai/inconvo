@@ -20,5 +20,6 @@ export const env = createEnv({
       .default("development"),
   },
   experimental__runtimeEnv: process.env,
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  skipValidation:
+    !!process.env.SKIP_ENV_VALIDATION || process.env.CI === "true",
 });

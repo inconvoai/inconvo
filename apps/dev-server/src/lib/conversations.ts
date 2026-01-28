@@ -17,6 +17,11 @@ export interface ConversationWithMessages extends Conversation {
   messages: ChatMessage[];
 }
 
+export interface ConversationWithMetaAndMessages
+  extends ConversationWithMeta {
+  messages: ChatMessage[];
+}
+
 /**
  * Parse userContext from JSON string (SQLite storage) to object
  */
@@ -103,6 +108,7 @@ export async function getConversation(
   });
 
   if (!conversation) return undefined;
+  console.log(conversation);
   return toConversation(conversation);
 }
 
@@ -182,6 +188,77 @@ export async function listConversations(): Promise<ConversationWithMeta[]> {
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   }));
+}
+
+/**
+ * List conversations with filtering and pagination
+ */
+export async function listConversationsFiltered(params: {
+  cursor?: Date;
+  limit: number;
+  userIdentifier?: string;
+  userContext?: Record<string, string | number>;
+}): Promise<{
+  conversations: ConversationWithMetaAndMessages[];
+  nextCursor: string | null;
+}> {
+  const { cursor, limit, userIdentifier, userContext } = params;
+
+  // Build WHERE clause
+  const where: {
+    userIdentifier?: string;
+    updatedAt?: { lt: Date };
+  } = {};
+
+  if (userIdentifier) {
+    where.userIdentifier = userIdentifier;
+  }
+
+  if (cursor) {
+    where.updatedAt = { lt: cursor };
+  }
+
+  // Fetch limit + 1 to determine if there are more results
+  const conversations = await prisma.conversation.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    take: limit + 1,
+  });
+
+  // Filter by userContext if provided (in-memory since it's JSON in SQLite)
+  let filtered = conversations;
+  if (userContext) {
+    filtered = conversations.filter((c) => {
+      const ctx = parseUserContext(c.userContext);
+      if (!ctx) return false;
+
+      // Check if all userContext filters match
+      return Object.entries(userContext).every(([key, value]) => {
+        return ctx[key] === value;
+      });
+    });
+  }
+
+  // Determine if there are more results
+  const hasMore = filtered.length > limit;
+  const results = hasMore ? filtered.slice(0, limit) : filtered;
+
+  // Generate next cursor from last item
+  const lastItem = results[results.length - 1];
+  const nextCursor =
+    hasMore && lastItem
+      ? Buffer.from(lastItem.updatedAt.toISOString()).toString("base64")
+      : null;
+
+  return {
+    conversations: results.map((c) => ({
+      ...toConversation(c),
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      messages: parseMessages(c.messages),
+    })),
+    nextCursor,
+  };
 }
 
 export async function deleteConversation(id: string): Promise<boolean> {

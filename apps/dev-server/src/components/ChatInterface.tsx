@@ -91,7 +91,7 @@ export function ChatInterface() {
 
   const fetchConversations = async () => {
     try {
-      const res = await fetch("/api/conversations");
+      const res = await fetch("/api/v1/agents/dev-agent/conversations");
       const data = (await res.json()) as { conversations?: ConversationItem[] };
       setConversations(data.conversations ?? []);
     } catch (err) {
@@ -113,7 +113,7 @@ export function ChatInterface() {
 
     // Load conversation with messages from server
     try {
-      const res = await fetch(`/api/conversations/${id}`);
+      const res = await fetch(`/api/v1/agents/dev-agent/conversations/${id}`);
       if (res.ok) {
         const data = (await res.json()) as {
           userContext?: Record<string, string | number>;
@@ -139,7 +139,9 @@ export function ChatInterface() {
   const handleDeleteConversation = useCallback(
     async (id: string) => {
       try {
-        await fetch(`/api/conversations?id=${id}`, { method: "DELETE" });
+        await fetch(`/api/v1/agents/dev-agent/conversations/${id}`, {
+          method: "DELETE",
+        });
         await fetchConversations();
         if (activeConversationId === id) {
           handleNewConversation();
@@ -175,11 +177,14 @@ export function ChatInterface() {
     setIsCreatingConversation(true);
     setError(undefined);
     try {
-      const context = buildUserContext();
-      const res = await fetch("/api/conversations", {
+      const userContext = buildUserContext();
+      // Generate a unique user identifier (in production, this would come from auth)
+      const userIdentifier = `dev-user-${Date.now()}`;
+
+      const res = await fetch("/api/v1/agents/dev-agent/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context }),
+        body: JSON.stringify({ userIdentifier, userContext }),
       });
 
       if (!res.ok) {
@@ -220,7 +225,7 @@ export function ChatInterface() {
 
       try {
         const response = await fetch(
-          `/api/conversations/${activeConversationId}/response`,
+          `/api/v1/agents/dev-agent/conversations/${activeConversationId}/response`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

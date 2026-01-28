@@ -154,6 +154,9 @@ export async function downloadRelease(version: string): Promise<ReleaseInfo> {
 
     spinner.stop(`Inconvo v${version} installed successfully`);
 
+    // Clean up old versions to avoid disk bloat
+    await cleanOldVersions(2);
+
     return {
       version,
       releaseDir: versionDir,

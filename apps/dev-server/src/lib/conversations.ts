@@ -1,87 +1,196 @@
-import type { Conversation } from "@repo/types";
+import type { Conversation, InconvoResponse } from "@repo/types";
 import { v4 as uuidv4 } from "uuid";
+import { prisma } from "./prisma";
 
-/**
- * In-memory conversation store
- * Conversations are lost on server restart
- */
-const conversations = new Map<string, Conversation>();
+export interface ChatMessage {
+  id: string;
+  type: "user" | InconvoResponse["type"];
+  content: string | InconvoResponse;
+}
 
 export interface ConversationWithMeta extends Conversation {
   createdAt: Date;
   updatedAt: Date;
 }
 
-const conversationMeta = new Map<
-  string,
-  { createdAt: Date; updatedAt: Date }
->();
+export interface ConversationWithMessages extends Conversation {
+  messages: ChatMessage[];
+}
 
-export function createConversation(
+/**
+ * Parse userContext from JSON string (SQLite storage) to object
+ */
+function parseUserContext(
+  userContext: string | null,
+): Record<string, string | number> | null {
+  if (!userContext) return null;
+  try {
+    return JSON.parse(userContext) as Record<string, string | number>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse messages from JSON string (SQLite storage) to array
+ */
+function parseMessages(messages: string): ChatMessage[] {
+  try {
+    return JSON.parse(messages) as ChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Convert Prisma model to Conversation type
+ */
+function toConversation(row: {
+  id: string;
+  userIdentifier: string;
+  title: string | null;
+  userContext: string | null;
+}): Conversation {
+  return {
+    id: row.id,
+    userIdentifier: row.userIdentifier,
+    title: row.title,
+    userContext: parseUserContext(row.userContext),
+  };
+}
+
+/**
+ * Convert Prisma model to ConversationWithMessages type
+ */
+function toConversationWithMessages(row: {
+  id: string;
+  userIdentifier: string;
+  title: string | null;
+  userContext: string | null;
+  messages: string;
+}): ConversationWithMessages {
+  return {
+    id: row.id,
+    userIdentifier: row.userIdentifier,
+    title: row.title,
+    userContext: parseUserContext(row.userContext),
+    messages: parseMessages(row.messages),
+  };
+}
+
+export async function createConversation(
   userIdentifier: string,
   userContext?: Record<string, string | number> | null,
-): Conversation {
+): Promise<Conversation> {
   const id = `convo_${uuidv4()}`;
-  const conversation: Conversation = {
-    id,
-    userIdentifier,
-    title: null,
-    userContext: userContext ?? null,
-  };
 
-  conversations.set(id, conversation);
-  conversationMeta.set(id, {
-    createdAt: new Date(),
-    updatedAt: new Date(),
+  const conversation = await prisma.conversation.create({
+    data: {
+      id,
+      userIdentifier,
+      userContext: userContext ? JSON.stringify(userContext) : null,
+    },
   });
 
-  return conversation;
+  return toConversation(conversation);
 }
 
-export function getConversation(id: string): Conversation | undefined {
-  return conversations.get(id);
+export async function getConversation(
+  id: string,
+): Promise<Conversation | undefined> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id },
+  });
+
+  if (!conversation) return undefined;
+  return toConversation(conversation);
 }
 
-export function updateConversation(
+export async function getConversationWithMessages(
+  id: string,
+): Promise<ConversationWithMessages | undefined> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id },
+  });
+
+  if (!conversation) return undefined;
+  return toConversationWithMessages(conversation);
+}
+
+export async function updateConversation(
   id: string,
   updates: Partial<Omit<Conversation, "id">>,
-): Conversation | undefined {
-  const existing = conversations.get(id);
-  if (!existing) return undefined;
+): Promise<Conversation | undefined> {
+  try {
+    const data: {
+      userIdentifier?: string;
+      title?: string | null;
+      userContext?: string | null;
+    } = {};
 
-  const updated: Conversation = {
-    ...existing,
-    ...updates,
-  };
-  conversations.set(id, updated);
-
-  const meta = conversationMeta.get(id);
-  if (meta) {
-    meta.updatedAt = new Date();
-  }
-
-  return updated;
-}
-
-export function listConversations(): ConversationWithMeta[] {
-  const result: ConversationWithMeta[] = [];
-
-  for (const [id, conversation] of conversations) {
-    const meta = conversationMeta.get(id);
-    if (meta) {
-      result.push({
-        ...conversation,
-        createdAt: meta.createdAt,
-        updatedAt: meta.updatedAt,
-      });
+    if (updates.userIdentifier !== undefined) {
+      data.userIdentifier = updates.userIdentifier;
     }
-  }
+    if (updates.title !== undefined) {
+      data.title = updates.title;
+    }
+    if (updates.userContext !== undefined) {
+      data.userContext = updates.userContext
+        ? JSON.stringify(updates.userContext)
+        : null;
+    }
 
-  // Sort by updatedAt descending (most recent first)
-  return result.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const conversation = await prisma.conversation.update({
+      where: { id },
+      data,
+    });
+
+    return toConversation(conversation);
+  } catch {
+    // Record not found
+    return undefined;
+  }
 }
 
-export function deleteConversation(id: string): boolean {
-  conversationMeta.delete(id);
-  return conversations.delete(id);
+export async function appendMessages(
+  id: string,
+  newMessages: ChatMessage[],
+): Promise<void> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id },
+    select: { messages: true },
+  });
+
+  if (!conversation) return;
+
+  const existingMessages = parseMessages(conversation.messages);
+  const updatedMessages = [...existingMessages, ...newMessages];
+
+  await prisma.conversation.update({
+    where: { id },
+    data: { messages: JSON.stringify(updatedMessages) },
+  });
+}
+
+export async function listConversations(): Promise<ConversationWithMeta[]> {
+  const conversations = await prisma.conversation.findMany({
+    orderBy: { updatedAt: "desc" },
+  });
+
+  return conversations.map((c) => ({
+    ...toConversation(c),
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  }));
+}
+
+export async function deleteConversation(id: string): Promise<boolean> {
+  try {
+    await prisma.conversation.delete({
+      where: { id },
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }

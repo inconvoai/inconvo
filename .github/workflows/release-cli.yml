@@ -59,6 +59,12 @@ jobs:
           # Copy prisma schema (needed for migrations)
           cp -r apps/dev-server/prisma release-bundle/apps/dev-server/
 
+          # Copy prisma CLI (needed for db push at runtime)
+          mkdir -p release-bundle/apps/dev-server/node_modules/.bin
+          cp -rL node_modules/prisma release-bundle/apps/dev-server/node_modules/
+          cp -rL node_modules/@prisma release-bundle/apps/dev-server/node_modules/
+          ln -sf ../prisma/build/index.js release-bundle/apps/dev-server/node_modules/.bin/prisma
+
           # Copy sandbox source (wrangler compiles on the fly)
           mkdir -p release-bundle/apps/sandbox
           cp -r apps/sandbox/src release-bundle/apps/sandbox/

@@ -17,6 +17,29 @@ function getLocalDbPath(): string {
 }
 
 /**
+ * Get a clean environment without pnpm-specific variables that confuse npm
+ */
+function getCleanEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  const skipPrefixes = ["npm_", "PNPM_", "NVM_"];
+  const skipKeys = new Set([
+    "npm_config_globalconfig",
+    "npm_config_userconfig",
+    "npm_execpath",
+    "npm_node_execpath",
+  ]);
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    if (skipKeys.has(key.toLowerCase())) continue;
+    if (skipPrefixes.some((prefix) => key.startsWith(prefix))) continue;
+    env[key] = value;
+  }
+
+  return env;
+}
+
+/**
  * Create runtime mode from a downloaded release
  */
 export function createRuntimeMode(release: ReleaseInfo): RuntimeMode {
@@ -37,11 +60,20 @@ export function checkDockerRunning(): boolean {
 }
 
 export function initializePrismaDb(mode: RuntimeMode): void {
-  execSync("npx prisma db push --accept-data-loss", {
+  // Use bundled prisma directly to avoid npm/pnpm conflicts
+  const prismaIndex = path.join(
+    mode.devServerDir,
+    "node_modules",
+    "prisma",
+    "build",
+    "index.js"
+  );
+  execSync(`node "${prismaIndex}" db push --accept-data-loss`, {
     cwd: mode.devServerDir,
     stdio: "pipe",
+    shell: true,
     env: {
-      ...process.env,
+      ...getCleanEnv(),
       INCONVO_LOCAL_DB_PATH: getLocalDbPath(),
       SKIP_ENV_VALIDATION: "true",
     },
@@ -60,7 +92,7 @@ export function spawnDevServer(
   configEnv: Record<string, string>
 ): ChildProcess {
   const env = {
-    ...process.env,
+    ...getCleanEnv(),
     ...configEnv,
     INCONVO_LOCAL_DB_PATH: getLocalDbPath(),
     INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
@@ -85,18 +117,18 @@ export function spawnSandbox(
   sandboxApiKey: string
 ): ChildProcess {
   const env = {
-    ...process.env,
+    ...getCleanEnv(),
     INTERNAL_API_KEY: sandboxApiKey,
     SKIP_BUCKET_MOUNT: "true",
     WRANGLER_SEND_METRICS: "false",
   };
 
-  // Use npx wrangler from the release bundle
-  return spawn("npx", ["wrangler", "dev"], {
+  // Use wrangler binary directly to avoid npm/pnpm conflicts
+  const wranglerBin = path.join(mode.sandboxDir, "node_modules", ".bin", "wrangler");
+  return spawn(wranglerBin, ["dev"], {
     cwd: mode.sandboxDir,
     env,
     stdio: ["inherit", "pipe", "pipe"],
-    shell: true,
   });
 }
 

@@ -7,6 +7,63 @@ import * as p from "@clack/prompts";
 
 // TODO: Update this when the repo is made public
 const GITHUB_REPO = process.env.INCONVO_GITHUB_REPO || "ten-dev/inconvo";
+
+/**
+ * Check if gh CLI is available and authenticated
+ */
+function isGhCliAvailable(): boolean {
+  try {
+    execSync("gh auth status", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download release using gh CLI (works with private repos if user is authenticated)
+ */
+function downloadWithGhCli(
+  version: string,
+  tarballPath: string
+): boolean {
+  try {
+    const patterns = [
+      `inconvo-v${version}-bundle.tar.gz`,
+      `inconvo-${version}-bundle.tar.gz`,
+    ];
+
+    for (const pattern of patterns) {
+      try {
+        execSync(
+          `gh release download "v${version}" --repo "${GITHUB_REPO}" --pattern "${pattern}" --output "${tarballPath}"`,
+          { stdio: "pipe" }
+        );
+        return true;
+      } catch {
+        // Try next pattern
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get latest version using gh CLI (works with private repos)
+ */
+function getLatestVersionWithGhCli(): string | null {
+  try {
+    const result = execSync(
+      `gh release view --repo "${GITHUB_REPO}" --json tagName -q ".tagName"`,
+      { stdio: "pipe", encoding: "utf-8" }
+    );
+    return result.trim().replace(/^v/, "");
+  } catch {
+    return null;
+  }
+}
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const RELEASES_DIR = path.join(INCONVO_DIR, "releases");
 
@@ -41,6 +98,13 @@ export async function isVersionInstalled(version: string): Promise<boolean> {
  * Get the latest release version from GitHub
  */
 export async function getLatestVersion(): Promise<string> {
+  // Try gh CLI first (works with private repos)
+  if (isGhCliAvailable()) {
+    const version = getLatestVersionWithGhCli();
+    if (version) return version;
+  }
+
+  // Fall back to public API
   const response = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
     {
@@ -93,30 +157,37 @@ export async function downloadRelease(version: string): Promise<ReleaseInfo> {
       // Directory didn't exist
     }
 
-    // Try to download the pre-built bundle from GitHub Releases
-    const bundleUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-v${version}-bundle.tar.gz`;
     const tarballPath = path.join(RELEASES_DIR, `${version}.tar.gz`);
+    let downloaded = false;
 
-    // Download the pre-built bundle from GitHub Releases
-    const bundleResponse = await fetch(bundleUrl, { redirect: "follow" });
+    // Try gh CLI first (works with private repos if user is authenticated)
+    if (isGhCliAvailable()) {
+      downloaded = downloadWithGhCli(version, tarballPath);
+    }
 
-    if (!bundleResponse.ok) {
-      // Try alternate URL pattern without 'v' prefix
-      const altUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-${version}-bundle.tar.gz`;
-      const altResponse = await fetch(altUrl, { redirect: "follow" });
+    // Fall back to direct fetch (works with public repos)
+    if (!downloaded) {
+      const bundleUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-v${version}-bundle.tar.gz`;
+      const bundleResponse = await fetch(bundleUrl, { redirect: "follow" });
 
-      if (!altResponse.ok) {
-        throw new Error(
-          `Could not download release bundle for v${version}.\n` +
-            `The release may not exist or the repository may be private.\n` +
-            `Repo: ${GITHUB_REPO}\n` +
-            `To use a different repo, set INCONVO_GITHUB_REPO environment variable.`
-        );
+      if (!bundleResponse.ok) {
+        // Try alternate URL pattern without 'v' prefix
+        const altUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/inconvo-${version}-bundle.tar.gz`;
+        const altResponse = await fetch(altUrl, { redirect: "follow" });
+
+        if (!altResponse.ok) {
+          throw new Error(
+            `Could not download release bundle for v${version}.\n` +
+              `The release may not exist or the repository may be private.\n` +
+              `Repo: ${GITHUB_REPO}\n` +
+              `To use a different repo, set INCONVO_GITHUB_REPO environment variable.`
+          );
+        }
+
+        await downloadToFile(altResponse, tarballPath);
+      } else {
+        await downloadToFile(bundleResponse, tarballPath);
       }
-
-      await downloadToFile(altResponse, tarballPath);
-    } else {
-      await downloadToFile(bundleResponse, tarballPath);
     }
 
     spinner.message("Extracting...");

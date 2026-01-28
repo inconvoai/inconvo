@@ -20,13 +20,13 @@ import {
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
-  .option("--version <version>", "Use a specific release version (default: latest)")
-  .action(async (options: { version?: string }) => {
+  .option("--release <version>", "Use a specific release version (default: latest)")
+  .action(async (options: { release?: string }) => {
     // Download the release (uses latest if no version specified)
     logInfo("Checking for Inconvo release...");
     let mode;
     try {
-      const release = await ensureRelease(options.version);
+      const release = await ensureRelease(options.release);
       logInfo(`Using Inconvo v${release.version}`);
       mode = createRuntimeMode(release);
     } catch (error) {

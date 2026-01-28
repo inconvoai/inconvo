@@ -26,7 +26,9 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Install dependencies
-        run: pnpm install
+        run: |
+          pnpm config set node-linker hoisted
+          pnpm install
 
       - name: Build dev-server
         run: pnpm --filter dev-server build
@@ -45,7 +47,7 @@ jobs:
           mkdir -p release-bundle
 
           # Copy the ENTIRE standalone output (includes node_modules with resolved deps)
-          # Use -L to dereference symlinks (important for pnpm)
+          # Use -L to dereference symlinks (hoisted node-linker avoids broken symlinks)
           cp -rL apps/dev-server/.next/standalone/* release-bundle/
 
           # Copy static assets (required for Next.js)

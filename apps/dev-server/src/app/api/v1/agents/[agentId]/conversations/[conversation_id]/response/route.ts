@@ -62,7 +62,7 @@ export async function POST(
     }
 
     // Parse request body
-    const body = await request.json() as {
+    const body = (await request.json()) as {
       message?: string;
       stream?: boolean;
     };
@@ -179,8 +179,7 @@ export async function POST(
           };
           await appendMessages(conversationId, [assistantMessage]);
 
-          // Update conversation title if first message
-          if (!conversation.title && lastResponse.type === "text") {
+          if (!conversation.title) {
             await updateConversation(conversationId, {
               title: message.slice(0, 100),
             });
@@ -317,8 +316,7 @@ export async function POST(
               response: formatResponseForSDK(lastResponse),
             });
 
-            // Update conversation title if first message
-            if (!conversation.title && lastResponse.type === "text") {
+            if (!conversation.title) {
               await updateConversation(conversationId, {
                 title: message.slice(0, 100),
               });

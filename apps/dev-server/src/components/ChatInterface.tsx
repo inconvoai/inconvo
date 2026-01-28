@@ -70,44 +70,8 @@ export function ChatInterface() {
   const [contextExpanded, setContextExpanded] = useState(false);
   const [contextConfirmed, setContextConfirmed] = useState(false);
 
-  // Session storage helpers for persisting messages
-  const getStorageKey = (id: string) => `inconvo-messages-${id}`;
-
-  const saveMessagesToStorage = useCallback(
-    (id: string, msgs: ChatMessage[]) => {
-      try {
-        sessionStorage.setItem(getStorageKey(id), JSON.stringify(msgs));
-      } catch (err) {
-        console.error("Failed to save messages to session storage:", err);
-      }
-    },
-    [],
-  );
-
-  const loadMessagesFromStorage = useCallback((id: string): ChatMessage[] => {
-    try {
-      const stored = sessionStorage.getItem(getStorageKey(id));
-      return stored ? JSON.parse(stored) : [];
-    } catch (err) {
-      console.error("Failed to load messages from session storage:", err);
-      return [];
-    }
-  }, []);
-
-  // Wrapper to persist messages when setting them
-  const setMessages = useCallback(
-    (update: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
-      setMessagesState((prev) => {
-        const newMessages =
-          typeof update === "function" ? update(prev) : update;
-        if (activeConversationId) {
-          saveMessagesToStorage(activeConversationId, newMessages);
-        }
-        return newMessages;
-      });
-    },
-    [activeConversationId, saveMessagesToStorage],
-  );
+  // Alias for setMessagesState (messages are now persisted server-side)
+  const setMessages = setMessagesState;
 
   // Fetch conversations and context fields on mount
   useEffect(() => {
@@ -143,38 +107,34 @@ export function ChatInterface() {
     setContextConfirmed(false);
   }, []);
 
-  const handleSelectConversation = useCallback(
-    async (id: string) => {
-      setActiveConversationId(id);
-      setError(undefined);
+  const handleSelectConversation = useCallback(async (id: string) => {
+    setActiveConversationId(id);
+    setError(undefined);
 
-      // Load messages from session storage
-      const storedMessages = loadMessagesFromStorage(id);
-      setMessagesState(storedMessages);
-
-      // Load conversation context from server
-      try {
-        const res = await fetch(`/api/conversations/${id}`);
-        if (res.ok) {
-          const data = (await res.json()) as {
-            userContext?: Record<string, string | number>;
-          };
-          if (data.userContext) {
-            // Convert context values to strings for the input fields
-            const stringValues: Record<string, string> = {};
-            for (const [key, value] of Object.entries(data.userContext)) {
-              stringValues[key] = String(value);
-            }
-            setContextValues(stringValues);
+    // Load conversation with messages from server
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          userContext?: Record<string, string | number>;
+          messages?: ChatMessage[];
+        };
+        // Load messages from server
+        setMessagesState(data.messages ?? []);
+        if (data.userContext) {
+          // Convert context values to strings for the input fields
+          const stringValues: Record<string, string> = {};
+          for (const [key, value] of Object.entries(data.userContext)) {
+            stringValues[key] = String(value);
           }
-          setContextConfirmed(true);
+          setContextValues(stringValues);
         }
-      } catch (err) {
-        console.error("Failed to load conversation:", err);
+        setContextConfirmed(true);
       }
-    },
-    [loadMessagesFromStorage],
-  );
+    } catch (err) {
+      console.error("Failed to load conversation:", err);
+    }
+  }, []);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {

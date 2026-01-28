@@ -7,21 +7,19 @@ datasource db {
   provider = "sqlite"
 }
 
-// Semantic model configuration tables
-
 model Table {
   id                String             @id @default(uuid())
   name              String             @unique
-  access            String             @default("OFF") // QUERYABLE, JOINABLE, OFF
+  access            String             @default("OFF")
   context           String?
-  columns           Column[]
-  computedColumns   ComputedColumn[]
-  outwardRelations  Relation[]         @relation("relation_source")
-  inwardRelations   Relation[]         @relation("relation_target")
-  columnConversions ColumnConversion[]
-  condition         TableCondition?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  columns           Column[]
+  columnConversions ColumnConversion[]
+  computedColumns   ComputedColumn[]
+  inwardRelations   Relation[]         @relation("relation_target")
+  outwardRelations  Relation[]         @relation("relation_source")
+  condition         TableCondition?
 }
 
 model Column {
@@ -33,13 +31,13 @@ model Column {
   selected               Boolean                 @default(true)
   unit                   String?
   tableId                String
-  table                  Table                   @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  sourceRelationMappings RelationColumnMapping[] @relation("mapping_source")
-  targetRelationMappings RelationColumnMapping[] @relation("mapping_target")
-  conversion             ColumnConversion?
-  conditions             TableCondition[]
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  table                  Table                   @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  conversion             ColumnConversion?
+  targetRelationMappings RelationColumnMapping[] @relation("mapping_target")
+  sourceRelationMappings RelationColumnMapping[] @relation("mapping_source")
+  conditions             TableCondition[]
 
   @@unique([tableId, name])
 }
@@ -48,14 +46,14 @@ model ComputedColumn {
   id        String   @id @default(uuid())
   name      String
   type      String
-  ast       String // JSON stored as string in SQLite
+  ast       String
   selected  Boolean  @default(true)
   unit      String?
   notes     String?
   tableId   String
-  table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
   @@unique([tableId, name])
 }
@@ -65,16 +63,16 @@ model Relation {
   name           String
   isList         Boolean
   selected       Boolean                 @default(true)
-  source         String                  @default("FK") // FK, MANUAL
-  status         String                  @default("VALID") // VALID, BROKEN
+  source         String                  @default("FK")
+  status         String                  @default("VALID")
   errorTag       String?
   sourceTableId  String
   targetTableId  String
-  sourceTable    Table                   @relation("relation_source", fields: [sourceTableId], references: [id], onDelete: Cascade)
-  targetTable    Table                   @relation("relation_target", fields: [targetTableId], references: [id], onDelete: Cascade)
-  columnMappings RelationColumnMapping[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+  targetTable    Table                   @relation("relation_target", fields: [targetTableId], references: [id], onDelete: Cascade)
+  sourceTable    Table                   @relation("relation_source", fields: [sourceTableId], references: [id], onDelete: Cascade)
+  columnMappings RelationColumnMapping[]
 
   @@unique([sourceTableId, name])
 }
@@ -87,22 +85,22 @@ model RelationColumnMapping {
   sourceColumnName String
   targetColumnName String
   position         Int
+  targetColumn     Column?  @relation("mapping_target", fields: [targetColumnId], references: [id])
+  sourceColumn     Column?  @relation("mapping_source", fields: [sourceColumnId], references: [id])
   relation         Relation @relation(fields: [relationId], references: [id], onDelete: Cascade)
-  sourceColumn     Column?  @relation("mapping_source", fields: [sourceColumnId], references: [id], onDelete: SetNull)
-  targetColumn     Column?  @relation("mapping_target", fields: [targetColumnId], references: [id], onDelete: SetNull)
 
   @@unique([relationId, position])
 }
 
 model ColumnConversion {
   id       String  @id @default(uuid())
-  ast      String // JSON stored as string in SQLite
+  ast      String
   type     String?
   selected Boolean @default(true)
   columnId String  @unique
   tableId  String
-  column   Column  @relation(fields: [columnId], references: [id], onDelete: Cascade)
   table    Table   @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  column   Column  @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
   @@index([tableId])
 }
@@ -112,14 +110,51 @@ model TableCondition {
   columnId           String
   tableId            String           @unique
   userContextFieldId String
-  column             Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  table              Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
   userContextField   UserContextField @relation(fields: [userContextFieldId], references: [id], onDelete: Cascade)
+  table              Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  column             Column           @relation(fields: [columnId], references: [id], onDelete: Cascade)
 }
 
 model UserContextField {
   id              String           @id @default(uuid())
   key             String           @unique
-  type            String // STRING, NUMBER
+  type            String
   tableConditions TableCondition[]
+}
+
+model Conversation {
+  id             String   @id
+  userIdentifier String
+  userContext    String?
+  title          String?
+  messages       String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userIdentifier])
+}
+
+model checkpoints {
+  thread_id            String
+  checkpoint_ns        String  @default("")
+  checkpoint_id        String
+  parent_checkpoint_id String?
+  type                 String?
+  checkpoint           Bytes?
+  metadata             Bytes?
+
+  @@id([thread_id, checkpoint_ns, checkpoint_id])
+}
+
+model writes {
+  thread_id     String
+  checkpoint_ns String  @default("")
+  checkpoint_id String
+  task_id       String
+  idx           Int
+  channel       String
+  type          String?
+  value         Bytes?
+
+  @@id([thread_id, checkpoint_ns, checkpoint_id, task_id, idx])
 }

@@ -1,6 +1,4 @@
-<p align="center">
-<a href="https://inconvo.com"><img width="1532" height="511" alt="ChatGPT Image Jan 27, 2026, 10_47_13 AM (1)" src="https://github.com/user-attachments/assets/93018d0d-164c-4d47-a3b0-2b4aba60c66a" /></a>
-</p>
+[![Inconvo](https://github.com/user-attachments/assets/93018d0d-164c-4d47-a3b0-2b4aba60c66a)](https://inconvo.com)
 
 <h1 align="center">Inconvo</h1>
 
@@ -29,28 +27,27 @@ https://github.com/user-attachments/assets/cbb468a6-3711-4ad1-92d6-d3871456ae08
 ## Call agents from your codebase
 
 ```typescript
-import 'dotenv/config'
+import "dotenv/config";
 import Inconvo from "@inconvoai/node";
 
 const inconvo = new Inconvo({
   apiKey: process.env.INCONVO_API_KEY,
 });
 
-const agentConvo = await inconvo.agents.conversations.create(
-  "agt_123",
-  {
-    userIdentifier: "user_123",
-    userContext: {
-      organisationId: 1
-    }
-  }
-);
-
-
-const agentResponse = await inconvo.agents.conversations.response.create(agentConvo.id, {
-  message: "What is our best selling product this week?",
-  stream: false,
+const agentConvo = await inconvo.agents.conversations.create("agt_123", {
+  userIdentifier: "user_123",
+  userContext: {
+    organisationId: 1,
+  },
 });
+
+const agentResponse = await inconvo.agents.conversations.response.create(
+  agentConvo.id,
+  {
+    message: "What is our best selling product this week?",
+    stream: false,
+  },
+);
 
 console.log(agentResponse);
 

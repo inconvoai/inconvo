@@ -81,6 +81,12 @@ jobs:
           pnpm config set node-linker hoisted
           pnpm install
 
+      - name: Generate Prisma for multi-platform
+        working-directory: apps/dev-server
+        run: pnpm prisma generate
+        env:
+          PRISMA_CLI_BINARY_TARGETS: linux-arm64-openssl-3.0.x,debian-openssl-3.0.x
+
       - name: Build dev-server
         run: pnpm --filter dev-server build
         env:
@@ -102,6 +108,7 @@ jobs:
           context: .
           file: docker/Dockerfile.dev-server
           push: true
+          platforms: linux/amd64,linux/arm64
           build-args: |
             PRISMA_VERSION=${{ needs.prepare.outputs.prisma_version }}
           tags: |
@@ -192,6 +199,7 @@ jobs:
           context: .
           file: docker/Dockerfile.sandbox
           push: true
+          platforms: linux/amd64,linux/arm64
           build-args: |
             WRANGLER_VERSION=${{ needs.prepare.outputs.wrangler_version }}
             ZOD_VERSION=${{ needs.prepare.outputs.zod_version }}

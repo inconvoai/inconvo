@@ -1,4 +1,4 @@
-name: inconvo
+name: inconvo-oss
 
 services:
   dev-server:

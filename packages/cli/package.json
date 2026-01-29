@@ -1,5 +1,5 @@
 {
-  "name": "inconvo",
+  "name": "@ten-dev/inconvo",
   "version": "0.1.0",
   "description": "CLI for Inconvo development environment",
   "type": "module",

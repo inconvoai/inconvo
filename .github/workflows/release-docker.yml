@@ -196,8 +196,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  create-release:
+  publish-cli:
     needs: [prepare, build-dev-server, build-sandbox]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: |
+          pnpm config set node-linker hoisted
+          pnpm install
+
+      - name: Build CLI
+        run: pnpm --filter inconvo build
+
+      - name: Set CLI version
+        working-directory: packages/cli
+        run: |
+          # Strip 'v' prefix for npm version
+          VERSION="${{ needs.prepare.outputs.version }}"
+          VERSION="${VERSION#v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Publish CLI to GitHub Packages
+        working-directory: packages/cli
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-release:
+    needs: [prepare, build-dev-server, build-sandbox, publish-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -225,5 +267,9 @@ jobs:
             ## Quick Start
 
             ```bash
-            npx inconvo dev
+            # Configure npm for GitHub Packages (one-time)
+            npm config set @ten-dev:registry https://npm.pkg.github.com
+
+            # Run
+            npx @ten-dev/inconvo dev
             ```

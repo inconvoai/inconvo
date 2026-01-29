@@ -10,7 +10,7 @@ export async function OPTIONS() {
 
 // GET /api/v1/agents/{agentId}/data-summary - Get database schema summary
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> },
 ) {
   try {
@@ -29,13 +29,11 @@ export async function GET(
 
     return NextResponse.json(schema, { headers: corsHeaders });
   } catch (error) {
-    console.error(
-      "[GET /api/v1/agents/[agentId]/data-summary] Error:",
-      error,
-    );
+    console.error("[GET /api/v1/agents/[agentId]/data-summary] Error:", error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to get data summary",
+        error:
+          error instanceof Error ? error.message : "Failed to get data summary",
       },
       { status: 500, headers: corsHeaders },
     );

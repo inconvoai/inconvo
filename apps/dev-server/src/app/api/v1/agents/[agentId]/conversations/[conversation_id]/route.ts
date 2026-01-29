@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getConversationWithMessages, deleteConversation } from "~/lib/conversations";
+import {
+  getConversationWithMessages,
+  deleteConversation,
+} from "~/lib/conversations";
 import { corsHeaders, handleOptions } from "~/lib/cors";
 import { DEV_AGENT_ID } from "~/lib/constants";
 
@@ -10,7 +13,7 @@ export async function OPTIONS() {
 
 // GET /api/v1/agents/{agentId}/conversations/{conversation_id} - Get a conversation
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ agentId: string; conversation_id: string }> },
 ) {
   try {
@@ -42,7 +45,8 @@ export async function GET(
     );
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to get conversation",
+        error:
+          error instanceof Error ? error.message : "Failed to get conversation",
       },
       { status: 500, headers: corsHeaders },
     );
@@ -51,7 +55,7 @@ export async function GET(
 
 // DELETE /api/v1/agents/{agentId}/conversations/{conversation_id} - Delete a conversation
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ agentId: string; conversation_id: string }> },
 ) {
   try {
@@ -86,7 +90,10 @@ export async function DELETE(
     );
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Failed to delete conversation",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete conversation",
       },
       { status: 500, headers: corsHeaders },
     );

@@ -23,7 +23,6 @@
     "@langchain/openai": "catalog:",
     "@repo/connect": "workspace:*",
     "@repo/types": "workspace:*",
-    "langchain": "catalog:",
     "uuid": "catalog:",
     "vega": "catalog:",
     "vega-lite": "catalog:",

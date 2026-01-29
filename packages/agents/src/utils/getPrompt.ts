@@ -1,23 +1,31 @@
-import * as hub from "langchain/hub";
 import type { Runnable } from "@langchain/core/runnables";
+import {
+  inconvoAgentPrompt,
+  selectTablePrompt,
+  selectOperationPrompt,
+  whereConditionPrompt,
+  extendQueryPrompt,
+} from "../prompts";
 
-const cache = new Map<string, { prompt: Runnable; timestamp: number }>();
-const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+// Map prompt base names (without version hash) to local prompts
+const PROMPT_MAP: Record<string, Runnable> = {
+  inconvo_agent_gpt5_dev: inconvoAgentPrompt,
+  select_table: selectTablePrompt,
+  select_operation: selectOperationPrompt,
+  where_condition_agent_5: whereConditionPrompt,
+  extend_query: extendQueryPrompt,
+};
 
 export async function getPrompt(promptName: string): Promise<Runnable> {
-  const now = Date.now();
-  const cachedItem = cache.get(promptName);
+  // Extract base name (ignore version hash after colon)
+  const baseName = promptName.split(":")[0];
+  const prompt = PROMPT_MAP[baseName];
 
-  if (cachedItem && now - cachedItem.timestamp < ONE_DAY_IN_MS) {
-    return cachedItem.prompt;
+  if (!prompt) {
+    throw new Error(
+      `Prompt "${baseName}" not found. Available prompts: ${Object.keys(PROMPT_MAP).join(", ")}`,
+    );
   }
 
-  try {
-    const prompt = await hub.pull(promptName);
-    cache.set(promptName, { prompt, timestamp: now });
-    return prompt;
-  } catch (error) {
-    console.error(`Error fetching prompt "${promptName}":`, error);
-    throw error;
-  }
+  return prompt;
 }

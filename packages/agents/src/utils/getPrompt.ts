@@ -7,9 +7,9 @@ import {
   extendQueryPrompt,
 } from "../prompts";
 
-// Map prompt base names (without version hash) to local prompts
+// Map prompt names to local prompts
 const PROMPT_MAP: Record<string, Runnable> = {
-  inconvo_agent_gpt5_dev: inconvoAgentPrompt,
+  inconvo_agent: inconvoAgentPrompt,
   select_table: selectTablePrompt,
   select_operation: selectOperationPrompt,
   where_condition_agent_5: whereConditionPrompt,
@@ -17,13 +17,11 @@ const PROMPT_MAP: Record<string, Runnable> = {
 };
 
 export async function getPrompt(promptName: string): Promise<Runnable> {
-  // Extract base name (ignore version hash after colon)
-  const baseName = promptName.split(":")[0];
-  const prompt = PROMPT_MAP[baseName];
+  const prompt = PROMPT_MAP[promptName];
 
   if (!prompt) {
     throw new Error(
-      `Prompt "${baseName}" not found. Available prompts: ${Object.keys(PROMPT_MAP).join(", ")}`,
+      `Prompt "${promptName}" not found. Available prompts: ${Object.keys(PROMPT_MAP).join(", ")}`,
     );
   }
 

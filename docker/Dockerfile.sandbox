@@ -1,0 +1,65 @@
+FROM node:22-slim
+
+# Install Docker CLI for wrangler containers feature
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install wrangler globally (pinned version)
+RUN npm install -g wrangler@4.14.1
+
+# Copy sandbox source files
+COPY apps/sandbox/src ./src
+COPY apps/sandbox/scripts ./scripts
+COPY apps/sandbox/wrangler.jsonc ./
+COPY apps/sandbox/Dockerfile ./
+COPY apps/sandbox/package.json ./
+COPY apps/sandbox/tsconfig.json ./
+COPY apps/sandbox/worker-configuration.d.ts ./
+
+# Resolve catalog: references, add @cloudflare/sandbox, remove workspace deps
+# (pnpm catalog: syntax is not understood by npm)
+RUN node -e " \
+  const fs = require('fs'); \
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8')); \
+  if (pkg.dependencies?.zod === 'catalog:') pkg.dependencies.zod = '^4.3.6'; \
+  pkg.dependencies['@cloudflare/sandbox'] = '^0.7.0'; \
+  delete pkg.devDependencies; \
+  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
+"
+
+# Create standalone tsconfig (no workspace extends)
+RUN cat > tsconfig.json << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": ["src/**/*.ts", "worker-configuration.d.ts"]
+}
+EOF
+
+# Install sandbox dependencies (hono, zod, @cloudflare/sandbox)
+RUN npm install
+
+# Copy entrypoint script
+COPY docker/entrypoint/sandbox.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8787
+
+ENV WRANGLER_SEND_METRICS=false
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["wrangler", "dev", "--port", "8787", "--ip", "0.0.0.0"]

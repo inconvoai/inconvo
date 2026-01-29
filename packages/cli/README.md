@@ -9,16 +9,16 @@ npx inconvo dev
 ```
 
 This will:
-1. Download the latest Inconvo release (~60MB)
-2. Run the setup wizard (first time only)
-3. Start the dev server and sandbox
+1. Run the setup wizard (first time only)
+2. Pull Docker images for the dev server and sandbox
+3. Start the services via Docker Compose
 
 Then open http://localhost:26686 to start chatting with your data.
 
 ## Requirements
 
-- Node.js 18+
-- Docker (for the sandbox environment)
+- Docker (Docker Desktop or Docker daemon running)
+- Node.js 18+ (only for running `npx`)
 
 ## Commands
 

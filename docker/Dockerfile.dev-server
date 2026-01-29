@@ -1,0 +1,30 @@
+FROM node:22-slim AS base
+
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy standalone build (created by Next.js `output: "standalone"`)
+COPY apps/dev-server/.next/standalone ./
+COPY apps/dev-server/.next/static ./apps/dev-server/.next/static
+COPY apps/dev-server/public ./apps/dev-server/public
+
+# Copy Prisma schema for migrations
+COPY apps/dev-server/prisma ./apps/dev-server/prisma
+
+# Install Prisma CLI globally for db push
+RUN npm install -g prisma@7.3.0
+
+# Copy entrypoint script
+COPY docker/entrypoint/dev-server.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 26686
+
+ENV PORT=26686
+ENV HOSTNAME=0.0.0.0
+ENV NODE_ENV=production
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "server.js"]

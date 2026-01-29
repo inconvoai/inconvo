@@ -66,9 +66,6 @@ catalogs:
     kysely:
       specifier: 0.28.10
       version: 0.28.10
-    langchain:
-      specifier: 1.2.12
-      version: 1.2.12
     monaco-editor:
       specifier: 0.55.1
       version: 0.55.1
@@ -340,9 +337,6 @@ importers:
       '@repo/types':
         specifier: workspace:*
         version: link:../types
-      langchain:
-        specifier: 'catalog:'
-        version: 1.2.12(@langchain/core@1.1.16(openai@6.16.0(ws@8.18.0)(zod@4.3.6)))(openai@6.16.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       uuid:
         specifier: 'catalog:'
         version: 13.0.0
@@ -4098,12 +4092,6 @@ packages:
   kysely@0.28.10:
     resolution: {integrity: sha512-ksNxfzIW77OcZ+QWSAPC7yDqUSaIVwkTWnTPNiIy//vifNbwsSgQ57OkkncHxxpcBHM3LRfLAZVEh7kjq5twVA==}
     engines: {node: '>=20.0.0'}
-
-  langchain@1.2.12:
-    resolution: {integrity: sha512-08UubBUAU6scuHBlz7O1b4FQQd4YArt/M+nH5FH3cRj2UF64ii8LqfnxopZvTnXYzw8HBurd3v0n738njqzPRg==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@langchain/core': 1.1.16
 
   langsmith@0.4.10:
     resolution: {integrity: sha512-l9QP/a7RXBXdaoAnNx99X+TK8aul8Qe4us1oCybdMgDmYMLT5PAwlJactvSdTlT8NOeSoFThYa2N7ijznBNe9w==}
@@ -9729,23 +9717,6 @@ snapshots:
   klona@2.0.6: {}
 
   kysely@0.28.10: {}
-
-  langchain@1.2.12(@langchain/core@1.1.16(openai@6.16.0(ws@8.18.0)(zod@4.3.6)))(openai@6.16.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
-    dependencies:
-      '@langchain/core': 1.1.16(openai@6.16.0(ws@8.18.0)(zod@4.3.6))
-      '@langchain/langgraph': 1.1.1(@langchain/core@1.1.16(openai@6.16.0(ws@8.18.0)(zod@4.3.6)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.3.6)
-      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.16(openai@6.16.0(ws@8.18.0)(zod@4.3.6)))
-      langsmith: 0.4.10(openai@6.16.0(ws@8.18.0)(zod@4.3.6))
-      uuid: 10.0.0
-      zod: 4.3.6
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@opentelemetry/exporter-trace-otlp-proto'
-      - '@opentelemetry/sdk-trace-base'
-      - openai
-      - react
-      - react-dom
-      - zod-to-json-schema
 
   langsmith@0.4.10(openai@6.16.0(ws@8.18.0)(zod@4.3.6)):
     dependencies:

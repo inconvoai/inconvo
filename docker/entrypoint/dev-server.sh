@@ -8,8 +8,10 @@ mkdir -p /data
 
 # Run Prisma db push to create/migrate SQLite database
 cd /app/apps/dev-server
-prisma db push --skip-generate --accept-data-loss 2>/dev/null || {
-    echo "Database initialization failed, but continuing..."
+echo "Running prisma db push..."
+prisma db push --skip-generate --accept-data-loss || {
+    echo "Warning: Database initialization failed"
+    echo "Schema location: $(ls -la prisma/ 2>/dev/null || echo 'prisma dir not found')"
 }
 
 echo "Starting dev-server..."

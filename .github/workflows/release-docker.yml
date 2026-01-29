@@ -15,6 +15,11 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ten-dev/inconvo
 
+# Top-level permissions for all jobs (can be overridden per-job)
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   prepare:
     runs-on: ubuntu-latest

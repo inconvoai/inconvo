@@ -5,6 +5,7 @@ import type { ReleaseInfo } from "../release/downloader.js";
 
 export interface RuntimeMode {
   type: "release";
+  releaseDir: string;
   devServerDir: string;
   sandboxDir: string;
 }
@@ -45,6 +46,7 @@ function getCleanEnv(): Record<string, string> {
 export function createRuntimeMode(release: ReleaseInfo): RuntimeMode {
   return {
     type: "release",
+    releaseDir: release.releaseDir,
     devServerDir: release.devServerDir,
     sandboxDir: release.sandboxDir,
   };
@@ -60,9 +62,9 @@ export function checkDockerRunning(): boolean {
 }
 
 export function initializePrismaDb(mode: RuntimeMode): void {
-  // Use bundled prisma directly to avoid npm/pnpm conflicts
+  // Use bundled prisma from release root node_modules
   const prismaIndex = path.join(
-    mode.devServerDir,
+    mode.releaseDir,
     "node_modules",
     "prisma",
     "build",

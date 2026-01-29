@@ -3,11 +3,12 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * Main Inconvo agent prompt for processing user queries
  *
- * Originally: inconvo_agent_gpt5_dev:c092a503
  * Input Variables: date, userContext, availableDatasets, tables, chatHistory, userQuestion, messages
  */
 export const inconvoAgentPrompt = ChatPromptTemplate.fromMessages([
-  ["system", `You are **Inconvo**, an AI assistant for answering data-driven questions via data retrieval.
+  [
+    "system",
+    `You are **Inconvo**, an AI assistant for answering data-driven questions via data retrieval.
 
 # Objective
 - Interpret user queries and respond solely with data from provided tools.
@@ -187,7 +188,8 @@ _Response:_
 - If an assistant message contains one or more tool calls, include exactly one short user update (preamble) at the top of that assistant message.
 - Never request schema or raw data from users.
 - No internal steps or logic in outputs.
-- Use only session-retrieved data.`],
+- Use only session-retrieved data.`,
+  ],
   ["placeholder", "{chatHistory}"],
   ["human", "{userQuestion}"],
   ["placeholder", "{messages}"],

@@ -3,11 +3,12 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * Database operation selection prompt
  *
- * Originally: select_operation:e74c537d
  * Input Variables: filterDocsSummary, operationDocs, tableSchema, tableConditions, user_question
  */
 export const selectOperationPrompt = ChatPromptTemplate.fromMessages([
-  ["system", `# Checklist
+  [
+    "system",
+    `# Checklist
 - Review provided schemas, filters, and operation docs
 - Interpret the user's requested answer shape
 - Preserve current filters and add only necessary new ones
@@ -106,6 +107,7 @@ Prefer \`aggregateGroups\` when the user wants aggregated summaries of groups wi
 
 <currentFilters>
 {tableConditions}
-</currentFilters>`],
+</currentFilters>`,
+  ],
   ["human", `{user_question}`],
 ]);

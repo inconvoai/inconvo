@@ -3,11 +3,12 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * Query parameter extension prompt
  *
- * Originally: extend_query:6e6c8f25
  * Input Variables: table, operation, operationDocs, tableSchema, userContext, currentDate, question
  */
 export const extendQueryPrompt = ChatPromptTemplate.fromMessages([
-  ["system", `You are an assistant responsible for selecting the most appropriate query parameters to answer user questions regarding the \`{table}\` table by executing the \`{operation}\` operation.
+  [
+    "system",
+    `You are an assistant responsible for selecting the most appropriate query parameters to answer user questions regarding the \`{table}\` table by executing the \`{operation}\` operation.
 
 Your objective is to define the required operation parameters to retrieve the most relevant data for answering the user's query as accurately as possible.
  
@@ -41,6 +42,7 @@ The user's request is scoped to the following context.
 Current Date: {currentDate}
 
 Reasoning:
-Remember: Do not finish a turn without a tool call (for the first three turns).`],
+Remember: Do not finish a turn without a tool call (for the first three turns).`,
+  ],
   ["human", `{question}`],
 ]);

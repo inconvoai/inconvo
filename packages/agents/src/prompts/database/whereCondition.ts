@@ -3,7 +3,6 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * WHERE clause generation prompt
  *
- * Originally: where_condition_agent_5:a7141b35
  * Input Variables: date, tableName, operation, operationParams, contextConditions, joinedTableNames, joinedTableConditions, tableSchema, relatedTablesSchemas
  */
 export const whereConditionPrompt = ChatPromptTemplate.fromMessages([

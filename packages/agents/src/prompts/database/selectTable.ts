@@ -3,11 +3,12 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * Database table selection prompt
  *
- * Originally: select_table:dbe22856
  * Input Variables: schema, question
  */
 export const selectTablePrompt = ChatPromptTemplate.fromMessages([
-  ["system", `Role:  Assistant for a Database Query Builder
+  [
+    "system",
+    `Role:  Assistant for a Database Query Builder
 
 Objective:
 - Analyze user questions and select the starting table for queries, using the provided database schema.
@@ -23,6 +24,7 @@ Guidelines:
 
 
 Database Schema:
-{schema}`],
+{schema}`,
+  ],
   ["human", `{question}`],
 ]);

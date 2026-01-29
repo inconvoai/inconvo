@@ -61,9 +61,5 @@
     "postcss-simple-vars": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"
-  },
-  "overrides": {
-    "@types/react": "19.2.9",
-    "@types/react-dom": "19.2.3"
   }
 }

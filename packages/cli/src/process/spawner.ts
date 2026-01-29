@@ -1,4 +1,5 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
+import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { ReleaseInfo } from "../release/downloader.js";
@@ -65,15 +66,24 @@ export function checkDockerRunning(): boolean {
 const PRISMA_VERSION = "7.3.0";
 const WRANGLER_VERSION = "4.14.1";
 
+/**
+ * Get path to CLI tools directory (separate from bundle node_modules)
+ */
+function getToolsDir(): string {
+  return path.join(os.homedir(), ".inconvo", "tools");
+}
+
 export function ensureDevServerDeps(mode: RuntimeMode): void {
-  const prismaDir = path.join(mode.releaseDir, "node_modules", "prisma");
+  const toolsDir = getToolsDir();
+  const prismaDir = path.join(toolsDir, "node_modules", "prisma");
 
   // Check if prisma exists, install if not
   try {
-    require("fs").accessSync(prismaDir);
+    fs.accessSync(prismaDir);
   } catch {
+    fs.mkdirSync(toolsDir, { recursive: true });
     execSync(`npm install prisma@${PRISMA_VERSION} dotenv@17.2.3 --no-save`, {
-      cwd: mode.releaseDir,
+      cwd: toolsDir,
       stdio: "pipe",
       env: getCleanEnv(),
     });
@@ -81,18 +91,17 @@ export function ensureDevServerDeps(mode: RuntimeMode): void {
 }
 
 export function initializePrismaDb(mode: RuntimeMode): void {
-  const prismaIndex = path.join(
-    mode.releaseDir,
-    "node_modules",
-    "prisma",
-    "build",
-    "index.js"
-  );
+  const toolsDir = getToolsDir();
+  const toolsNodeModules = path.join(toolsDir, "node_modules");
+  const prismaIndex = path.join(toolsNodeModules, "prisma", "build", "index.js");
+
   execSync(`node "${prismaIndex}" db push --accept-data-loss`, {
     cwd: mode.devServerDir,
     stdio: "pipe",
     env: {
       ...getCleanEnv(),
+      // Include tools node_modules so prisma config can find dotenv
+      NODE_PATH: toolsNodeModules,
       INCONVO_LOCAL_DB_PATH: getLocalDbPath(),
       SKIP_ENV_VALIDATION: "true",
     },
@@ -131,16 +140,18 @@ export function spawnDevServer(
   });
 }
 
-export function ensureSandboxDeps(mode: RuntimeMode): void {
-  const wranglerBin = path.join(mode.sandboxDir, "node_modules", ".bin", "wrangler");
+export function ensureSandboxDeps(): void {
+  const toolsDir = getToolsDir();
+  const wranglerDir = path.join(toolsDir, "node_modules", "wrangler");
 
   // Check if wrangler exists, install if not
   try {
-    require("fs").accessSync(wranglerBin);
+    fs.accessSync(wranglerDir);
   } catch {
-    // Install wrangler for the user's platform
+    // Install wrangler in tools directory for the user's platform
+    fs.mkdirSync(toolsDir, { recursive: true });
     execSync(`npm install wrangler@${WRANGLER_VERSION} --no-save`, {
-      cwd: mode.sandboxDir,
+      cwd: toolsDir,
       stdio: "pipe",
       env: getCleanEnv(),
     });
@@ -151,6 +162,9 @@ export function spawnSandbox(
   mode: RuntimeMode,
   sandboxApiKey: string
 ): ChildProcess {
+  const toolsDir = getToolsDir();
+  const wranglerBin = path.join(toolsDir, "node_modules", ".bin", "wrangler");
+
   const env = {
     ...getCleanEnv(),
     INTERNAL_API_KEY: sandboxApiKey,
@@ -158,7 +172,6 @@ export function spawnSandbox(
     WRANGLER_SEND_METRICS: "false",
   };
 
-  const wranglerBin = path.join(mode.sandboxDir, "node_modules", ".bin", "wrangler");
   return spawn(wranglerBin, ["dev"], {
     cwd: mode.sandboxDir,
     env,

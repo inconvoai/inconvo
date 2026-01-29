@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.1.0-test)"
+        required: true
+        default: "0.1.0-dev"
 
 jobs:
   build-release:
@@ -11,6 +17,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    env:
+      # Use input version for workflow_dispatch, or tag name for tag push
+      RELEASE_VERSION: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
 
     steps:
       - name: Checkout
@@ -76,14 +85,14 @@ jobs:
           cp apps/sandbox/worker-configuration.d.ts release-bundle/apps/sandbox/
 
           # Create version marker
-          echo "${{ github.ref_name }}" > release-bundle/.version
+          echo "${{ env.RELEASE_VERSION }}" > release-bundle/.version
 
           # Check size
           du -sh release-bundle/
 
           # Create tarball
-          tar -czf inconvo-${{ github.ref_name }}-bundle.tar.gz -C release-bundle .
-          ls -lh inconvo-${{ github.ref_name }}-bundle.tar.gz
+          tar -czf inconvo-${{ env.RELEASE_VERSION }}-bundle.tar.gz -C release-bundle .
+          ls -lh inconvo-${{ env.RELEASE_VERSION }}-bundle.tar.gz
 
       # TODO: Uncomment when ready to publish to npm
       # - name: Publish CLI to npm
@@ -95,7 +104,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
+          tag_name: ${{ env.RELEASE_VERSION }}
           generate_release_notes: true
           draft: false
+          prerelease: ${{ contains(env.RELEASE_VERSION, '-') }}
           files: |
-            inconvo-${{ github.ref_name }}-bundle.tar.gz
+            inconvo-${{ env.RELEASE_VERSION }}-bundle.tar.gz

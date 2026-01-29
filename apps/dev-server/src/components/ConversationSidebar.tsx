@@ -10,7 +10,7 @@ import {
   ScrollArea,
   Badge,
 } from "@mantine/core";
-import { IconPlus, IconTrash, IconBraces } from "@tabler/icons-react";
+import { IconPlus, IconTrash } from "@tabler/icons-react";
 
 export interface ConversationItem {
   id: string;
@@ -18,6 +18,7 @@ export interface ConversationItem {
   createdAt: string;
   updatedAt: string;
   userContext?: Record<string, string | number> | null;
+  userIdentifier?: string | null;
 }
 
 interface ConversationSidebarProps {
@@ -87,22 +88,40 @@ export function ConversationSidebar({
               >
                 <Group justify="space-between" wrap="nowrap">
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Group gap={4} mb={2}>
+                    <Group gap={8} mb={4}>
                       <Text size="xs" c="dimmed">
                         {new Date(conv.updatedAt).toLocaleDateString()}
                       </Text>
-                      {conv.userContext &&
-                        Object.keys(conv.userContext).length > 0 && (
-                          <Badge
-                            size="xs"
-                            variant="light"
-                            color="blue"
-                            leftSection={<IconBraces size={10} />}
-                          >
-                            {Object.keys(conv.userContext).length}
-                          </Badge>
-                        )}
+                      {conv.userIdentifier && (
+                        <Badge size="xs" variant="dot" color="gray">
+                          {conv.userIdentifier}
+                        </Badge>
+                      )}
                     </Group>
+                    {conv.userContext &&
+                      Object.keys(conv.userContext).length > 0 && (
+                        <ScrollArea
+                          type="never"
+                          mb={4}
+                          style={{ width: "100%" }}
+                        >
+                          <Group gap={4} wrap="nowrap">
+                            {Object.entries(conv.userContext).map(
+                              ([key, value]) => (
+                                <Badge
+                                  key={key}
+                                  size="xs"
+                                  variant="light"
+                                  color="blue"
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  {key}: {value}
+                                </Badge>
+                              ),
+                            )}
+                          </Group>
+                        </ScrollArea>
+                      )}
                     <Text size="sm" truncate>
                       {conv.title ?? "New conversation"}
                     </Text>

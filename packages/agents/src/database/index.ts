@@ -123,7 +123,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const model = getAIModel(params.provider, "gpt-5.1", {
       promptCacheKey,
     });
-    const selectTablePrompt = await getPrompt("select_table:dbe22856");
+    const selectTablePrompt = await getPrompt("select_table");
     const tableNames = state.schema
       .filter((table) => table.access === "QUERYABLE")
       .map((table) => table.name);
@@ -151,9 +151,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     const model = getAIModel(params.provider, "gpt-5.2", {
       promptCacheKey,
     });
-    const operationSelectorPrompt = await getPrompt(
-      "select_operation:e74c537d",
-    );
+    const operationSelectorPrompt = await getPrompt("select_operation");
 
     const columns = state.tableSchema.columns;
     const relations = state.tableSchema.outwardRelations ?? [];
@@ -269,6 +267,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         joinedTableSchema,
         params.userContext,
       );
+
       if (joinedTableConditions) {
         for (const cond of joinedTableConditions) {
           contextConditions.push({

@@ -3,7 +3,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * WHERE clause generation prompt
  *
- * Input Variables: date, tableName, operation, operationParams, contextConditions, joinedTableNames, joinedTableConditions, tableSchema, relatedTablesSchemas
+ * Input Variables: date, tableName, operation, operationParams, contextConditions, joinedTableNames, tableSchema, relatedTablesSchemas
  */
 export const whereConditionPrompt = ChatPromptTemplate.fromMessages([
   [
@@ -124,7 +124,6 @@ The \`Context Conditions\` below handle tenant/organisation isolation. These fil
 - Params: {{operationParams}}
 - Context Conditions: {{contextConditions}}
 - Joined Tables: {{joinedTableNames}}
-- Joined Table Conditions: {{joinedTableConditions}}
 - Table Schema: {{tableSchema}}
 - Related Schemas: {{relatedTablesSchemas}}
 

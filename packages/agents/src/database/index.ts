@@ -267,6 +267,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
         joinedTableSchema,
         params.userContext,
       );
+
       if (joinedTableConditions) {
         for (const cond of joinedTableConditions) {
           contextConditions.push({

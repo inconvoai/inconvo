@@ -136,7 +136,6 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     tableSchema: buildTableSchemaStringFromTableSchema(params.tableSchema),
     relatedTablesSchemas: relatedTablesSchemasString,
     joinedTableNames: params.joinedTableNames.join(", ") || "none",
-    joinedTableConditions: "null", // FIXME: this still needs to be fixed
   })) as Record<"messages", BaseMessage[]>;
 
   const modelWithTools = llm.bindTools([applyFilterTool]);

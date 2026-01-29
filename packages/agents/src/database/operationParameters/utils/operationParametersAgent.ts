@@ -164,7 +164,7 @@ export async function buildOperationParametersPromptMessages(
   },
   tableSchema: string,
 ): Promise<BaseMessage[]> {
-  const prompt = await getPrompt("extend_query");
+  const prompt = await getPrompt("extend_query:6e6c8f25");
   const formatted = (await prompt.invoke({
     operation: params.operation,
     table: params.tableName,

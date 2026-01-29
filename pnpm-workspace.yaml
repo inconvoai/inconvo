@@ -83,6 +83,3 @@ catalog:
   vitest: 4.0.18
   tsx: 4.21.0
   concurrently: 9.2.1
-
-  # CLI/Docker tooling
-  wrangler: 4.14.1

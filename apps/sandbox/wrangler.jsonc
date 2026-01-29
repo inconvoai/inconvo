@@ -39,7 +39,6 @@
   // "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
   "containers": [
     {
-      "name": "inconvo-sandbox-container",
       "class_name": "Sandbox",
       "image": "./Dockerfile",
       "instance_type": "standard-1",
@@ -88,7 +87,6 @@
       },
       "containers": [
         {
-          "name": "inconvo-sandbox-container-dev",
           "class_name": "Sandbox",
           "image": "./Dockerfile",
           "instance_type": "standard-1",

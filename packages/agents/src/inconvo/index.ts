@@ -299,25 +299,42 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             ),
           );
 
-          // 4. Filter out old databaseRetriever messages, keeping the last N
-          const filteredHistory = x.filter((msg) => {
-            // Remove only tool messages whose tool_call_id is in the removal set
-            if (ToolMessage.isInstance(msg) && msg.tool_call_id) {
-              if (idsToRemove.has(msg.tool_call_id)) return false;
-            }
-            // Remove AI messages that contain databaseRetriever tool calls to be removed
+          // 4. First pass: identify AI messages to remove and collect ALL their tool call IDs
+          const allToolCallIdsToRemove = new Set<string>();
+          const aiMessagesToRemove = new Set<BaseMessage>();
+
+          x.forEach((msg) => {
             if (AIMessage.isInstance(msg)) {
-              const dbCalls = [
+              const allCalls = [
                 ...(msg.tool_calls ?? []),
                 ...(msg.invalid_tool_calls ?? []),
-              ].filter((c) => c.name === "databaseRetriever" && c.id);
+              ];
+              const dbCalls = allCalls.filter(
+                (c) => c.name === "databaseRetriever" && c.id,
+              );
               // If all db calls in this message are in the removal set, remove the message
               if (
                 dbCalls.length > 0 &&
                 dbCalls.every((c) => c.id && idsToRemove.has(c.id))
               ) {
-                return false;
+                aiMessagesToRemove.add(msg);
+                // Collect ALL tool call IDs from this message (not just databaseRetriever)
+                allCalls.forEach((c) => {
+                  if (c.id) allToolCallIdsToRemove.add(c.id);
+                });
               }
+            }
+          });
+
+          // 5. Filter out AI messages and their corresponding ToolMessages
+          const filteredHistory = x.filter((msg) => {
+            // Remove tool messages whose tool_call_id belongs to a removed AI message
+            if (ToolMessage.isInstance(msg) && msg.tool_call_id) {
+              if (allToolCallIdsToRemove.has(msg.tool_call_id)) return false;
+            }
+            // Remove marked AI messages
+            if (aiMessagesToRemove.has(msg)) {
+              return false;
             }
             return true;
           });
@@ -952,7 +969,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   }
 
   async function callModel(state: typeof AgentState.State) {
-    const prompt = await getPrompt("inconvo_agent");
+    const prompt = await getPrompt("inconvo_agent_gpt5_dev:c092a503");
 
     // Format tables as a markdown list grouped by database
     const tables = params.databases

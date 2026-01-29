@@ -17,8 +17,7 @@ export interface ConversationWithMessages extends Conversation {
   messages: ChatMessage[];
 }
 
-export interface ConversationWithMetaAndMessages
-  extends ConversationWithMeta {
+export interface ConversationWithMetaAndMessages extends ConversationWithMeta {
   messages: ChatMessage[];
 }
 
@@ -108,7 +107,6 @@ export async function getConversation(
   });
 
   if (!conversation) return undefined;
-  console.log(conversation);
   return toConversation(conversation);
 }
 

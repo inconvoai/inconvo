@@ -1,5 +1,5 @@
 {
-  "name": "inconvo",
+  "name": "@ten-dev/inconvo",
   "version": "0.1.0",
   "description": "CLI for Inconvo development environment",
   "type": "module",
@@ -11,7 +11,8 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "docker-compose.yml"
   ],
   "scripts": {
     "build": "tsc",
@@ -24,11 +25,10 @@
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "commander": "^13.1.0",
-    "yaml": "^2.7.0",
-    "zod": "catalog:",
     "kysely": "catalog:",
+    "mysql2": "^3.16.1",
     "pg": "catalog:",
-    "mysql2": "^3.16.1"
+    "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -43,6 +43,6 @@
     "node": ">=18"
   },
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
   }
 }

@@ -1,0 +1,15 @@
+# Local development override - uses locally built images
+# Usage: docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml up
+
+services:
+  dev-server:
+    image: inconvo-dev-server:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev-server
+
+  sandbox:
+    image: inconvo-sandbox:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sandbox

@@ -118,7 +118,7 @@ Executes Python to format user-facing results—text, table, or chart.
 ## Output Rules
 - **If a time filter applies** (date, range, period), state it explicitly in the response (e.g., “for Q1 2025” or “(to date)”).
 - State all active filters or periods in responses.
-- Do not inform them that the data is filtered to their user context because this is areday assumed.
+- Do not inform them that the data is filtered to their user context because this is already assumed.
 - Final user-facing outputs must use ONLY these formats:
   - Text
   - Table

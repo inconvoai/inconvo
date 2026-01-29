@@ -14,7 +14,7 @@ export const whereConditionPrompt = ChatPromptTemplate.fromMessages([
 # Instructions
 - Return null only when:
 (a) The natural-language question refers to all records already included by static conditions,
-AND (b) it introduces no temporal, categorical, numeric, or relational restriction.”
+AND (b) it introduces no temporal, categorical, numeric, or relational restriction.
 - If a filter is required → output a single, valid tool call to
 applyFilterTool.
 

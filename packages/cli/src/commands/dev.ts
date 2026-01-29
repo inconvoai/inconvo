@@ -3,13 +3,16 @@ import { execSync, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { fileURLToPath } from "url";
 import * as p from "@clack/prompts";
 import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import { logInfo, logError, logGray } from "../process/output.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
-const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/ten-dev/inconvo";
+// Bundled compose file (shipped with npm package)
+const BUNDLED_COMPOSE_FILE = path.join(__dirname, "..", "..", "docker-compose.yml");
 
 function checkDockerRunning(): boolean {
   try {
@@ -33,25 +36,18 @@ function generateApiKey(): string {
   return crypto.randomUUID();
 }
 
-async function downloadComposeFile(version: string): Promise<void> {
-  const branch = version === "latest" ? "main" : `v${version}`;
-  const url = `${GITHUB_RAW_BASE}/${branch}/docker/docker-compose.yml`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download docker-compose.yml: ${response.status} ${response.statusText}`);
-  }
-
-  const content = await response.text();
+function copyBundledComposeFile(): void {
+  // Copy the bundled compose file to ~/.inconvo/
+  // This ensures the compose file version matches the CLI version
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
-  fs.writeFileSync(COMPOSE_FILE, content);
+  fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
 }
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
-  .option("--version <version>", "Use a specific release version (default: latest)")
-  .action(async (options: { version?: string }) => {
-    const version = options.version || "latest";
+  .option("--image-version <version>", "Use a specific Docker image version (default: latest)")
+  .action(async (options: { imageVersion?: string }) => {
+    const imageVersion = options.imageVersion || "latest";
 
     // Check Docker is running
     if (!checkDockerRunning()) {
@@ -79,12 +75,12 @@ export const devCommand = new Command("dev")
     // Read config from ~/.inconvo/config.env
     const configEnv = await readEnvFile();
 
-    // Download docker-compose.yml
+    // Copy bundled docker-compose.yml to ~/.inconvo/
     const spinner = p.spinner();
     spinner.start("Preparing Docker environment...");
 
     try {
-      await downloadComposeFile(version);
+      copyBundledComposeFile();
       spinner.stop("Docker environment ready");
     } catch (error) {
       spinner.stop("Failed to prepare Docker environment");
@@ -99,7 +95,7 @@ export const devCommand = new Command("dev")
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
       ...configEnv,
-      INCONVO_VERSION: version,
+      INCONVO_VERSION: imageVersion,
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
     };
 

@@ -16,11 +16,13 @@ env:
   IMAGE_PREFIX: ten-dev/inconvo
 
 jobs:
-  build-dev-server:
+  prepare:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prisma_version: ${{ steps.catalog.outputs.prisma }}
+      wrangler_version: ${{ steps.catalog.outputs.wrangler }}
+      zod_version: ${{ steps.catalog.outputs.zod }}
 
     steps:
       - name: Checkout
@@ -34,6 +36,32 @@ jobs:
           else
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Extract catalog versions
+        id: catalog
+        run: |
+          # Extract versions from pnpm-workspace.yaml catalog
+          extract_version() {
+            grep "^  $1:" pnpm-workspace.yaml | sed 's/.*: //' | tr -d ' '
+          }
+
+          echo "prisma=$(extract_version prisma)" >> $GITHUB_OUTPUT
+          echo "wrangler=$(extract_version wrangler)" >> $GITHUB_OUTPUT
+          echo "zod=$(extract_version zod)" >> $GITHUB_OUTPUT
+
+          echo "Extracted versions:"
+          cat $GITHUB_OUTPUT
+
+  build-dev-server:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,13 +97,16 @@ jobs:
           context: .
           file: docker/Dockerfile.dev-server
           push: true
+          build-args: |
+            PRISMA_VERSION=${{ needs.prepare.outputs.prisma_version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-sandbox:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,22 +116,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=v${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Prepare sandbox package.json
         run: |
           cd apps/sandbox
 
           # Resolve zod catalog reference
-          ZOD_VERSION=$(grep '^\s*zod:' ../../pnpm-workspace.yaml | head -1 | sed 's/.*zod:\s*//' | tr -d ' ')
-          sed -i "s/\"zod\": \"catalog:\"/\"zod\": \"^${ZOD_VERSION:-4.3.6}\"/" package.json
+          sed -i "s/\"zod\": \"catalog:\"/\"zod\": \"^${{ needs.prepare.outputs.zod_version }}\"/" package.json
 
           # Remove workspace: and catalog: dependencies
           node -e "
@@ -166,14 +187,17 @@ jobs:
           context: .
           file: docker/Dockerfile.sandbox
           push: true
+          build-args: |
+            WRANGLER_VERSION=${{ needs.prepare.outputs.wrangler_version }}
+            ZOD_VERSION=${{ needs.prepare.outputs.zod_version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   create-release:
-    needs: [build-dev-server, build-sandbox]
+    needs: [prepare, build-dev-server, build-sandbox]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -182,29 +206,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=v${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.version }}
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
           body: |
             ## Docker Images
 
             ```bash
-            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ steps.version.outputs.version }}
-            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/sandbox:${{ steps.version.outputs.version }}
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}
             ```
 
             ## Quick Start

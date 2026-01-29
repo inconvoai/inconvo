@@ -11,7 +11,8 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "docker-compose.yml"
   ],
   "scripts": {
     "build": "tsc",
@@ -42,6 +43,6 @@
     "node": ">=18"
   },
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
   }
 }

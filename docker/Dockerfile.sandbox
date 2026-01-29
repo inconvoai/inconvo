@@ -1,5 +1,9 @@
 FROM node:22-slim
 
+# Versions from pnpm-workspace.yaml catalog (passed via build args)
+ARG WRANGLER_VERSION=4.14.1
+ARG ZOD_VERSION=4.3.6
+
 # Install Docker CLI for wrangler containers feature
 RUN apt-get update && apt-get install -y \
     docker.io \
@@ -8,8 +12,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install wrangler globally (pinned version)
-RUN npm install -g wrangler@4.14.1
+# Install wrangler globally
+RUN npm install -g wrangler@${WRANGLER_VERSION}
 
 # Copy sandbox source files
 COPY apps/sandbox/src ./src
@@ -25,7 +29,7 @@ COPY apps/sandbox/worker-configuration.d.ts ./
 RUN node -e " \
   const fs = require('fs'); \
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8')); \
-  if (pkg.dependencies?.zod === 'catalog:') pkg.dependencies.zod = '^4.3.6'; \
+  if (pkg.dependencies?.zod === 'catalog:') pkg.dependencies.zod = '^${ZOD_VERSION}'; \
   pkg.dependencies['@cloudflare/sandbox'] = '^0.7.0'; \
   delete pkg.devDependencies; \
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \

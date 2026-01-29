@@ -92,7 +92,7 @@ export const devCommand = new Command("dev")
     // Ensure sandbox dependencies are installed (platform-specific)
     spinner.start("Checking sandbox dependencies...");
     try {
-      ensureSandboxDeps(mode);
+      ensureSandboxDeps();
       spinner.stop("Sandbox dependencies ready");
     } catch (error) {
       spinner.stop("Failed to install sandbox dependencies");

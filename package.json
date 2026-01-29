@@ -11,7 +11,10 @@
     "check-types": "turbo run check-types",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "cf-typegen": "turbo run cf-typegen",
-    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo"
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules .turbo apps/*/.turbo packages/*/.turbo",
+    "docker:build": "pnpm --filter dev-server build && INCONVO_SANDBOX_API_KEY=build-placeholder docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml build",
+    "docker:up": "set -a; [ -f ~/.inconvo/config.env ] && . ~/.inconvo/config.env; set +a; INCONVO_SANDBOX_API_KEY=$(uuidgen) docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml up",
+    "docker:down": "docker compose -f docker/docker-compose.yml -f docker/docker-compose.local.yml down"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

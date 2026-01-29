@@ -12,8 +12,7 @@
   "scripts": {
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit",
-    "test": "vitest run",
-    "debug:prompt": "npx tsx scripts/debugPrompt.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@langchain/core": "catalog:",
@@ -23,7 +22,6 @@
     "@langchain/openai": "catalog:",
     "@repo/connect": "workspace:*",
     "@repo/types": "workspace:*",
-    "langchain": "catalog:",
     "uuid": "catalog:",
     "vega": "catalog:",
     "vega-lite": "catalog:",

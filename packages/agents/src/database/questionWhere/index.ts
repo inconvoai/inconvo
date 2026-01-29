@@ -126,7 +126,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     },
   );
 
-  const agentPrompt = await getPrompt("where_condition_agent_5:a7141b35");
+  const agentPrompt = await getPrompt("where_condition_agent_5");
   const agentPromptFormatted = (await agentPrompt.invoke({
     tableName: params.tableName,
     operation: params.operation,

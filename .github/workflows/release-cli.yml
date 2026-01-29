@@ -59,9 +59,9 @@ jobs:
           # Copy prisma schema (needed for migrations)
           cp -r apps/dev-server/prisma release-bundle/apps/dev-server/
 
-          # Install prisma CLI at bundle root (with all dependencies)
+          # Install prisma CLI and dependencies at bundle root
           cd release-bundle
-          npm install prisma@7.3.0
+          npm install prisma@7.3.0 dotenv@17.2.3
           rm -f package.json package-lock.json
           cd ..
 

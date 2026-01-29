@@ -40,7 +40,6 @@ RUN pnpm config set node-linker hoisted && pnpm install --frozen-lockfile
 # Copy source code
 COPY apps/dev-server ./apps/dev-server
 COPY packages ./packages
-COPY tsconfig.json ./
 
 # Build the dev-server
 ENV SKIP_ENV_VALIDATION=true

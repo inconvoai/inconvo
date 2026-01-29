@@ -3,14 +3,17 @@ name: inconvo-oss
 services:
   dev-server:
     image: ghcr.io/ten-dev/inconvo/dev-server:${INCONVO_VERSION:-latest}
-    network_mode: host
+    ports:
+      - "26686:26686"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - inconvo-data:/data
     environment:
       # Database path inside container
       - INCONVO_LOCAL_DB_PATH=/data/inconvo.db
-      # Internal communication with sandbox (using host network)
-      - INCONVO_SANDBOX_BASE_URL=http://localhost:8787
+      # Internal communication with sandbox
+      - INCONVO_SANDBOX_BASE_URL=http://sandbox:8787
       - INCONVO_SANDBOX_API_KEY=${INCONVO_SANDBOX_API_KEY:?INCONVO_SANDBOX_API_KEY is required}
       # Skip env validation (validated at CLI level)
       - SKIP_ENV_VALIDATION=true

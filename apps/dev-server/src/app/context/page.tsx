@@ -21,6 +21,7 @@ import {
   type TableCondition,
   type TableInfo,
 } from "@repo/ui/user-context";
+import { trackFeatureUsageClient } from "@/lib/telemetry";
 
 // API response types (slightly different from component types)
 interface ApiUserContextField {
@@ -135,6 +136,9 @@ export default function UserContextPage() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track context field creation
+      trackFeatureUsageClient("user_context", { action: "context_field_created" });
+
       setSuccessMessage("Request context field created");
       setShowAddField(false);
       await fetchData();
@@ -153,6 +157,9 @@ export default function UserContextPage() {
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track context field deletion
+      trackFeatureUsageClient("user_context", { action: "context_field_deleted" });
 
       setSuccessMessage("Request context field deleted");
       await fetchData();
@@ -177,6 +184,9 @@ export default function UserContextPage() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track table condition creation
+      trackFeatureUsageClient("user_context", { action: "table_condition_created" });
+
       setSuccessMessage("Table condition created");
       setShowAddCondition(false);
       await fetchData();
@@ -197,6 +207,9 @@ export default function UserContextPage() {
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track table condition deletion
+      trackFeatureUsageClient("user_context", { action: "table_condition_deleted" });
 
       setSuccessMessage("Table condition deleted");
       await fetchData();

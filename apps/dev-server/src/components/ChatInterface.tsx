@@ -32,6 +32,7 @@ import {
 import { MessageList, type ChatMessage } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import type { InconvoResponse } from "@repo/types";
+import { trackFeatureUsageClient } from "@/lib/telemetry";
 
 interface UserContextField {
   id: string;
@@ -117,6 +118,9 @@ export function ChatInterface() {
     setActiveConversationId(id);
     setError(undefined);
 
+    // Track conversation selection
+    trackFeatureUsageClient("conversations", { action: "selected" });
+
     // Load conversation with messages from server
     try {
       const res = await fetch(`/api/v1/agents/dev-agent/conversations/${id}`);
@@ -154,6 +158,10 @@ export function ChatInterface() {
         await fetch(`/api/v1/agents/dev-agent/conversations/${id}`, {
           method: "DELETE",
         });
+
+        // Track conversation deletion
+        trackFeatureUsageClient("conversations", { action: "deleted" });
+
         await fetchConversations();
         if (activeConversationId === id) {
           handleNewConversation();
@@ -206,6 +214,9 @@ export function ChatInterface() {
       const data = (await res.json()) as { id: string };
       setActiveConversationId(data.id);
       setContextConfirmed(true);
+
+      // Track conversation creation
+      trackFeatureUsageClient("conversations", { action: "created" });
     } catch (err) {
       console.error("Failed to create conversation:", err);
       setError(
@@ -227,8 +238,8 @@ export function ChatInterface() {
       setIsLoading(true);
       setProgressMessage(undefined);
 
-      // Check if this is the first message
-      const isFirstMessage = messages.length === 0;
+      // Track message sent event
+      trackFeatureUsageClient("conversations", { action: "message_sent" });
 
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;
@@ -307,7 +318,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId],
+    [activeConversationId, messages.length],
   );
 
   // Count active context values

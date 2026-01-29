@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { getPostHogClient } from "~/lib/posthog-server";
+import { trackQueryPerformance } from "~/lib/telemetry";
 
 // Dynamic import to defer connect package loading until runtime
 // This prevents env validation from running during build
@@ -100,11 +102,26 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime;
     console.log(`[/api/connect POST] Operation completed in ${duration}ms`);
 
+    // Track server-side query execution
+    const posthog = getPostHogClient();
+    trackQueryPerformance(posthog, {
+      success: true,
+      duration_ms: duration,
+    });
+
     return new NextResponse(safeJsonStringify(response), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
     const duration = Date.now() - startTime;
+
+    // Track server-side query error
+    const posthog = getPostHogClient();
+    trackQueryPerformance(posthog, {
+      success: false,
+      duration_ms: duration,
+      error_type: error instanceof ZodError ? "validation" : "execution",
+    });
 
     if (error instanceof ZodError) {
       console.error(

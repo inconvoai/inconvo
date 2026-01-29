@@ -30,6 +30,7 @@ import type {
   TableWithColumns,
   FilterValue,
 } from "@repo/ui/semantic-model";
+import { trackFeatureUsageClient } from "@/lib/telemetry";
 
 // Dynamic import to avoid Monaco SSR issues
 const SemanticModelEditor = dynamic(
@@ -434,6 +435,10 @@ function SchemaPageContent() {
       };
       if (data.error) throw new Error(data.error);
       setSuccessMessage(`Synced: ${data.added} added, ${data.updated} updated`);
+
+      // Track schema sync event
+      trackFeatureUsageClient("schema_editor", { action: "schema_synced" });
+
       await fetchTables();
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -446,7 +451,10 @@ function SchemaPageContent() {
   // Callbacks for SemanticModelEditor
   const onTableSelect = useCallback((tableId: string) => {
     setSelectedTableId(tableId);
-  }, []);
+
+    // Track table selection
+    trackFeatureUsageClient("schema_editor", { action: "table_selected" });
+  }, [tables]);
 
   const onUpdateTable = useCallback(
     async (
@@ -466,6 +474,14 @@ function SchemaPageContent() {
       );
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track table changes
+      if (payload.access) {
+        trackFeatureUsageClient("schema_editor", { action: "table_access_changed" });
+      }
+      if (payload.context !== undefined) {
+        trackFeatureUsageClient("schema_editor", { action: "table_prompt_edited" });
+      }
 
       // Refresh data
       await fetchTables();
@@ -493,6 +509,17 @@ function SchemaPageContent() {
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track column changes
+      if (payload.selected !== undefined) {
+        trackFeatureUsageClient("schema_editor", { action: "column_selected" });
+      }
+      if (payload.rename !== undefined) {
+        trackFeatureUsageClient("schema_editor", { action: "column_renamed" });
+      }
+      if (payload.notes !== undefined) {
+        trackFeatureUsageClient("schema_editor", { action: "column_note_edited" });
+      }
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {
@@ -544,8 +571,10 @@ function SchemaPageContent() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track computed column creation
+      trackFeatureUsageClient("schema_editor", { action: "computed_column_created" });
+
       // Refresh table detail
-      const table = tables.find((t) => t.id === tableId);
       if (table) {
         await fetchTableDetail(table.name);
       }
@@ -567,6 +596,9 @@ function SchemaPageContent() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track computed column update
+      trackFeatureUsageClient("schema_editor", { action: "computed_column_updated" });
+
       // Update local state optimistically
       if (selectedTable?.id === tableId) {
         setSelectedTable({
@@ -587,6 +619,9 @@ function SchemaPageContent() {
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track computed column deletion
+      trackFeatureUsageClient("schema_editor", { action: "computed_column_deleted" });
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {
@@ -623,6 +658,9 @@ function SchemaPageContent() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track manual relation creation
+      trackFeatureUsageClient("schema_editor", { action: "relation_created" });
+
       // Refresh table detail
       const table = tables.find((t) => t.id === tableId);
       if (table) {
@@ -654,6 +692,9 @@ function SchemaPageContent() {
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
+      // Track relation update
+      trackFeatureUsageClient("schema_editor", { action: "relation_updated" });
+
       // Refresh table detail
       const table = tables.find((t) => t.id === tableId);
       if (table) {
@@ -670,6 +711,9 @@ function SchemaPageContent() {
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
+
+      // Track relation deletion
+      trackFeatureUsageClient("schema_editor", { action: "relation_deleted" });
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {

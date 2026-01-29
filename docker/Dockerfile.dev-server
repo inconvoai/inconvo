@@ -34,16 +34,16 @@ COPY packages/ui/package.json ./packages/ui/
 COPY packages/eslint-config/package.json ./packages/eslint-config/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 
-# Install dependencies
-RUN pnpm config set node-linker hoisted && pnpm install --frozen-lockfile
+# Install dependencies (ignore scripts - prisma generate needs schema which comes later)
+RUN pnpm config set node-linker hoisted && pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source code
 COPY apps/dev-server ./apps/dev-server
 COPY packages ./packages
 
-# Build the dev-server
+# Generate Prisma client and build
 ENV SKIP_ENV_VALIDATION=true
-RUN pnpm --filter dev-server build
+RUN pnpm --filter dev-server exec prisma generate && pnpm --filter dev-server build
 
 # ============================================
 # Runner stage - minimal production image

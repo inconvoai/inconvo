@@ -222,7 +222,7 @@ jobs:
           pnpm install
 
       - name: Build CLI
-        run: pnpm --filter inconvo build
+        run: pnpm --filter @ten-dev/inconvo build
 
       - name: Set CLI version
         working-directory: packages/cli

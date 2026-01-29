@@ -2,6 +2,11 @@
   "name": "@ten-dev/inconvo",
   "version": "0.1.0",
   "description": "CLI for Inconvo development environment",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ten-dev/inconvo.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "bin": {
     "inconvo": "./bin/inconvo.js"

@@ -61,8 +61,26 @@ export function checkDockerRunning(): boolean {
   }
 }
 
+// Pinned versions for runtime dependencies
+const PRISMA_VERSION = "7.3.0";
+const WRANGLER_VERSION = "4.14.1";
+
+export function ensureDevServerDeps(mode: RuntimeMode): void {
+  const prismaDir = path.join(mode.releaseDir, "node_modules", "prisma");
+
+  // Check if prisma exists, install if not
+  try {
+    require("fs").accessSync(prismaDir);
+  } catch {
+    execSync(`npm install prisma@${PRISMA_VERSION} dotenv@17.2.3 --no-save`, {
+      cwd: mode.releaseDir,
+      stdio: "pipe",
+      env: getCleanEnv(),
+    });
+  }
+}
+
 export function initializePrismaDb(mode: RuntimeMode): void {
-  // Use bundled prisma from release root node_modules
   const prismaIndex = path.join(
     mode.releaseDir,
     "node_modules",
@@ -113,6 +131,22 @@ export function spawnDevServer(
   });
 }
 
+export function ensureSandboxDeps(mode: RuntimeMode): void {
+  const wranglerBin = path.join(mode.sandboxDir, "node_modules", ".bin", "wrangler");
+
+  // Check if wrangler exists, install if not
+  try {
+    require("fs").accessSync(wranglerBin);
+  } catch {
+    // Install wrangler for the user's platform
+    execSync(`npm install wrangler@${WRANGLER_VERSION} --no-save`, {
+      cwd: mode.sandboxDir,
+      stdio: "pipe",
+      env: getCleanEnv(),
+    });
+  }
+}
+
 export function spawnSandbox(
   mode: RuntimeMode,
   sandboxApiKey: string
@@ -124,7 +158,6 @@ export function spawnSandbox(
     WRANGLER_SEND_METRICS: "false",
   };
 
-  // Use wrangler binary directly to avoid npm/pnpm conflicts
   const wranglerBin = path.join(mode.sandboxDir, "node_modules", ".bin", "wrangler");
   return spawn(wranglerBin, ["dev"], {
     cwd: mode.sandboxDir,

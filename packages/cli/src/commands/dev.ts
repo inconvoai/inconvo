@@ -4,7 +4,9 @@ import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import {
   createRuntimeMode,
   checkDockerRunning,
+  ensureDevServerDeps,
   initializePrismaDb,
+  ensureSandboxDeps,
   spawnDevServer,
   spawnSandbox,
   setupShutdownHandler,
@@ -58,8 +60,22 @@ export const devCommand = new Command("dev")
 
     logInfo("Docker is running");
 
-    // Initialize Prisma database
+    // Ensure dev-server dependencies (prisma)
     const spinner = p.spinner();
+    spinner.start("Installing dependencies...");
+
+    try {
+      ensureDevServerDeps(mode);
+      spinner.stop("Dependencies installed");
+    } catch (error) {
+      spinner.stop("Failed to install dependencies");
+      logError(
+        `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
+      process.exit(1);
+    }
+
+    // Initialize Prisma database
     spinner.start("Initializing local database...");
 
     try {
@@ -67,6 +83,19 @@ export const devCommand = new Command("dev")
       spinner.stop("Local database initialized");
     } catch (error) {
       spinner.stop("Failed to initialize local database");
+      logError(
+        `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
+      process.exit(1);
+    }
+
+    // Ensure sandbox dependencies are installed (platform-specific)
+    spinner.start("Checking sandbox dependencies...");
+    try {
+      ensureSandboxDeps(mode);
+      spinner.stop("Sandbox dependencies ready");
+    } catch (error) {
+      spinner.stop("Failed to install sandbox dependencies");
       logError(
         `Error: ${error instanceof Error ? error.message : String(error)}`
       );

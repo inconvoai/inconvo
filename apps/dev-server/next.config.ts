@@ -14,6 +14,16 @@ const config: NextConfig = {
     "@repo/agents",
     "@repo/connect",
   ],
+  serverExternalPackages: [
+    "pino",
+    "pino-pretty",
+    "pino-std-serializers",
+    "thread-stream",
+    "pg",
+    "pg-types",
+    "better-sqlite3",
+    "@prisma/adapter-better-sqlite3",
+  ],
 };
 
 export default config;

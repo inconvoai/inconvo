@@ -63,10 +63,13 @@ function openBrowser(url: string): void {
 /**
  * Wait for a URL to become available
  */
-async function waitForServer(url: string, maxAttempts = 30): Promise<boolean> {
+async function waitForServer(url: string, maxAttempts = 60): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const response = await fetch(url);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
       if (response.ok || response.status < 500) {
         return true;
       }
@@ -156,13 +159,15 @@ export const devCommand = new Command("dev")
     logGray("─".repeat(50));
     logGray("Press Ctrl+C to stop\n");
 
-    // Wait for server to be ready, then open browser
-    (async () => {
-      const ready = await waitForServer(devServerUrl);
+    // Wait for server to be ready, then open browser (runs in background)
+    waitForServer(devServerUrl).then((ready) => {
       if (ready) {
+        logInfo("Opening browser...");
         openBrowser(devServerUrl);
       }
-    })();
+    }).catch(() => {
+      // Silently ignore errors
+    });
 
     // Run docker compose up
     const proc = spawn(

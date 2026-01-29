@@ -13,5 +13,13 @@ mkdir -p /data
 
 echo "Starting sandbox..."
 
-# Execute the main command (wrangler dev)
-exec "$@"
+# Build wrangler args - pass env vars as worker vars
+WRANGLER_ARGS="dev --port 8787 --ip 0.0.0.0"
+WRANGLER_ARGS="$WRANGLER_ARGS --var SKIP_BUCKET_MOUNT:true"
+
+if [ -n "$INTERNAL_API_KEY" ]; then
+    WRANGLER_ARGS="$WRANGLER_ARGS --var INTERNAL_API_KEY:$INTERNAL_API_KEY"
+fi
+
+# Execute wrangler with the constructed args
+exec wrangler $WRANGLER_ARGS

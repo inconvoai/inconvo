@@ -190,6 +190,9 @@ export async function listConversations(): Promise<ConversationWithMeta[]> {
 
 /**
  * List conversations with filtering and pagination
+ *
+ * When userContext filtering is applied, iteratively fetches pages until
+ * we have limit + 1 filtered results to ensure correct pagination.
  */
 export async function listConversationsFiltered(params: {
   cursor?: Date;
@@ -202,7 +205,7 @@ export async function listConversationsFiltered(params: {
 }> {
   const { cursor, limit, userIdentifier, userContext } = params;
 
-  // Build WHERE clause
+  // Build WHERE clause for DB-level filtering
   const where: {
     userIdentifier?: string;
     updatedAt?: { lt: Date };
@@ -216,32 +219,96 @@ export async function listConversationsFiltered(params: {
     where.updatedAt = { lt: cursor };
   }
 
-  // Fetch limit + 1 to determine if there are more results
-  const conversations = await prisma.conversation.findMany({
-    where,
-    orderBy: { updatedAt: "desc" },
-    take: limit + 1,
-  });
+  // If no userContext filter, simple case: fetch limit + 1 and we're done
+  if (!userContext) {
+    const conversations = await prisma.conversation.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      take: limit + 1,
+    });
 
-  // Filter by userContext if provided (in-memory since it's JSON in SQLite)
-  let filtered = conversations;
-  if (userContext) {
-    filtered = conversations.filter((c) => {
+    const hasMore = conversations.length > limit;
+    const results = hasMore ? conversations.slice(0, limit) : conversations;
+
+    const lastItem = results[results.length - 1];
+    const nextCursor =
+      hasMore && lastItem
+        ? Buffer.from(lastItem.updatedAt.toISOString()).toString("base64")
+        : null;
+
+    return {
+      conversations: results.map((c) => ({
+        ...toConversation(c),
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        messages: parseMessages(c.messages),
+      })),
+      nextCursor,
+    };
+  }
+
+  // If userContext filter is provided, iteratively fetch until we have limit + 1 filtered results
+  type ConversationRow = {
+    id: string;
+    userIdentifier: string;
+    title: string | null;
+    userContext: string | null;
+    messages: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+
+  const filtered: ConversationRow[] = [];
+  let fetchCursor = cursor;
+  const batchSize = 50;
+
+  // Keep fetching batches until we have enough filtered results or run out of data
+  while (true) {
+    const batchWhere = { ...where };
+    if (fetchCursor) {
+      batchWhere.updatedAt = { lt: fetchCursor };
+    }
+
+    const batch = await prisma.conversation.findMany({
+      where: batchWhere,
+      orderBy: { updatedAt: "desc" },
+      take: batchSize,
+    });
+
+    // No more results in DB - stop
+    if (batch.length === 0) break;
+
+    // Filter batch by userContext
+    for (const c of batch) {
       const ctx = parseUserContext(c.userContext);
-      if (!ctx) return false;
 
       // Check if all userContext filters match
-      return Object.entries(userContext).every(([key, value]) => {
-        return ctx[key] === value;
-      });
-    });
+      if (ctx && Object.entries(userContext).every(([key, value]) => ctx[key] === value)) {
+        filtered.push(c);
+
+        // Early exit: we have enough filtered results (limit + 1)
+        if (filtered.length > limit) break;
+      }
+    }
+
+    // If we have enough filtered results, stop fetching
+    if (filtered.length > limit) break;
+
+    // Update cursor for next batch
+    const lastInBatch = batch[batch.length - 1];
+    if (lastInBatch) {
+      fetchCursor = lastInBatch.updatedAt;
+    }
+
+    // If we got fewer than batchSize, no more results exist in DB
+    if (batch.length < batchSize) break;
   }
 
   // Determine if there are more results
   const hasMore = filtered.length > limit;
   const results = hasMore ? filtered.slice(0, limit) : filtered;
 
-  // Generate next cursor from last item
+  // Generate next cursor from last returned item
   const lastItem = results[results.length - 1];
   const nextCursor =
     hasMore && lastItem

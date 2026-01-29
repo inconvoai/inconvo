@@ -1,4 +1,4 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { inconvoAgent } from "@repo/agents";
 import { getConnector } from "~/lib/connector";
@@ -12,6 +12,7 @@ import {
 } from "~/lib/conversations";
 import type { InconvoResponse } from "@repo/types";
 import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
+import { corsHeaders, handleOptions } from "~/lib/cors";
 
 interface ResponseCreateParams {
   message: string;
@@ -39,30 +40,49 @@ interface StreamEvent {
   error?: string;
 }
 
-// POST /api/conversations/[id]/response - Create a response (send a message)
+// Handle OPTIONS preflight
+export async function OPTIONS() {
+  return handleOptions();
+}
+
+// POST /api/v1/agents/{agentId}/conversations/{conversation_id}/response - Create a response (send a message)
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ agentId: string; conversation_id: string }> },
 ) {
   try {
-    const { id: conversationId } = await params;
-    const body = (await request.json()) as ResponseCreateParams;
+    const { agentId, conversation_id: conversationId } = await params;
+
+    // Validate agent ID
+    if (agentId !== DEV_AGENT_ID) {
+      return NextResponse.json(
+        { error: "Invalid agent ID" },
+        { status: 404, headers: corsHeaders },
+      );
+    }
+
+    // Parse request body
+    const body = (await request.json()) as {
+      message?: string;
+      stream?: boolean;
+    };
+
     const { message, stream = true } = body;
 
-    if (!message) {
-      return new Response(JSON.stringify({ error: "Message is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!message || typeof message !== "string") {
+      return NextResponse.json(
+        { error: "message is required and must be a non-empty string" },
+        { status: 400, headers: corsHeaders },
+      );
     }
 
     // Get existing conversation
     const conversation = await getConversation(conversationId);
     if (!conversation) {
-      return new Response(JSON.stringify({ error: "Conversation not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404, headers: corsHeaders },
+      );
     }
 
     const runId = uuidv4();
@@ -159,39 +179,32 @@ export async function POST(
           };
           await appendMessages(conversationId, [assistantMessage]);
 
-          // Update conversation title if first message
-          if (!conversation.title && lastResponse.type === "text") {
+          if (!conversation.title) {
             await updateConversation(conversationId, {
               title: message.slice(0, 100),
             });
           }
 
-          return new Response(
-            JSON.stringify(formatResponseForSDK(lastResponse)),
-            {
-              headers: { "Content-Type": "application/json" },
-            },
-          );
+          return NextResponse.json(formatResponseForSDK(lastResponse), {
+            headers: corsHeaders,
+          });
         }
 
-        return new Response(
-          JSON.stringify({ error: "No response generated" }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          },
+        return NextResponse.json(
+          { error: "No response generated" },
+          { status: 500, headers: corsHeaders },
         );
       } catch (error) {
-        console.error("[/api/conversations/[id]/response] Agent error:", error);
-        return new Response(
-          JSON.stringify({
+        console.error(
+          "[POST /api/v1/agents/[agentId]/conversations/[conversation_id]/response] Agent error:",
+          error,
+        );
+        return NextResponse.json(
+          {
             error:
               error instanceof Error ? error.message : "Agent execution failed",
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
           },
+          { status: 500, headers: corsHeaders },
         );
       }
     }
@@ -303,8 +316,7 @@ export async function POST(
               response: formatResponseForSDK(lastResponse),
             });
 
-            // Update conversation title if first message
-            if (!conversation.title && lastResponse.type === "text") {
+            if (!conversation.title) {
               await updateConversation(conversationId, {
                 title: message.slice(0, 100),
               });
@@ -318,7 +330,7 @@ export async function POST(
           }
         } catch (error) {
           console.error(
-            "[/api/conversations/[id]/response] Agent error:",
+            "[POST /api/v1/agents/[agentId]/conversations/[conversation_id]/response] Agent error:",
             error,
           );
           sendEvent({
@@ -335,21 +347,22 @@ export async function POST(
 
     return new Response(responseStream, {
       headers: {
+        ...corsHeaders,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       },
     });
   } catch (error) {
-    console.error("[/api/conversations/[id]/response] Request error:", error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Request failed",
-      }),
+    console.error(
+      "[POST /api/v1/agents/[agentId]/conversations/[conversation_id]/response] Request error:",
+      error,
+    );
+    return NextResponse.json(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        error: error instanceof Error ? error.message : "Request failed",
       },
+      { status: 500, headers: corsHeaders },
     );
   }
 }

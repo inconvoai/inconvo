@@ -84,10 +84,13 @@ jobs:
           cp apps/sandbox/tsconfig.json release-bundle/apps/sandbox/
           cp apps/sandbox/worker-configuration.d.ts release-bundle/apps/sandbox/
 
-          # Install wrangler in sandbox
+          # Install wrangler in sandbox (use temp package.json to avoid catalog: refs)
           cd release-bundle/apps/sandbox
+          mv package.json package.json.bak
+          npm init -y
           npm install wrangler
-          rm -f package-lock.json
+          rm -f package.json package-lock.json
+          mv package.json.bak package.json
           cd ../../..
 
           # Create version marker

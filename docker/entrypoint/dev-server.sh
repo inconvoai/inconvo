@@ -17,7 +17,7 @@ cd /app/apps/dev-server
 rm -f prisma.config.ts
 
 echo "Running prisma db push..."
-prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss || {
+prisma db push --schema prisma/schema.prisma --url "$DATABASE_URL" --accept-data-loss || {
     echo "Warning: Database initialization failed"
     echo "Schema location: $(ls -la prisma/ 2>/dev/null || echo 'prisma dir not found')"
 }

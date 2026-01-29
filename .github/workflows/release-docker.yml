@@ -95,6 +95,7 @@ jobs:
           file: docker/Dockerfile.dev-server
           push: true
           platforms: ${{ matrix.platform }}
+          provenance: false
           build-args: |
             PRISMA_VERSION=${{ needs.prepare.outputs.prisma_version }}
           tags: |
@@ -230,6 +231,7 @@ jobs:
           file: docker/Dockerfile.sandbox
           push: true
           platforms: ${{ matrix.platform }}
+          provenance: false
           build-args: |
             WRANGLER_VERSION=${{ needs.prepare.outputs.wrangler_version }}
             ZOD_VERSION=${{ needs.prepare.outputs.zod_version }}

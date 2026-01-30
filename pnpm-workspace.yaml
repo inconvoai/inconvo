@@ -1,7 +1,6 @@
 packages:
   - apps/*
   - packages/*
-
 onlyBuiltDependencies:
   - "@prisma/client"
   - "@prisma/engines"
@@ -13,21 +12,14 @@ onlyBuiltDependencies:
   - sharp
   - unrs-resolver
   - workerd
-
-# Centralized dependency versions - use "catalog:" in package.json to reference
 catalog:
-  # Core
   typescript: 5.9.3
   zod: 4.3.6
   uuid: 13.0.0
-
-  # React ecosystem
-  react: 19.2.3
-  react-dom: 19.2.3
-  "@types/react": 19.2.9
+  react: 19.2.4
+  react-dom: 19.2.4
+  "@types/react": 19.2.10
   "@types/react-dom": 19.2.3
-
-  # Mantine UI
   "@mantine/charts": 8.3.13
   "@mantine/code-highlight": 8.3.13
   "@mantine/core": 8.3.13
@@ -36,57 +28,37 @@ catalog:
   "@mantine/hooks": 8.3.13
   "@mantine/modals": 8.3.13
   "@mantine/notifications": 8.3.13
-
-  # Monaco editor
   "@monaco-editor/react": 4.7.0
   monaco-editor: 0.55.1
-
-  # LangChain
-  "@langchain/core": 1.1.16
-  "@langchain/langgraph": 1.1.1
+  "@langchain/core": 1.1.17
+  "@langchain/langgraph": 1.1.2
   "@langchain/langgraph-checkpoint-postgres": 1.0.0
   "@langchain/openai": 1.2.3
-  langchain: 1.2.12
-
-  # Database
+  langchain: 1.2.15
   kysely: 0.28.10
   pg: 8.17.2
   "@types/pg": 8.16.0
   "@prisma/client": 7.3.0
   prisma: 7.3.0
-
-  # Next.js
-  next: 16.1.4
+  next: 16.1.6
   "@t3-oss/env-nextjs": 0.13.10
-
-  # Utilities
   clsx: 2.1.1
   dotenv: 17.2.3
   yaml: 2.8.2
   "@tabler/icons-react": 3.36.1
-
-  # Vega (charts)
   vega: 6.2.0
   vega-lite: 6.4.2
   vega-embed: 7.1.0
   react-vega: 8.0.0
-
-  # Analytics
   posthog-js: 1.336.4
   posthog-node: 5.24.7
-
-  # PostCSS
   postcss: 8.5.6
   postcss-import: 16.1.1
   postcss-preset-mantine: 1.18.0
   postcss-simple-vars: 7.0.1
-
-  # Dev tooling
-  "@types/node": 25.0.10
+  "@types/node": 25.1.0
   eslint: 9.39.2
   vitest: 4.0.18
   tsx: 4.21.0
   concurrently: 9.2.1
-
-  # CLI/Docker tooling
-  wrangler: 4.60.0
+  wrangler: 4.61.1

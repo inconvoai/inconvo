@@ -15,7 +15,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.0.0",
     "@langchain/langgraph": "catalog:",
     "@langchain/langgraph-checkpoint-sqlite": "^1.0.0",
     "@mantine/charts": "catalog:",
@@ -33,7 +33,7 @@
     "clsx": "catalog:",
     "dotenv": "catalog:",
     "kysely": "catalog:",
-    "mysql2": "^3.16.1",
+    "mysql2": "^3.16.2",
     "next": "catalog:",
     "pg": "catalog:",
     "pino": "^10.3.0",

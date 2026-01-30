@@ -227,7 +227,7 @@ export async function runSetupWizard(): Promise<boolean> {
   const databaseUrl = await p.text({
     message: "Enter your database connection string:",
     placeholder: placeholders[databaseDialect as DatabaseDialect],
-    validate: (value: string) => {
+    validate: (value) => {
       if (!value) return "Connection string is required";
       try {
         new URL(value);
@@ -287,7 +287,7 @@ export async function runSetupWizard(): Promise<boolean> {
   const openaiApiKey = await p.text({
     message: "Enter your OpenAI API key:",
     placeholder: "sk-...",
-    validate: (value: string) => {
+    validate: (value) => {
       if (!value) return "OpenAI API key is required";
       if (!value.startsWith("sk-")) return "Invalid OpenAI API key format";
       return undefined;
@@ -303,7 +303,7 @@ export async function runSetupWizard(): Promise<boolean> {
   const langchainApiKey = await p.text({
     message: "Enter your LangChain API key (for prompts):",
     placeholder: "lsv2_pt_...",
-    validate: (value: string) => {
+    validate: (value) => {
       if (!value) return "LangChain API key is required";
       return undefined;
     },

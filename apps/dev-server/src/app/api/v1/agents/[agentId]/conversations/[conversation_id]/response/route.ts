@@ -186,11 +186,18 @@ export async function POST(
 
           // Track server-side response generation
           const posthog = getPostHogClient();
-          trackResponsePerformance(posthog, {
+          const telemetryPayload: Parameters<typeof trackResponsePerformance>[1] = {
             success: true,
             duration_ms: Date.now() - startTime,
-            response_type: lastResponse.type as "text" | "table" | "chart",
-          });
+          };
+          if (
+            lastResponse.type === "text" ||
+            lastResponse.type === "table" ||
+            lastResponse.type === "chart"
+          ) {
+            telemetryPayload.response_type = lastResponse.type;
+          }
+          trackResponsePerformance(posthog, telemetryPayload);
 
           if (!conversation.title) {
             await updateConversation(conversationId, {

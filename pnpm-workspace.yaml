@@ -71,6 +71,10 @@ catalog:
   vega-embed: 7.1.0
   react-vega: 8.0.0
 
+  # Analytics
+  posthog-js: 1.336.4
+  posthog-node: 5.24.7
+
   # PostCSS
   postcss: 8.5.6
   postcss-import: 16.1.1

@@ -333,10 +333,18 @@ export async function POST(
 
             // Track server-side response generation (streaming)
             const posthog = getPostHogClient();
+            let responseType: "text" | "table" | "chart" | undefined;
+            if (
+              lastResponse.type === "text" ||
+              lastResponse.type === "table" ||
+              lastResponse.type === "chart"
+            ) {
+              responseType = lastResponse.type;
+            }
             trackResponsePerformance(posthog, {
               success: true,
               duration_ms: Date.now() - startTime,
-              response_type: lastResponse.type as "text" | "table" | "chart",
+              ...(responseType && { response_type: responseType }),
             });
 
             sendEvent({

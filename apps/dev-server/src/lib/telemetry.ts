@@ -48,7 +48,12 @@ interface ErrorSummaryData {
 
 // Check if telemetry is disabled
 const isTelemetryDisabled = (): boolean => {
-  return process.env.DISABLE_TELEMETRY === 'true';
+  // Server-side check
+  if (typeof window === 'undefined') {
+    return process.env.DISABLE_TELEMETRY === 'true';
+  }
+  // Client-side check - Next.js requires NEXT_PUBLIC_ prefix
+  return process.env.NEXT_PUBLIC_DISABLE_TELEMETRY === 'true';
 };
 
 // Sanitize error messages to remove PII
@@ -155,20 +160,19 @@ export const trackErrorSummary = (
   });
 };
 
-// Client-side helpers that work without PostHog client
+// Client-side helper - must be imported in client components
+// This function requires 'use client' directive and direct posthog-js import
 export const trackFeatureUsageClient = (
+  posthogInstance: any, // posthog-js instance
   feature: FeatureType,
   data: FeatureUsageData
 ): void => {
   if (isTelemetryDisabled()) return;
   if (typeof window === 'undefined') return;
+  if (!posthogInstance) return;
 
   try {
-    // Use window.posthog if available
-    const posthog = (window as any).posthog;
-    if (!posthog) return;
-
-    posthog.capture('feature_usage', {
+    posthogInstance.capture('feature_usage', {
       feature,
       action: data.action,
       count: data.count || 1,

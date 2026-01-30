@@ -30,7 +30,8 @@ import type {
   TableWithColumns,
   FilterValue,
 } from "@repo/ui/semantic-model";
-import { trackFeatureUsageClient } from "@/lib/telemetry";
+import posthog from "posthog-js";
+import { trackFeatureUsageClient } from "~/lib/telemetry";
 
 // Dynamic import to avoid Monaco SSR issues
 const SemanticModelEditor = dynamic(
@@ -437,7 +438,9 @@ function SchemaPageContent() {
       setSuccessMessage(`Synced: ${data.added} added, ${data.updated} updated`);
 
       // Track schema sync event
-      trackFeatureUsageClient("schema_editor", { action: "schema_synced" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "schema_synced",
+      });
 
       await fetchTables();
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -449,12 +452,17 @@ function SchemaPageContent() {
   };
 
   // Callbacks for SemanticModelEditor
-  const onTableSelect = useCallback((tableId: string) => {
-    setSelectedTableId(tableId);
+  const onTableSelect = useCallback(
+    (tableId: string) => {
+      setSelectedTableId(tableId);
 
-    // Track table selection
-    trackFeatureUsageClient("schema_editor", { action: "table_selected" });
-  }, [tables]);
+      // Track table selection
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "table_selected",
+      });
+    },
+    [tables],
+  );
 
   const onUpdateTable = useCallback(
     async (
@@ -477,10 +485,14 @@ function SchemaPageContent() {
 
       // Track table changes
       if (payload.access) {
-        trackFeatureUsageClient("schema_editor", { action: "table_access_changed" });
+        trackFeatureUsageClient(posthog, "schema_editor", {
+          action: "table_access_changed",
+        });
       }
       if (payload.context !== undefined) {
-        trackFeatureUsageClient("schema_editor", { action: "table_prompt_edited" });
+        trackFeatureUsageClient(posthog, "schema_editor", {
+          action: "table_prompt_edited",
+        });
       }
 
       // Refresh data
@@ -512,13 +524,19 @@ function SchemaPageContent() {
 
       // Track column changes
       if (payload.selected !== undefined) {
-        trackFeatureUsageClient("schema_editor", { action: "column_selected" });
+        trackFeatureUsageClient(posthog, "schema_editor", {
+          action: "column_selected",
+        });
       }
       if (payload.rename !== undefined) {
-        trackFeatureUsageClient("schema_editor", { action: "column_renamed" });
+        trackFeatureUsageClient(posthog, "schema_editor", {
+          action: "column_renamed",
+        });
       }
       if (payload.notes !== undefined) {
-        trackFeatureUsageClient("schema_editor", { action: "column_note_edited" });
+        trackFeatureUsageClient(posthog, "schema_editor", {
+          action: "column_note_edited",
+        });
       }
 
       // Update local state optimistically
@@ -572,9 +590,12 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track computed column creation
-      trackFeatureUsageClient("schema_editor", { action: "computed_column_created" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "computed_column_created",
+      });
 
       // Refresh table detail
+      const table = tables.find((t) => t.id === tableId);
       if (table) {
         await fetchTableDetail(table.name);
       }
@@ -597,7 +618,9 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track computed column update
-      trackFeatureUsageClient("schema_editor", { action: "computed_column_updated" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "computed_column_updated",
+      });
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {
@@ -621,7 +644,9 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track computed column deletion
-      trackFeatureUsageClient("schema_editor", { action: "computed_column_deleted" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "computed_column_deleted",
+      });
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {
@@ -659,7 +684,9 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track manual relation creation
-      trackFeatureUsageClient("schema_editor", { action: "relation_created" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "relation_created",
+      });
 
       // Refresh table detail
       const table = tables.find((t) => t.id === tableId);
@@ -693,7 +720,9 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track relation update
-      trackFeatureUsageClient("schema_editor", { action: "relation_updated" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "relation_updated",
+      });
 
       // Refresh table detail
       const table = tables.find((t) => t.id === tableId);
@@ -713,7 +742,9 @@ function SchemaPageContent() {
       if (data.error) throw new Error(data.error);
 
       // Track relation deletion
-      trackFeatureUsageClient("schema_editor", { action: "relation_deleted" });
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "relation_deleted",
+      });
 
       // Update local state optimistically
       if (selectedTable?.id === tableId) {

@@ -32,7 +32,8 @@ import {
 import { MessageList, type ChatMessage } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import type { InconvoResponse } from "@repo/types";
-import { trackFeatureUsageClient } from "@/lib/telemetry";
+import posthog from "posthog-js";
+import { trackFeatureUsageClient } from "~/lib/telemetry";
 
 interface UserContextField {
   id: string;
@@ -119,7 +120,7 @@ export function ChatInterface() {
     setError(undefined);
 
     // Track conversation selection
-    trackFeatureUsageClient("conversations", { action: "selected" });
+    trackFeatureUsageClient(posthog, "conversations", { action: "selected" });
 
     // Load conversation with messages from server
     try {
@@ -160,7 +161,7 @@ export function ChatInterface() {
         });
 
         // Track conversation deletion
-        trackFeatureUsageClient("conversations", { action: "deleted" });
+        trackFeatureUsageClient(posthog, "conversations", { action: "deleted" });
 
         await fetchConversations();
         if (activeConversationId === id) {
@@ -216,7 +217,7 @@ export function ChatInterface() {
       setContextConfirmed(true);
 
       // Track conversation creation
-      trackFeatureUsageClient("conversations", { action: "created" });
+      trackFeatureUsageClient(posthog, "conversations", { action: "created" });
     } catch (err) {
       console.error("Failed to create conversation:", err);
       setError(
@@ -239,7 +240,7 @@ export function ChatInterface() {
       setProgressMessage(undefined);
 
       // Track message sent event
-      trackFeatureUsageClient("conversations", { action: "message_sent" });
+      trackFeatureUsageClient(posthog, "conversations", { action: "message_sent" });
 
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;

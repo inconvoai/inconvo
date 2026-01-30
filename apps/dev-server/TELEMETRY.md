@@ -69,14 +69,23 @@ We only see aggregate counts like "45 columns were renamed this week" across all
 
 We **never** collect:
 
-- ❌ IP addresses or device identifiers
+- ❌ IP addresses or geolocation data
+- ❌ Device identifiers or user agents
 - ❌ Usernames, user IDs, or conversation identifiers
 - ❌ Database table names, column names, or field keys
 - ❌ Full error messages with sensitive data
 - ❌ User queries or messages
 - ❌ Database query results or content
 - ❌ Schema details or structure
+- ❌ Session recordings or pageview tracking
 - ❌ Any personally identifiable information (PII)
+
+**PostHog Privacy Configuration:**
+We explicitly disable PostHog's automatic property collection including:
+- No person profiles created (`person_profiles: never`)
+- No automatic pageview/pageleave tracking
+- No session recordings
+- IP addresses and geolocation properties blocked via property denylist
 
 ## How to Opt Out
 

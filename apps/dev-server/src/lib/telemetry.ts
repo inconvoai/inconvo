@@ -1,7 +1,7 @@
 import { PostHog } from 'posthog-node';
 
 type FeatureType = 'conversations' | 'schema_editor' | 'user_context';
-type ErrorCategory = 'database' | 'llm' | 'schema' | 'network';
+type ErrorCategory = 'database' | 'llm' | 'schema' | 'network' | 'unknown';
 type ResponseType = 'text' | 'table' | 'chart';
 type ErrorType = 'validation' | 'execution';
 

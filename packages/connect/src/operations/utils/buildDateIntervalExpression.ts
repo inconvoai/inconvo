@@ -13,7 +13,8 @@ export function buildDateIntervalExpression(
       case "day":
         return sql`to_char(${column}::date, 'YYYY-MM-DD')`;
       case "week":
-        return sql`EXTRACT(YEAR FROM ${column}) || '-' || EXTRACT(WEEK FROM ${column})`;
+        // IYYY = ISO 8601 week-numbering year, IW = ISO week (01-53)
+        return sql`to_char(${column}::date, 'IYYY-"W"IW')`;
       case "month":
         return sql`to_char(${column}::date, 'YYYY-MM')`;
       case "quarter":
@@ -28,7 +29,8 @@ export function buildDateIntervalExpression(
       case "day":
         return sql`DATE_FORMAT(${column}, '%Y-%m-%d')`;
       case "week":
-        return sql`YEARWEEK(${column})`;
+        // %x = ISO 8601 week-numbering year, %v = ISO week (01-53)
+        return sql`DATE_FORMAT(${column}, '%x-W%v')`;
       case "month":
         return sql`DATE_FORMAT(${column}, '%Y-%m')`;
       case "quarter":
@@ -44,7 +46,9 @@ export function buildDateIntervalExpression(
         // Style 23 = yyyy-mm-dd
         return sql`CONVERT(VARCHAR(10), ${column}, 23)`;
       case "week":
-        return sql`CONCAT(YEAR(${column}), '-W', DATEPART(WEEK, ${column}))`;
+        // MSSQL lacks ISOYEAR, so compute it by shifting date towards mid-year (week 26)
+        // ISO_WEEK gives ISO week number; zero-pad for consistent YYYY-WNN format
+        return sql`CONCAT(YEAR(DATEADD(day, 26 - DATEPART(ISO_WEEK, ${column}), ${column})), '-W', RIGHT('0' + CAST(DATEPART(ISO_WEEK, ${column}) AS VARCHAR), 2))`;
       case "month":
         // Style 23 = yyyy-mm-dd, take first 7 chars for yyyy-mm
         return sql`LEFT(CONVERT(VARCHAR(10), ${column}, 23), 7)`;

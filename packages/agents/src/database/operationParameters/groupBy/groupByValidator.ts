@@ -203,7 +203,7 @@ const DATE_INTERVAL_PATTERNS: Record<
   { regex: RegExp; example: string }
 > = {
   day: { regex: /^\d{4}-\d{2}-\d{2}$/, example: "2024-01-15" },
-  week: { regex: /^\d{4}-W?\d{1,2}$/, example: "2024-W03 or 202403" },
+  week: { regex: /^\d{4}-W\d{2}$/, example: "2024-W03" },
   month: { regex: /^\d{4}-\d{2}$/, example: "2024-01" },
   quarter: { regex: /^\d{4}-Q[1-4]$/, example: "2024-Q1" },
   year: { regex: /^\d{4}$/, example: "2024" },

@@ -13,7 +13,7 @@ export function buildDateIntervalExpression(
       case "day":
         return sql`to_char(${column}::date, 'YYYY-MM-DD')`;
       case "week":
-        return sql`EXTRACT(YEAR FROM ${column}) || '-' || EXTRACT(WEEK FROM ${column})`;
+        return sql`EXTRACT(ISOYEAR FROM ${column}) || '-' || EXTRACT(WEEK FROM ${column})`;
       case "month":
         return sql`to_char(${column}::date, 'YYYY-MM')`;
       case "quarter":
@@ -28,7 +28,7 @@ export function buildDateIntervalExpression(
       case "day":
         return sql`DATE_FORMAT(${column}, '%Y-%m-%d')`;
       case "week":
-        return sql`YEARWEEK(${column})`;
+        return sql`YEARWEEK(${column}, 3)`;
       case "month":
         return sql`DATE_FORMAT(${column}, '%Y-%m')`;
       case "quarter":
@@ -44,7 +44,7 @@ export function buildDateIntervalExpression(
         // Style 23 = yyyy-mm-dd
         return sql`CONVERT(VARCHAR(10), ${column}, 23)`;
       case "week":
-        return sql`CONCAT(YEAR(${column}), '-W', DATEPART(WEEK, ${column}))`;
+        return sql`CONCAT(YEAR(DATEADD(day, 26 - DATEPART(ISO_WEEK, ${column}), ${column})), '-W', DATEPART(ISO_WEEK, ${column}))`;
       case "month":
         // Style 23 = yyyy-mm-dd, take first 7 chars for yyyy-mm
         return sql`LEFT(CONVERT(VARCHAR(10), ${column}, 23), 7)`;

@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node';
+import type { PostHog } from 'posthog-node';
 
 type FeatureType = 'conversations' | 'schema_editor' | 'user_context';
 type ErrorCategory = 'database' | 'llm' | 'schema' | 'network' | 'unknown';
@@ -41,11 +41,6 @@ interface ResponsePerformanceData {
   response_type?: ResponseType;
 }
 
-interface ErrorSummaryData {
-  error_category: ErrorCategory;
-  count: number;
-}
-
 // Check if telemetry is disabled
 const isTelemetryDisabled = (): boolean => {
   // Server-side check
@@ -60,7 +55,11 @@ const isTelemetryDisabled = (): boolean => {
 const sanitizeErrorMessage = (error: unknown): string => {
   if (!error) return 'unknown';
 
-  const errorStr = error instanceof Error ? error.message : String(error);
+  const errorStr = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : 'unknown';
 
   // Map to generic categories
   if (errorStr.toLowerCase().includes('database') || errorStr.toLowerCase().includes('sql')) {
@@ -94,7 +93,7 @@ const safeCapture = (
       event: eventName,
       properties,
     });
-  } catch (error) {
+  } catch (_error) {
     // Silent failure - never impact app functionality
     // Intentionally not logging to avoid noise
   }
@@ -111,8 +110,8 @@ export const trackFeatureUsage = (
   safeCapture(client, 'feature_usage', {
     feature,
     action: data.action,
-    count: data.count || 1,
-    session_hash: data.session_hash || 'anonymous',
+    count: data.count ?? 1,
+    session_hash: data.session_hash ?? 'anonymous',
   });
 };
 
@@ -148,7 +147,7 @@ export const trackResponsePerformance = (
 export const trackErrorSummary = (
   client: PostHog | null,
   error: unknown,
-  count: number = 1
+  count = 1
 ): void => {
   if (isTelemetryDisabled()) return;
 
@@ -160,10 +159,15 @@ export const trackErrorSummary = (
   });
 };
 
+// Minimal interface for posthog-js client capture method
+interface PostHogClient {
+  capture: (event: string, properties?: Record<string, unknown>) => void;
+}
+
 // Client-side helper - must be imported in client components
 // This function requires 'use client' directive and direct posthog-js import
 export const trackFeatureUsageClient = (
-  posthogInstance: any, // posthog-js instance
+  posthogInstance: PostHogClient | null | undefined,
   feature: FeatureType,
   data: FeatureUsageData
 ): void => {
@@ -175,10 +179,10 @@ export const trackFeatureUsageClient = (
     posthogInstance.capture('feature_usage', {
       feature,
       action: data.action,
-      count: data.count || 1,
-      session_hash: data.session_hash || 'anonymous',
+      count: data.count ?? 1,
+      session_hash: data.session_hash ?? 'anonymous',
     });
-  } catch (error) {
+  } catch (_error) {
     // Silent failure
   }
 };

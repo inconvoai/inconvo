@@ -87,6 +87,12 @@ catalogs:
     postcss-simple-vars:
       specifier: 7.0.1
       version: 7.0.1
+    posthog-js:
+      specifier: 1.336.4
+      version: 1.336.4
+    posthog-node:
+      specifier: 5.24.7
+      version: 5.24.7
     prisma:
       specifier: 7.3.0
       version: 7.3.0
@@ -219,10 +225,10 @@ importers:
         specifier: ^13.1.3
         version: 13.1.3
       posthog-js:
-        specifier: ^1.336.4
+        specifier: 'catalog:'
         version: 1.336.4
       posthog-node:
-        specifier: ^5.24.7
+        specifier: 'catalog:'
         version: 5.24.7
       react:
         specifier: 'catalog:'

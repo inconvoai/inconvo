@@ -52,7 +52,7 @@ if (process.env.NEXT_PUBLIC_DISABLE_TELEMETRY === "true") {
           ];
 
           // Strip each property
-          if (event && event.properties) {
+          if (event?.properties) {
             propsToStrip.forEach((prop) => {
               if (event.properties[prop]) {
                 event.properties[prop] = null;
@@ -68,7 +68,7 @@ if (process.env.NEXT_PUBLIC_DISABLE_TELEMETRY === "true") {
         debug: process.env.NODE_ENV === "development",
       });
     }
-  } catch (error) {
+  } catch (_error) {
     // Silent failure - never impact app functionality
   }
 }

@@ -19,7 +19,7 @@ export function getPostHogClient() {
       flushAt: 1,
       flushInterval: 0,
     });
-  } catch (error) {
+  } catch (_error) {
     // Silent failure - return null
     return null;
   }

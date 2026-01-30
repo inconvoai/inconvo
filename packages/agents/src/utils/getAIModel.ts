@@ -23,6 +23,9 @@ export function getAIModel(
   model: AzureModel | OpenAIModel | string,
   options?: ChatOpenAIFields,
 ) {
+  // TEMP: Override to openai
+  provider = "openai" as AIProvider;
+
   const isGPT5 = model.startsWith("gpt-5");
   const DEFAULT_OPTIONS: Record<AIProvider, ChatOpenAIFields> = {
     azure: {

@@ -305,6 +305,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const buildQuery = async (state: typeof DatabaseAgentState.State) => {
     const query: DBQuery = {
       table: state.tableName,
+      tableSchema: state.tableSchema.schema ?? null,  // Include schema from selected table
       operation: state.operation,
       operationParameters: state.operationParams,
       tableConditions: null, // Set below after building tableConditionsMap

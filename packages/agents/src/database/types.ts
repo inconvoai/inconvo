@@ -12,6 +12,7 @@ export type Operation =
 
 export interface DBQuery {
   table: string;
+  tableSchema?: string | null;  // Database schema name (e.g., 'public', 'sales')
   operation: string;
   operationParameters: Record<string, unknown>;
   whereAndArray?: WhereAndArray;

@@ -5,6 +5,7 @@ import type { DatabaseDialect, OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { buildJsonObject } from "../utils/jsonBuilderHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -96,7 +97,9 @@ export async function aggregate(
     selectFields.push(buildJsonObject(medianFields, dialect).as("_median"));
   }
 
-  let dbQuery = db.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let dbQuery = db.selectFrom(tableId);
 
   const resolvedJoins =
     (operationParameters.joins ?? []).map((join) =>
@@ -126,7 +129,7 @@ export async function aggregate(
         continue; // Skip duplicate hop
       }
       appliedHops.add(hopKey);
-      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop);
+      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop, schema, dialect);
     }
   }
 

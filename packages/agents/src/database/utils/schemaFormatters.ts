@@ -33,6 +33,11 @@ export function stringifyComputedColumnAst(
 export function buildTableSchemaStringFromTableSchema(
   tableSchema: TableSchema,
 ) {
+  // Include schema prefix when present (e.g., "public.users" or "sales.orders")
+  const tableName = tableSchema.schema
+    ? `${tableSchema.schema}.${tableSchema.name}`
+    : tableSchema.name;
+
   const access =
     tableSchema.access === "QUERYABLE"
       ? `Access: Selectable`
@@ -69,7 +74,11 @@ export function buildTableSchemaStringFromTableSchema(
     tableSchema.outwardRelations.length > 0
       ? tableSchema.outwardRelations
           .map((relation) => {
-            return `\t\t- ${relation.name} (${relation.targetTable.name}${
+            // Include target schema for cross-schema relations
+            const targetDisplay = relation.targetSchema
+              ? `${relation.targetSchema}.${relation.targetTable.name}`
+              : relation.targetTable.name;
+            return `\t\t- ${relation.name} (${targetDisplay}${
               relation.isList ? "[]" : ""
             })`;
           })
@@ -80,7 +89,7 @@ export function buildTableSchemaStringFromTableSchema(
     ? `\n\t<${tableSchema.name}TableContext>\n${tableSchema.context}\n\t</${tableSchema.name}TableContext>`
     : "";
 
-  return `${tableSchema.name}\n\t${access}\n${columns}${computedColumns}${relations}${context}`;
+  return `${tableName}\n\t${access}\n${columns}${computedColumns}${relations}${context}`;
 }
 
 function buildTableSchemaString(schema: Schema, table: string) {

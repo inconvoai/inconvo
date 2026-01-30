@@ -4,6 +4,7 @@ import type { Expression, SqlBool } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
@@ -120,8 +121,7 @@ export async function aggregateGroups(
       groupByColumns.push(select);
       groupByColumns.push(order);
       // BigQuery requires using alias in HAVING clause for computed expressions
-      const havingExpr =
-        dialect === "bigquery" ? sql.ref(dialectAlias) : order;
+      const havingExpr = dialect === "bigquery" ? sql.ref(dialectAlias) : order;
       groupKeyExpressions.set(alias, {
         select: select.as(dialectAlias),
         order,
@@ -202,7 +202,9 @@ export async function aggregateGroups(
     perGroupSelections.push(expression.select);
   }
 
-  let groupQuery = dbForQuery.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let groupQuery = dbForQuery.selectFrom(tableId);
 
   // Handle joins if specified - deduplicate hops to avoid duplicate table joins
   if (joins && joins.length > 0) {
@@ -217,12 +219,18 @@ export async function aggregateGroups(
         }
         appliedHops.add(hopKey);
         const metadata = normaliseJoinHop(hop);
-        groupQuery = applyJoinHop(groupQuery, joinType, metadata);
+        groupQuery = applyJoinHop(groupQuery, joinType, metadata, schema, dialect);
       }
     }
   }
 
-  const whereExpr = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
+  const whereExpr = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    dialect,
+    query.tableConditions,
+  );
   if (whereExpr) {
     groupQuery = groupQuery.where(whereExpr);
   }

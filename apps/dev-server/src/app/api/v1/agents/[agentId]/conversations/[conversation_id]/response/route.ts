@@ -14,11 +14,6 @@ import type { InconvoResponse } from "@repo/types";
 import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
 import { corsHeaders, handleOptions } from "~/lib/cors";
 
-interface ResponseCreateParams {
-  message: string;
-  stream?: boolean;
-}
-
 interface SDKResponse {
   id: string;
   conversationId: string;

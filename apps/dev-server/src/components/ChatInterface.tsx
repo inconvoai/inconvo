@@ -227,9 +227,6 @@ export function ChatInterface() {
       setIsLoading(true);
       setProgressMessage(undefined);
 
-      // Check if this is the first message
-      const isFirstMessage = messages.length === 0;
-
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;
       setMessages((prev) => [
@@ -307,7 +304,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId],
+    [activeConversationId, setMessages],
   );
 
   // Count active context values

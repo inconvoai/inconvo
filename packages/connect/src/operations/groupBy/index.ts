@@ -12,6 +12,7 @@ import {
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
 import { buildDateComponentExpressions } from "../utils/buildDateComponentExpression";
 import assert from "assert";
@@ -35,7 +36,9 @@ export async function groupBy(
   const { groupBy: groupByList, orderBy, limit, joins } = operationParameters;
   const having = operationParameters.having ?? null;
 
-  let dbQuery = dbForQuery.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let dbQuery = dbForQuery.selectFrom(tableId);
 
   // Handle joins if specified - deduplicate hops to avoid duplicate table joins
   if (joins && joins.length > 0) {
@@ -50,7 +53,7 @@ export async function groupBy(
         }
         appliedHops.add(hopKey);
         const metadata = normaliseJoinHop(hop);
-        dbQuery = applyJoinHop(dbQuery, joinType, metadata);
+        dbQuery = applyJoinHop(dbQuery, joinType, metadata, schema, dialect);
       }
     }
   }

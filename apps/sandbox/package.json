@@ -24,6 +24,6 @@
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
-    "wrangler": "^4.59.3"
+    "wrangler": "catalog:"
   }
 }

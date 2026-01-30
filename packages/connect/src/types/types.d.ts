@@ -30,6 +30,7 @@ export interface SchemaRelation {
   name: string;
   isList: boolean;
   targetTable: string;
+  targetSchema?: string;  // For cross-schema relations
   sourceColumns?: string[];
   targetColumns?: string[];
   source?: "FK" | "MANUAL";

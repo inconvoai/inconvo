@@ -4,6 +4,7 @@ import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
 import levenshtein from "fast-levenshtein";
@@ -47,8 +48,10 @@ export async function findDistinctByEditDistance(
     dialect,
   });
 
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
   let dbQuery = dbForQuery
-    .selectFrom(table)
+    .selectFrom(tableId)
     .select(distinctColumn.as(operationParameters.column))
     .distinct();
 

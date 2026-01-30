@@ -5,6 +5,7 @@ import type {
   TableConditionsMap,
 } from "../../types/querySchema";
 import { getColumnFromTable } from "./computedColumns";
+import { getTableIdentifier } from "./tableIdentifier";
 import type { SchemaResponse } from "../../types/types";
 import type { DatabaseDialect } from "../types";
 
@@ -323,6 +324,7 @@ function buildRelationFilter(
 
   // Extract relation details
   const targetTable = relation.targetTable;
+  const targetSchema = relation.targetSchema;
   const sourceColumns = relation.sourceColumns || [];
   const targetColumns = relation.targetColumns || [];
 
@@ -335,15 +337,18 @@ function buildRelationFilter(
     [string, any],
   ];
 
-  // Build the subquery
-  const targetTableRef = sql.table(targetTable);
+  // Build schema-qualified table identifiers for cross-schema support
+  const currentTableId = getTableIdentifier(currentTableName, currentTable.schema, dialect);
+  const targetTableId = getTableIdentifier(targetTable, targetSchema, dialect);
+  const targetTableRef = sql.table(targetTableId);
 
   // Build table condition expression for the target table (row-level security)
+  // Use schema-qualified table name for cross-schema relations
   let tableConditionExpr: Expression<SqlBool> | undefined;
   const targetCondition = tableConditions?.[targetTable];
   if (targetCondition) {
     const { column, value } = targetCondition;
-    tableConditionExpr = sql<SqlBool>`${sql.ref(`${targetTable}.${column}`)} = ${value}`;
+    tableConditionExpr = sql<SqlBool>`${sql.ref(`${targetTableId}.${column}`)} = ${value}`;
   }
 
   // Build the join condition based on whether it's a list relation or not
@@ -352,11 +357,12 @@ function buildRelationFilter(
   if (relation.isList) {
     // For list relations (one-to-many): target.targetColumn = current.sourceColumn
     // e.g., orders.user_id = users.id
+    // Use schema-qualified table names for cross-schema relations
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
         sql<SqlBool>`${sql.ref(
-          `${targetTable}.${targetColumns[i]!}`,
-        )} = ${sql.ref(`${currentTableName}.${sourceCol}`)}`,
+          `${targetTableId}.${targetColumns[i]!}`,
+        )} = ${sql.ref(`${currentTableId}.${sourceCol}`)}`,
     );
     if (conditions.length === 1) {
       joinCondition = conditions[0]!;
@@ -372,10 +378,11 @@ function buildRelationFilter(
   } else {
     // For single relations (many-to-one): current.sourceColumn = target.targetColumn
     // e.g., orders.user_id = users.id
+    // Use schema-qualified table names for cross-schema relations
     const conditions: Expression<SqlBool>[] = sourceColumns.map(
       (sourceCol: string, i: number) =>
-        sql<SqlBool>`${sql.ref(`${currentTableName}.${sourceCol}`)} = ${sql.ref(
-          `${targetTable}.${targetColumns[i]!}`,
+        sql<SqlBool>`${sql.ref(`${currentTableId}.${sourceCol}`)} = ${sql.ref(
+          `${targetTableId}.${targetColumns[i]!}`,
         )}`,
     );
     if (conditions.length === 1) {
@@ -457,7 +464,7 @@ function buildRelationFilter(
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
+              sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NOT NULL`,
           );
           return combineSqlExpressions(notNullChecks, "AND");
         }
@@ -475,7 +482,7 @@ function buildRelationFilter(
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
+              sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NULL`,
           );
           return nullChecks.length === 1
             ? nullChecks[0]
@@ -511,7 +518,7 @@ function buildRelationFilter(
         // Check if foreign key is null
         const nullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
+            sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NULL`,
         );
         return nullChecks.length === 1
           ? nullChecks[0]
@@ -520,7 +527,7 @@ function buildRelationFilter(
         // Empty object - check if foreign key is not null
         const notNullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
+            sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NOT NULL`,
         );
         return combineSqlExpressions(notNullChecks, "AND");
       } else {
@@ -538,7 +545,7 @@ function buildRelationFilter(
           // No valid conditions, just check if foreign key is not null
           const notNullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
+              sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NOT NULL`,
           );
           return combineSqlExpressions(notNullChecks, "AND");
         }
@@ -554,7 +561,7 @@ function buildRelationFilter(
         // Check if foreign key is not null
         const notNullChecks = sourceColumns.map(
           (col: string) =>
-            sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NOT NULL`,
+            sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NOT NULL`,
         );
         return combineSqlExpressions(notNullChecks, "AND");
       } else {
@@ -572,7 +579,7 @@ function buildRelationFilter(
           // Check if foreign key is null
           const nullChecks = sourceColumns.map(
             (col: string) =>
-              sql<SqlBool>`${sql.ref(`${currentTableName}.${col}`)} IS NULL`,
+              sql<SqlBool>`${sql.ref(`${currentTableId}.${col}`)} IS NULL`,
           );
           return nullChecks.length === 1
             ? nullChecks[0]

@@ -3,6 +3,7 @@ import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import {
   normaliseJoinHop,
@@ -138,7 +139,9 @@ export async function countRelations(
     builder = builder.with(plan.cteName, () => plan.cteQuery);
   }
 
-  let selectBuilder = builder.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let selectBuilder = builder.selectFrom(tableId);
 
   const baseSelections: any[] = [];
   for (const column of columns ?? []) {

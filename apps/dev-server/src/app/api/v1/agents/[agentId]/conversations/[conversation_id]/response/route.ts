@@ -13,6 +13,8 @@ import {
 import type { InconvoResponse } from "@repo/types";
 import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
 import { corsHeaders, handleOptions } from "~/lib/cors";
+import { getPostHogClient } from "~/lib/posthog-server";
+import { trackResponsePerformance } from "~/lib/telemetry";
 
 interface SDKResponse {
   id: string;
@@ -114,6 +116,9 @@ export async function POST(
       provider: "openai",
     });
 
+    // Track start time for performance metrics
+    const startTime = Date.now();
+
     // Helper to format response for SDK
     const formatResponseForSDK = (response: InconvoResponse): SDKResponse => {
       const base = {
@@ -174,6 +179,21 @@ export async function POST(
           };
           await appendMessages(conversationId, [assistantMessage]);
 
+          // Track server-side response generation
+          const posthog = getPostHogClient();
+          const telemetryPayload: Parameters<typeof trackResponsePerformance>[1] = {
+            success: true,
+            duration_ms: Date.now() - startTime,
+          };
+          if (
+            lastResponse.type === "text" ||
+            lastResponse.type === "table" ||
+            lastResponse.type === "chart"
+          ) {
+            telemetryPayload.response_type = lastResponse.type;
+          }
+          trackResponsePerformance(posthog, telemetryPayload);
+
           if (!conversation.title) {
             await updateConversation(conversationId, {
               title: message.slice(0, 100),
@@ -194,6 +214,14 @@ export async function POST(
           "[POST /api/v1/agents/[agentId]/conversations/[conversation_id]/response] Agent error:",
           error,
         );
+
+        // Track server-side error
+        const posthog = getPostHogClient();
+        trackResponsePerformance(posthog, {
+          success: false,
+          duration_ms: Date.now() - startTime,
+        });
+
         return NextResponse.json(
           {
             error:
@@ -305,6 +333,22 @@ export async function POST(
             };
             await appendMessages(conversationId, [assistantMessage]);
 
+            // Track server-side response generation (streaming)
+            const posthog = getPostHogClient();
+            let responseType: "text" | "table" | "chart" | undefined;
+            if (
+              lastResponse.type === "text" ||
+              lastResponse.type === "table" ||
+              lastResponse.type === "chart"
+            ) {
+              responseType = lastResponse.type;
+            }
+            trackResponsePerformance(posthog, {
+              success: true,
+              duration_ms: Date.now() - startTime,
+              ...(responseType && { response_type: responseType }),
+            });
+
             sendEvent({
               type: "response.completed",
               id: runId,
@@ -328,6 +372,14 @@ export async function POST(
             "[POST /api/v1/agents/[agentId]/conversations/[conversation_id]/response] Agent error:",
             error,
           );
+
+          // Track server-side error (streaming)
+          const posthog = getPostHogClient();
+          trackResponsePerformance(posthog, {
+            success: false,
+            duration_ms: Date.now() - startTime,
+          });
+
           sendEvent({
             type: "response.error",
             id: runId,

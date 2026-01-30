@@ -32,6 +32,8 @@ import {
 import { MessageList, type ChatMessage } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import type { InconvoResponse } from "@repo/types";
+import posthog from "posthog-js";
+import { trackFeatureUsageClient } from "~/lib/telemetry";
 
 interface UserContextField {
   id: string;
@@ -117,6 +119,9 @@ export function ChatInterface() {
     setActiveConversationId(id);
     setError(undefined);
 
+    // Track conversation selection
+    trackFeatureUsageClient(posthog, "conversations", { action: "selected" });
+
     // Load conversation with messages from server
     try {
       const res = await fetch(`/api/v1/agents/dev-agent/conversations/${id}`);
@@ -154,6 +159,12 @@ export function ChatInterface() {
         await fetch(`/api/v1/agents/dev-agent/conversations/${id}`, {
           method: "DELETE",
         });
+
+        // Track conversation deletion
+        trackFeatureUsageClient(posthog, "conversations", {
+          action: "deleted",
+        });
+
         await fetchConversations();
         if (activeConversationId === id) {
           handleNewConversation();
@@ -206,6 +217,9 @@ export function ChatInterface() {
       const data = (await res.json()) as { id: string };
       setActiveConversationId(data.id);
       setContextConfirmed(true);
+
+      // Track conversation creation
+      trackFeatureUsageClient(posthog, "conversations", { action: "created" });
     } catch (err) {
       console.error("Failed to create conversation:", err);
       setError(
@@ -226,6 +240,11 @@ export function ChatInterface() {
       setError(undefined);
       setIsLoading(true);
       setProgressMessage(undefined);
+
+      // Track message sent event
+      trackFeatureUsageClient(posthog, "conversations", {
+        action: "message_sent",
+      });
 
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;
@@ -421,17 +440,16 @@ export function ChatInterface() {
                       {userIdentifier}
                     </Text>
                   </Group>
-                  {userContext &&
-                    Object.keys(userContext).length > 0 && (
-                      <Group gap="xs">
-                        <Text size="sm" c="dimmed">
-                          userContext:
-                        </Text>
-                        <Text size="sm" ff="monospace">
-                          {JSON.stringify(userContext)}
-                        </Text>
-                      </Group>
-                    )}
+                  {userContext && Object.keys(userContext).length > 0 && (
+                    <Group gap="xs">
+                      <Text size="sm" c="dimmed">
+                        userContext:
+                      </Text>
+                      <Text size="sm" ff="monospace">
+                        {JSON.stringify(userContext)}
+                      </Text>
+                    </Group>
+                  )}
                 </Group>
               </Paper>
             )}

@@ -461,7 +461,7 @@ function SchemaPageContent() {
         action: "table_selected",
       });
     },
-    [tables],
+    [],
   );
 
   const onUpdateTable = useCallback(

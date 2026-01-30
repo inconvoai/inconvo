@@ -5,12 +5,7 @@ import { z } from "zod";
 const SQL_DIALECTS = ["postgresql", "redshift", "mysql", "mssql"] as const;
 const ALL_DIALECTS = [...SQL_DIALECTS, "bigquery"] as const;
 
-// Skip validation during build (CI or when explicitly set)
-const shouldSkipValidation =
-  !!process.env.SKIP_ENV_VALIDATION || process.env.CI === "true";
-
 export const env = createEnv({
-  skipValidation: shouldSkipValidation,
   server: {
     DATABASE_DIALECT: z.enum(ALL_DIALECTS),
     INCONVO_DATABASE_URL: z.string().optional(),

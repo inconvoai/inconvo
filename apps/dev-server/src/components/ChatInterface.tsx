@@ -67,10 +67,6 @@ export function ChatInterface() {
   const [contextValues, setContextValues] = useState<Record<string, string>>(
     {},
   );
-  const [userContext, setUserContext] = useState<
-    Record<string, string | number> | undefined
-  >();
-  const [userIdentifier, setUserIdentifier] = useState<string>("dev-user");
   const [contextExpanded, setContextExpanded] = useState(false);
   const [contextConfirmed, setContextConfirmed] = useState(false);
 
@@ -95,7 +91,7 @@ export function ChatInterface() {
 
   const fetchConversations = async () => {
     try {
-      const res = await fetch("/api/v1/agents/dev-agent/conversations");
+      const res = await fetch("/api/conversations");
       const data = (await res.json()) as { conversations?: ConversationItem[] };
       setConversations(data.conversations ?? []);
     } catch (err) {
@@ -108,8 +104,6 @@ export function ChatInterface() {
     setMessagesState([]);
     setError(undefined);
     setContextValues({});
-    setUserContext(undefined);
-    setUserIdentifier("dev-user");
     setContextConfirmed(false);
   }, []);
 
@@ -119,21 +113,15 @@ export function ChatInterface() {
 
     // Load conversation with messages from server
     try {
-      const res = await fetch(`/api/v1/agents/dev-agent/conversations/${id}`);
+      const res = await fetch(`/api/conversations/${id}`);
       if (res.ok) {
         const data = (await res.json()) as {
           userContext?: Record<string, string | number>;
-          userIdentifier?: string;
           messages?: ChatMessage[];
         };
         // Load messages from server
         setMessagesState(data.messages ?? []);
-        if (data.userIdentifier) {
-          setUserIdentifier(data.userIdentifier);
-        }
         if (data.userContext) {
-          // Store the raw context for display
-          setUserContext(data.userContext);
           // Convert context values to strings for the input fields
           const stringValues: Record<string, string> = {};
           for (const [key, value] of Object.entries(data.userContext)) {
@@ -151,9 +139,7 @@ export function ChatInterface() {
   const handleDeleteConversation = useCallback(
     async (id: string) => {
       try {
-        await fetch(`/api/v1/agents/dev-agent/conversations/${id}`, {
-          method: "DELETE",
-        });
+        await fetch(`/api/conversations?id=${id}`, { method: "DELETE" });
         await fetchConversations();
         if (activeConversationId === id) {
           handleNewConversation();
@@ -189,14 +175,11 @@ export function ChatInterface() {
     setIsCreatingConversation(true);
     setError(undefined);
     try {
-      const userContext = buildUserContext();
-      // Generate a unique user identifier (in production, this would come from auth)
-      const userIdentifier = "dev-user";
-
-      const res = await fetch("/api/v1/agents/dev-agent/conversations", {
+      const context = buildUserContext();
+      const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIdentifier, userContext }),
+        body: JSON.stringify({ context }),
       });
 
       if (!res.ok) {
@@ -206,6 +189,7 @@ export function ChatInterface() {
       const data = (await res.json()) as { id: string };
       setActiveConversationId(data.id);
       setContextConfirmed(true);
+      await fetchConversations();
     } catch (err) {
       console.error("Failed to create conversation:", err);
       setError(
@@ -227,9 +211,6 @@ export function ChatInterface() {
       setIsLoading(true);
       setProgressMessage(undefined);
 
-      // Check if this is the first message
-      const isFirstMessage = messages.length === 0;
-
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;
       setMessages((prev) => [
@@ -239,7 +220,7 @@ export function ChatInterface() {
 
       try {
         const response = await fetch(
-          `/api/v1/agents/dev-agent/conversations/${activeConversationId}/response`,
+          `/api/conversations/${activeConversationId}/response`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -413,119 +394,81 @@ export function ChatInterface() {
         ) : (
           <>
             {/* User Context Display - show values once conversation has messages */}
-            {messages.length > 0 && (
-              <Paper withBorder m="md" mb={0} py="xs" px="md">
-                <Group gap="md">
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">
-                      userIdentifier:
-                    </Text>
-                    <Text size="sm" ff="monospace">
-                      {userIdentifier}
-                    </Text>
-                  </Group>
-                  {userContext &&
-                    Object.keys(userContext).length > 0 && (
-                      <Group gap="xs">
-                        <Text size="sm" c="dimmed">
-                          userContext:
-                        </Text>
-                        <Text size="sm" ff="monospace">
-                          {JSON.stringify(userContext)}
-                        </Text>
-                      </Group>
-                    )}
-                </Group>
-              </Paper>
-            )}
-
-            {/* User Context Display - shown after conversation created but before first message */}
-            {messages.length === 0 && contextConfirmed && (
-              <Paper withBorder m="md" mb={0} py="xs" px="md">
-                <Group gap="md">
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">
-                      userIdentifier:
-                    </Text>
-                    <Text size="sm" ff="monospace">
-                      {userIdentifier}
-                    </Text>
-                  </Group>
-                  {userContext && Object.keys(userContext).length > 0 && (
-                    <Group gap="xs">
-                      <Text size="sm" c="dimmed">
-                        userContext:
-                      </Text>
-                      <Text size="sm" ff="monospace">
-                        {JSON.stringify(userContext)}
-                      </Text>
-                    </Group>
-                  )}
-                </Group>
-              </Paper>
-            )}
-
-            {/* Collapsible User Context Panel - only shown before conversation is created */}
             {contextFields.length > 0 &&
-              messages.length === 0 &&
-              !contextConfirmed && (
-                <Paper withBorder m="md" mb={0} p="xs">
-                  <Group
-                    justify="space-between"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setContextExpanded(!contextExpanded)}
-                  >
-                    <Group gap="xs">
-                      <IconBraces size={16} />
-                      <Text size="sm" fw={500}>
-                        User Context
-                      </Text>
-                      {activeContextCount > 0 && (
-                        <Badge size="xs" variant="filled" color="blue">
-                          {activeContextCount} set
-                        </Badge>
-                      )}
-                    </Group>
-                    <ActionIcon variant="subtle" size="sm">
-                      {contextExpanded ? (
-                        <IconChevronUp size={14} />
-                      ) : (
-                        <IconChevronDown size={14} />
-                      )}
-                    </ActionIcon>
+              messages.length > 0 &&
+              activeContextCount > 0 && (
+                <Paper withBorder m="md" mb={0} py="xs" px="md">
+                  <Group gap="xs">
+                    <IconBraces size={14} />
+                    <Text size="sm" c="dimmed">
+                      context:
+                    </Text>
+                    <Text size="sm" ff="monospace">
+                      {JSON.stringify(buildUserContext())}
+                    </Text>
                   </Group>
-
-                  <Collapse in={contextExpanded}>
-                    <Stack gap="xs" mt="sm">
-                      <Text size="xs" c="dimmed">
-                        Set context values to filter queries by user identity,
-                        tenant, etc.
-                      </Text>
-                      {contextFields.map((field) => (
-                        <TextInput
-                          key={field.id}
-                          label={field.key}
-                          description={`Type: ${field.type}`}
-                          placeholder={
-                            field.type === "NUMBER"
-                              ? "Enter a number"
-                              : "Enter a value"
-                          }
-                          value={contextValues[field.key] ?? ""}
-                          onChange={(e) => {
-                            const value = e.currentTarget?.value ?? "";
-                            setContextValues((prev) => ({
-                              ...prev,
-                              [field.key]: value,
-                            }));
-                          }}
-                          size="xs"
-                        />
-                      ))}
-                    </Stack>
-                  </Collapse>
                 </Paper>
               )}
+
+            {/* Collapsible User Context Panel - only shown before first message */}
+            {contextFields.length > 0 && messages.length === 0 && (
+              <Paper withBorder m="md" mb={0} p="xs">
+                <Group
+                  justify="space-between"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setContextExpanded(!contextExpanded)}
+                >
+                  <Group gap="xs">
+                    <IconBraces size={16} />
+                    <Text size="sm" fw={500}>
+                      User Context
+                    </Text>
+                    {activeContextCount > 0 && (
+                      <Badge size="xs" variant="filled" color="blue">
+                        {activeContextCount} set
+                      </Badge>
+                    )}
+                  </Group>
+                  <ActionIcon variant="subtle" size="sm">
+                    {contextExpanded ? (
+                      <IconChevronUp size={14} />
+                    ) : (
+                      <IconChevronDown size={14} />
+                    )}
+                  </ActionIcon>
+                </Group>
+
+                <Collapse in={contextExpanded}>
+                  <Stack gap="xs" mt="sm">
+                    <Text size="xs" c="dimmed">
+                      Set context values to filter queries by user identity,
+                      tenant, etc.
+                    </Text>
+                    {contextFields.map((field) => (
+                      <TextInput
+                        key={field.id}
+                        label={field.key}
+                        description={`Type: ${field.type}`}
+                        placeholder={
+                          field.type === "NUMBER"
+                            ? "Enter a number"
+                            : "Enter a value"
+                        }
+                        value={contextValues[field.key] ?? ""}
+                        onChange={(e) => {
+                          const value = e.currentTarget?.value ?? "";
+                          setContextValues((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }));
+                        }}
+                        size="xs"
+                      />
+                    ))}
+                  </Stack>
+                </Collapse>
+              </Paper>
+            )}
 
             <MessageList
               messages={messages}

@@ -54,6 +54,7 @@ export async function getSchema(): Promise<Schema> {
     },
     select: {
       name: true,
+      schema: true,
       access: true,
       context: true,
       columns: {
@@ -110,7 +111,7 @@ export async function getSchema(): Promise<Schema> {
       outwardRelations: {
         select: {
           name: true,
-          targetTable: { select: { name: true } },
+          targetTable: { select: { name: true, schema: true } },
           isList: true,
           selected: true,
           source: true,
@@ -219,6 +220,7 @@ export async function getSchema(): Promise<Schema> {
         name: relation.name,
         relationId: null, // Dev server doesn't use relationId
         targetTable: { name: relation.targetTable.name },
+        targetSchema: relation.targetTable.schema ?? null,
         isList: relation.isList,
         selected: relation.selected,
         source: relation.source as "FK" | "MANUAL",
@@ -231,6 +233,7 @@ export async function getSchema(): Promise<Schema> {
 
     return {
       name: table.name,
+      schema: table.schema ?? null,
       access: table.access as "QUERYABLE" | "JOINABLE" | "OFF",
       context: table.context ?? null,
       columns,
@@ -298,6 +301,7 @@ export async function syncSchema(): Promise<{
       await prisma.table.create({
         data: {
           name: table.name,
+          schema: table.schema ?? null,
           access: "QUERYABLE",
           columns: {
             create: table.columns.map((col) => ({
@@ -310,7 +314,15 @@ export async function syncSchema(): Promise<{
       });
       added++;
     } else {
-      // Update existing table - handle column changes
+      // Update existing table - handle schema and column changes
+      // Update schema if changed
+      if (existingTable.schema !== (table.schema ?? null)) {
+        await prisma.table.update({
+          where: { id: existingTable.id },
+          data: { schema: table.schema ?? null },
+        });
+      }
+
       const existingColumnNames = new Set(
         existingTable.columns.map((c) => c.name),
       );

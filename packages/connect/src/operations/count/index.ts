@@ -4,6 +4,7 @@ import type { OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -24,7 +25,9 @@ export async function count(
 
   const dbForQuery = getSchemaBoundDb(db, schema, dialect);
 
-  let dbQuery = dbForQuery.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let dbQuery = dbForQuery.selectFrom(tableId);
 
   const resolvedJoins =
     (joins ?? []).map((join) =>
@@ -61,7 +64,7 @@ export async function count(
         continue; // Skip duplicate hop
       }
       appliedHops.add(hopKey);
-      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop);
+      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop, schema, dialect);
     }
   }
 

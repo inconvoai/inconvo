@@ -44,6 +44,8 @@ export function buildDateIntervalExpression(
         // Style 23 = yyyy-mm-dd
         return sql`CONVERT(VARCHAR(10), ${column}, 23)`;
       case "week":
+        // Adjust the date towards ISO week 26 (mid-year) so YEAR() returns the correct ISO year,
+        // even when the ISO week belongs to the previous/next calendar year.
         return sql`CONCAT(YEAR(DATEADD(day, 26 - DATEPART(ISO_WEEK, ${column}), ${column})), '-W', DATEPART(ISO_WEEK, ${column}))`;
       case "month":
         // Style 23 = yyyy-mm-dd, take first 7 chars for yyyy-mm

@@ -175,7 +175,9 @@ function pluralize(tableName: string): string {
 
 interface ForeignKeyInfo {
   sourceTable: string;
+  sourceSchema: string | null;
   targetTable: string;
+  targetSchema: string | null;
   sourceColumns: string[];
   targetColumns: string[];
   constraintName: string;
@@ -569,7 +571,9 @@ async function extractForeignKeys(
 
       foreignKeys.push({
         sourceTable: sortedGroup[0]!.sourceTable,
+        sourceSchema: sortedGroup[0]!.sourceSchema,
         targetTable,
+        targetSchema: sortedGroup.find((r) => Boolean(r.targetSchema))?.targetSchema ?? null,
         sourceColumns,
         targetColumns,
         constraintName: sortedGroup[0]!.constraintName,
@@ -598,7 +602,7 @@ async function extractForeignKeys(
 
     // First pass: create forward relations (many-to-one)
     for (const fk of foreignKeys) {
-      const { sourceTable, targetTable, sourceColumns, targetColumns } = fk;
+      const { sourceTable, sourceSchema, targetTable, targetSchema, sourceColumns, targetColumns } = fk;
 
       if (
         !allowedTables.has(sourceTable) ||
@@ -631,10 +635,14 @@ async function extractForeignKeys(
       }
       relationNamesPerTable.get(sourceTable)!.set(relationName, nameCount + 1);
 
+      // Include targetSchema when it differs from sourceSchema (cross-schema relation)
+      const isCrossSchema = targetSchema && sourceSchema && targetSchema !== sourceSchema;
+
       const relation: SchemaRelation = {
         name: relationName,
         isList: false,
         targetTable: targetTable,
+        ...(isCrossSchema ? { targetSchema } : {}),
         sourceColumns: sourceColumns,
         targetColumns: targetColumns,
       };
@@ -644,7 +652,7 @@ async function extractForeignKeys(
 
     // Second pass: create reverse relations (one-to-many)
     for (const fk of foreignKeys) {
-      const { sourceTable, targetTable, sourceColumns, targetColumns } = fk;
+      const { sourceTable, sourceSchema, targetTable, targetSchema, sourceColumns, targetColumns } = fk;
 
       if (
         !allowedTables.has(sourceTable) ||
@@ -677,10 +685,15 @@ async function extractForeignKeys(
       }
       relationNamesPerTable.get(targetTable)!.set(relationName, nameCount + 1);
 
+      // For reverse relation, the "target" is the original source table
+      // Include sourceSchema as targetSchema when it differs from targetSchema (cross-schema relation)
+      const isCrossSchema = sourceSchema && targetSchema && sourceSchema !== targetSchema;
+
       const reverseRelation: SchemaRelation = {
         name: relationName,
         isList: true,
         targetTable: sourceTable,
+        ...(isCrossSchema ? { targetSchema: sourceSchema } : {}),
         sourceColumns: targetColumns,
         targetColumns: sourceColumns,
       };

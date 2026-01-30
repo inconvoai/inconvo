@@ -233,6 +233,7 @@ export type TableConditionsMap = z.infer<typeof tableConditionsMapSchema>;
 
 const baseSchema = {
   table: z.string(),
+  tableSchema: z.string().nullable().optional(),  // Database schema name (e.g., 'public', 'sales')
   whereAndArray: whereAndArraySchema,
   tableConditions: tableConditionsMapSchema,
 };

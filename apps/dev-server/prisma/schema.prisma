@@ -10,6 +10,7 @@ datasource db {
 model Table {
   id                String             @id @default(uuid())
   name              String             @unique
+  schema            String?            // Database schema name (e.g., 'public', 'sales')
   access            String             @default("OFF")
   context           String?
   createdAt         DateTime           @default(now())

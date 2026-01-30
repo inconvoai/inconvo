@@ -18,8 +18,8 @@ export function parseListParams(searchParams: URLSearchParams) {
   // Parse userContext parameters (e.g., userContext[orgId]=123)
   const userContext: Record<string, string | number> = {};
   for (const [key, value] of searchParams.entries()) {
-    const match = key.match(/^userContext\[(.+)\]$/);
-    if (match && match[1]) {
+    const match = /^userContext\[(.+)\]$/.exec(key);
+    if (match?.[1]) {
       const contextKey = match[1];
       // Try to parse as number, otherwise keep as string
       const numValue = Number(value);

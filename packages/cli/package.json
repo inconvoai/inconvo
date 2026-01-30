@@ -33,7 +33,7 @@
     "kysely": "catalog:",
     "mysql2": "^3.16.1",
     "pg": "catalog:",
-    "yaml": "^2.7.0"
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

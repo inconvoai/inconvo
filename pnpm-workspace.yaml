@@ -85,4 +85,4 @@ catalog:
   concurrently: 9.2.1
 
   # CLI/Docker tooling
-  wrangler: 4.14.1
+  wrangler: 4.60.0

@@ -66,4 +66,4 @@ EXPOSE 8787
 ENV WRANGLER_SEND_METRICS=false
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["wrangler", "dev", "--port", "8787", "--ip", "0.0.0.0"]
+# Note: INTERNAL_API_KEY is passed via entrypoint script using --var flag

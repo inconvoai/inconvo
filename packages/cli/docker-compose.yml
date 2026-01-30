@@ -5,6 +5,8 @@ services:
     image: ghcr.io/ten-dev/inconvo/dev-server:${INCONVO_VERSION:-latest}
     ports:
       - "26686:26686"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - inconvo-data:/data
     environment:

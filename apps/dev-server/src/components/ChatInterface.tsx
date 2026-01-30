@@ -161,7 +161,9 @@ export function ChatInterface() {
         });
 
         // Track conversation deletion
-        trackFeatureUsageClient(posthog, "conversations", { action: "deleted" });
+        trackFeatureUsageClient(posthog, "conversations", {
+          action: "deleted",
+        });
 
         await fetchConversations();
         if (activeConversationId === id) {
@@ -240,7 +242,9 @@ export function ChatInterface() {
       setProgressMessage(undefined);
 
       // Track message sent event
-      trackFeatureUsageClient(posthog, "conversations", { action: "message_sent" });
+      trackFeatureUsageClient(posthog, "conversations", {
+        action: "message_sent",
+      });
 
       // Add user message immediately
       const userMessageId = `user-${Date.now()}`;
@@ -319,7 +323,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId],
+    [activeConversationId, setMessages],
   );
 
   // Count active context values
@@ -436,17 +440,16 @@ export function ChatInterface() {
                       {userIdentifier}
                     </Text>
                   </Group>
-                  {userContext &&
-                    Object.keys(userContext).length > 0 && (
-                      <Group gap="xs">
-                        <Text size="sm" c="dimmed">
-                          userContext:
-                        </Text>
-                        <Text size="sm" ff="monospace">
-                          {JSON.stringify(userContext)}
-                        </Text>
-                      </Group>
-                    )}
+                  {userContext && Object.keys(userContext).length > 0 && (
+                    <Group gap="xs">
+                      <Text size="sm" c="dimmed">
+                        userContext:
+                      </Text>
+                      <Text size="sm" ff="monospace">
+                        {JSON.stringify(userContext)}
+                      </Text>
+                    </Group>
+                  )}
                 </Group>
               </Paper>
             )}

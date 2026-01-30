@@ -8,7 +8,10 @@ declare global {
 }
 
 function createPrismaClient(): PrismaClient {
-  const dbPath = path.join(process.cwd(), "prisma", ".inconvo.db");
+  // Use INCONVO_LOCAL_DB_PATH if set (Docker), otherwise default to local prisma dir
+  const dbPath =
+    process.env.INCONVO_LOCAL_DB_PATH ??
+    path.join(process.cwd(), "prisma", ".inconvo.db");
   const adapter = new PrismaBetterSqlite3({ url: dbPath });
   return new PrismaClient({ adapter });
 }

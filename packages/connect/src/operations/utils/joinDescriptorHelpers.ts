@@ -1,5 +1,7 @@
 import { JoinBuilder } from "kysely";
 import type { JoinPathHop } from "../../types/querySchema";
+import type { SchemaResponse, DatabaseDialect } from "../../types/types";
+import { getTableIdentifier } from "./tableIdentifier";
 
 export type QualifiedColumn = {
   tableName: string;
@@ -53,31 +55,46 @@ export function applyJoinHop(
   query: any,
   joinType: "inner" | "left" | "right",
   hop: JoinHopMetadata,
+  schema?: SchemaResponse,
+  dialect?: DatabaseDialect,
 ) {
   const targetTableName = hop.target[0]?.tableName;
   if (!targetTableName) {
     throw new Error("Join hop is missing target table metadata.");
   }
 
+  // Look up the target table's schema for cross-schema joins
+  const targetTable = schema?.tables.find((t) => t.name === targetTableName);
+  const targetTableId = schema && dialect
+    ? getTableIdentifier(targetTableName, targetTable?.schema, dialect)
+    : targetTableName;
+
+  // Build column refs with schema-qualified table names
+  const getTableId = (tableName: string) => {
+    if (!schema || !dialect) return tableName;
+    const table = schema.tables.find((t) => t.name === tableName);
+    return getTableIdentifier(tableName, table?.schema, dialect);
+  };
+
   const sourceRefs = hop.source.map(
-    (column) => `${column.tableName}.${column.columnName}`,
+    (column) => `${getTableId(column.tableName)}.${column.columnName}`,
   );
   const targetRefs = hop.target.map(
-    (column) => `${column.tableName}.${column.columnName}`,
+    (column) => `${getTableId(column.tableName)}.${column.columnName}`,
   );
 
   switch (joinType) {
     case "inner":
-      return query.innerJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+      return query.innerJoin(targetTableId, (jb: JoinBuilder<any, any>) =>
         applyJoinConditions(jb, sourceRefs, targetRefs),
       );
     case "right":
-      return query.rightJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+      return query.rightJoin(targetTableId, (jb: JoinBuilder<any, any>) =>
         applyJoinConditions(jb, sourceRefs, targetRefs),
       );
     case "left":
     default:
-      return query.leftJoin(targetTableName, (jb: JoinBuilder<any, any>) =>
+      return query.leftJoin(targetTableId, (jb: JoinBuilder<any, any>) =>
         applyJoinConditions(jb, sourceRefs, targetRefs),
       );
   }

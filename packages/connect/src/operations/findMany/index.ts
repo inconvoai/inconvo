@@ -4,6 +4,7 @@ import type { OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import { resolveJoinDescriptor } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
@@ -121,20 +122,29 @@ export async function findMany(
     }
   }
 
-  // Build query
-  let dbQuery: any = db.selectFrom(table);
+  // Build query with schema-qualified table name
+  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  let dbQuery: any = db.selectFrom(tableId);
 
   // Add JOINs - use SQL alias when joining same table multiple times
   for (const [, joinInfo] of joinInfoMap) {
+    // Get schema-qualified table identifier for the joined table
+    const joinedTable = schema.tables.find((t) => t.name === joinInfo.tableName);
+    const joinedTableId = getTableIdentifier(joinInfo.tableName, joinedTable?.schema, dialect);
+
     // If alias differs from table name, use "table AS alias" syntax
     const joinTarget =
       joinInfo.alias !== joinInfo.tableName
-        ? `${joinInfo.tableName} as ${joinInfo.alias}`
-        : joinInfo.tableName;
+        ? `${joinedTableId} as ${joinInfo.alias}`
+        : joinedTableId;
+
+    // Get schema-qualified identifier for source table
+    const sourceTable = schema.tables.find((t) => t.name === joinInfo.sourceTable);
+    const sourceTableId = getTableIdentifier(joinInfo.sourceTable, sourceTable?.schema, dialect);
 
     dbQuery = dbQuery.leftJoin(joinTarget, (join: any) =>
       join.onRef(
-        `${joinInfo.sourceTable}.${joinInfo.sourceCol}`,
+        `${sourceTableId}.${joinInfo.sourceCol}`,
         "=",
         `${joinInfo.alias}.${joinInfo.targetCol}`,
       ),

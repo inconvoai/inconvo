@@ -36,6 +36,51 @@ function generateApiKey(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Rewrite localhost URLs to host.docker.internal for Docker access to host services.
+ * This allows users to enter localhost URLs (which the CLI can validate) while
+ * Docker containers can still reach host services.
+ */
+function rewriteLocalhostForDocker(url: string): string {
+  return url
+    .replace(/localhost/gi, "host.docker.internal")
+    .replace(/127\.0\.0\.1/g, "host.docker.internal");
+}
+
+/**
+ * Open a URL in the system's default browser
+ */
+function openBrowser(url: string): void {
+  const platform = process.platform;
+  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+  try {
+    execSync(`${cmd} ${url}`, { stdio: "ignore" });
+  } catch {
+    // Silently fail if browser can't be opened
+  }
+}
+
+/**
+ * Wait for a URL to become available
+ */
+async function waitForServer(url: string, maxAttempts = 60): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (response.ok || response.status < 500) {
+        return true;
+      }
+    } catch {
+      // Server not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false;
+}
+
 function copyBundledComposeFile(): void {
   // Copy the bundled compose file to ~/.inconvo/
   // This ensures the compose file version matches the CLI version
@@ -91,20 +136,38 @@ export const devCommand = new Command("dev")
     // Generate shared API key for internal communication
     const sandboxApiKey = generateApiKey();
 
+    // Rewrite localhost to host.docker.internal for Docker access to host services
+    const dockerEnv = { ...configEnv };
+    if (dockerEnv.INCONVO_DATABASE_URL) {
+      dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(dockerEnv.INCONVO_DATABASE_URL);
+    }
+
     // Build environment for docker compose
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
-      ...configEnv,
+      ...dockerEnv,
       INCONVO_VERSION: imageVersion,
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
     };
 
+    const devServerUrl = "http://localhost:26686";
+
     logGray("─".repeat(50));
     logInfo("Starting Inconvo...");
-    logGray("  dev-server: http://localhost:26686");
+    logGray(`  dev-server: ${devServerUrl}`);
     logGray("  sandbox:    http://localhost:8787");
     logGray("─".repeat(50));
     logGray("Press Ctrl+C to stop\n");
+
+    // Wait for server to be ready, then open browser (runs in background)
+    waitForServer(devServerUrl).then((ready) => {
+      if (ready) {
+        logInfo("Opening browser...");
+        openBrowser(devServerUrl);
+      }
+    }).catch(() => {
+      // Silently ignore errors
+    });
 
     // Run docker compose up
     const proc = spawn(

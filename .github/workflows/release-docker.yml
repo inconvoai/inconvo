@@ -57,9 +57,19 @@ jobs:
           echo "Extracted versions:"
           cat $GITHUB_OUTPUT
 
+  # Build dev-server for each architecture natively
   build-dev-server:
     needs: prepare
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -67,30 +77,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: |
-          pnpm config set node-linker hoisted
-          pnpm install
-
-      - name: Generate Prisma for multi-platform
-        working-directory: apps/dev-server
-        run: pnpm prisma generate
-        env:
-          PRISMA_CLI_BINARY_TARGETS: linux-arm64-openssl-3.0.x,debian-openssl-3.0.x
-
-      - name: Build dev-server
-        run: pnpm --filter dev-server build
-        env:
-          SKIP_ENV_VALIDATION: "true"
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -108,18 +94,63 @@ jobs:
           context: .
           file: docker/Dockerfile.dev-server
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
+          provenance: false
           build-args: |
             PRISMA_VERSION=${{ needs.prepare.outputs.prisma_version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}-${{ matrix.suffix }}
+          cache-from: type=gha,scope=dev-server-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=dev-server-${{ matrix.suffix }}
 
+  # Create multi-arch manifest for dev-server
+  manifest-dev-server:
+    needs: [prepare, build-dev-server]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server"
+
+          # Create manifest for versioned tag
+          docker manifest create ${IMAGE}:${VERSION} \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:${VERSION}
+
+          # Create manifest for latest tag
+          docker manifest create ${IMAGE}:latest \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:latest
+
+  # Build sandbox for each architecture natively
   build-sandbox:
     needs: prepare
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -199,18 +230,53 @@ jobs:
           context: .
           file: docker/Dockerfile.sandbox
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
+          provenance: false
           build-args: |
             WRANGLER_VERSION=${{ needs.prepare.outputs.wrangler_version }}
             ZOD_VERSION=${{ needs.prepare.outputs.zod_version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}-${{ matrix.suffix }}
+          cache-from: type=gha,scope=sandbox-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=sandbox-${{ matrix.suffix }}
+
+  # Create multi-arch manifest for sandbox
+  manifest-sandbox:
+    needs: [prepare, build-sandbox]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox"
+
+          # Create manifest for versioned tag
+          docker manifest create ${IMAGE}:${VERSION} \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:${VERSION}
+
+          # Create manifest for latest tag
+          docker manifest create ${IMAGE}:latest \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          docker manifest push ${IMAGE}:latest
 
   publish-cli:
-    needs: [prepare, build-dev-server, build-sandbox]
+    needs: [prepare, manifest-dev-server, manifest-sandbox]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -252,7 +318,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   create-release:
-    needs: [prepare, build-dev-server, build-sandbox, publish-cli]
+    needs: [prepare, manifest-dev-server, manifest-sandbox, publish-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write

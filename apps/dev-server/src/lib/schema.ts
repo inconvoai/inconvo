@@ -3,6 +3,8 @@ import type {
   SchemaColumn,
   SchemaRelation,
   SchemaComputedColumn,
+  SQLCastExpressionAst,
+  SQLComputedColumnAst,
 } from "@repo/types";
 
 // Matches the internal ColumnRelationEntry type in @repo/types
@@ -54,6 +56,7 @@ export async function getSchema(): Promise<Schema> {
     },
     select: {
       name: true,
+      schema: true,
       access: true,
       context: true,
       columns: {
@@ -110,7 +113,7 @@ export async function getSchema(): Promise<Schema> {
       outwardRelations: {
         select: {
           name: true,
-          targetTable: { select: { name: true } },
+          targetTable: { select: { name: true, schema: true } },
           isList: true,
           selected: true,
           source: true,
@@ -175,7 +178,7 @@ export async function getSchema(): Promise<Schema> {
         conversion: conversion
           ? {
               id: conversion.id,
-              ast: JSON.parse(conversion.ast) as Record<string, unknown>,
+              ast: JSON.parse(conversion.ast) as SQLCastExpressionAst,
               type: conversion.type ?? null,
               selected: conversion.selected,
             }
@@ -192,7 +195,7 @@ export async function getSchema(): Promise<Schema> {
       name: cc.name,
       table: { name: cc.table.name },
       type: cc.type,
-      ast: JSON.parse(cc.ast) as Record<string, unknown>,
+      ast: JSON.parse(cc.ast) as SQLComputedColumnAst,
       unit: cc.unit ?? null,
       notes: cc.notes ?? null,
     }));
@@ -219,6 +222,7 @@ export async function getSchema(): Promise<Schema> {
         name: relation.name,
         relationId: null, // Dev server doesn't use relationId
         targetTable: { name: relation.targetTable.name },
+        targetSchema: relation.targetTable.schema ?? null,
         isList: relation.isList,
         selected: relation.selected,
         source: relation.source as "FK" | "MANUAL",
@@ -231,6 +235,7 @@ export async function getSchema(): Promise<Schema> {
 
     return {
       name: table.name,
+      schema: table.schema ?? null,
       access: table.access as "QUERYABLE" | "JOINABLE" | "OFF",
       context: table.context ?? null,
       columns,
@@ -298,6 +303,7 @@ export async function syncSchema(): Promise<{
       await prisma.table.create({
         data: {
           name: table.name,
+          schema: table.schema ?? null,
           access: "QUERYABLE",
           columns: {
             create: table.columns.map((col) => ({
@@ -310,7 +316,15 @@ export async function syncSchema(): Promise<{
       });
       added++;
     } else {
-      // Update existing table - handle column changes
+      // Update existing table - handle schema and column changes
+      // Update schema if changed
+      if (existingTable.schema !== (table.schema ?? null)) {
+        await prisma.table.update({
+          where: { id: existingTable.id },
+          data: { schema: table.schema ?? null },
+        });
+      }
+
       const existingColumnNames = new Set(
         existingTable.columns.map((c) => c.name),
       );
@@ -673,7 +687,7 @@ export async function syncAugmentationsToFile(): Promise<void> {
   const computedColumnsPayload = computedColumns.map((cc) => ({
     name: cc.name,
     table: cc.table.name,
-    ast: JSON.parse(cc.ast),
+    ast: JSON.parse(cc.ast) as SQLComputedColumnAst,
     type: cc.type,
     unit: cc.unit,
     notes: cc.notes,
@@ -683,7 +697,7 @@ export async function syncAugmentationsToFile(): Promise<void> {
   const columnConversionsPayload = columnConversions.map((conv) => ({
     column: conv.column.name,
     table: conv.table.name,
-    ast: JSON.parse(conv.ast),
+    ast: JSON.parse(conv.ast) as SQLCastExpressionAst,
     type: conv.type ?? undefined,
     selected: conv.selected,
   }));

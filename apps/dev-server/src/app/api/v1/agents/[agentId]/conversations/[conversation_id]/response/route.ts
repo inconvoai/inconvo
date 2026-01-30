@@ -16,11 +16,6 @@ import { corsHeaders, handleOptions } from "~/lib/cors";
 import { getPostHogClient } from "~/lib/posthog-server";
 import { trackResponsePerformance } from "~/lib/telemetry";
 
-interface ResponseCreateParams {
-  message: string;
-  stream?: boolean;
-}
-
 interface SDKResponse {
   id: string;
   conversationId: string;

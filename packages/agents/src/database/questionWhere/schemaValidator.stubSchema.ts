@@ -3,6 +3,7 @@ import type { Schema } from "@repo/types";
 export const stubSchema = [
   {
     name: "User",
+    schema: null,
     access: "QUERYABLE",
     context: null,
     columns: [
@@ -77,6 +78,7 @@ export const stubSchema = [
         name: "profile",
         relationId: "User_profile",
         targetTable: { name: "Profile" },
+        targetSchema: null,
         isList: false,
         selected: true,
         source: "FK",
@@ -89,6 +91,7 @@ export const stubSchema = [
         name: "posts",
         relationId: "User_posts",
         targetTable: { name: "Post" },
+        targetSchema: null,
         isList: true,
         selected: true,
         source: "FK",
@@ -102,6 +105,7 @@ export const stubSchema = [
   },
   {
     name: "Profile",
+    schema: null,
     access: "QUERYABLE",
     context: null,
     columns: [
@@ -156,6 +160,7 @@ export const stubSchema = [
   },
   {
     name: "Post",
+    schema: null,
     access: "QUERYABLE",
     context: null,
     columns: [

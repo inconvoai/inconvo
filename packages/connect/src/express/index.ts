@@ -94,10 +94,8 @@ export async function inconvo(): Promise<Router> {
       clearSchemaCache();
       clearAugmentedSchemaCache();
       const schema = await getCachedSchema();
-      const { databaseSchema: _databaseSchema } = schema;
       const sanitizedTables = schema.tables.map(
         ({
-          schema: _tableSchema,
           computedColumns: _computedColumns,
           columnConversions: _columnConversions,
           ...table
@@ -116,6 +114,7 @@ export async function inconvo(): Promise<Router> {
       );
       const publicSchema = {
         tables: sanitizedTables,
+        databaseSchema: schema.databaseSchema,
       };
       res.setHeader("Content-Type", "application/json");
       res.send(safeJsonStringify(publicSchema));

@@ -319,7 +319,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId, messages.length],
+    [activeConversationId],
   );
 
   // Count active context values

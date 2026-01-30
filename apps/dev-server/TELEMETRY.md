@@ -89,17 +89,22 @@ We explicitly disable PostHog's automatic property collection including:
 
 ## How to Opt Out
 
-To completely disable telemetry, set the `DISABLE_TELEMETRY` environment variable:
+To completely disable telemetry, set both environment variables (server-side and client-side):
 
 ```bash
 export DISABLE_TELEMETRY=true
+export NEXT_PUBLIC_DISABLE_TELEMETRY=true
 ```
 
-Or add it to your `.inconvo.env` file:
+Or add them to your `.inconvo.env` file:
 
 ```bash
+# Telemetry opt-out (both required for Next.js)
 DISABLE_TELEMETRY=true
+NEXT_PUBLIC_DISABLE_TELEMETRY=true
 ```
+
+**Why both variables?** Next.js requires `NEXT_PUBLIC_*` prefix for client-side environment variables. `DISABLE_TELEMETRY` disables server-side tracking and proxy routes, while `NEXT_PUBLIC_DISABLE_TELEMETRY` prevents client-side PostHog initialization.
 
 When telemetry is disabled:
 - Zero events are sent to PostHog

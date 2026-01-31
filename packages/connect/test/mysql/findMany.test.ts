@@ -168,4 +168,82 @@ describe("MySQL findMany Operation", () => {
       expect(response.data[0]).toHaveProperty("productJoin1_title");
     }
   }, 15000);
+
+  test("deduplicates shared first hop in multi-hop joins", async () => {
+    // When a single-hop join and a multi-hop join share the same first hop,
+    // only ONE SQL JOIN should be created for the shared hop.
+    const iql = {
+      operation: "findMany" as const,
+      table: "organisations",
+      tableConditions: null,
+      whereAndArray: [],
+      operationParameters: {
+        select: {
+          organisations: ["id", "name"],
+          "organisations.orders": ["id", "subtotal"],
+          "organisations.orders.product": ["title"],
+        },
+        joins: [
+          {
+            // Single-hop join: organisations → orders
+            table: "orders",
+            name: "organisations.orders",
+            path: [
+              {
+                source: ["organisations.id"],
+                target: ["orders.organisation_id"],
+              },
+            ],
+          },
+          {
+            // Multi-hop join: organisations → orders → products
+            // First hop is identical to the single-hop join above
+            table: "products",
+            name: "organisations.orders.product",
+            path: [
+              {
+                source: ["organisations.id"],
+                target: ["orders.organisation_id"],
+              },
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+        orderBy: {
+          column: "id",
+          direction: "asc" as const,
+        },
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await findMany(db, parsed, ctx);
+
+    // Verify query executed successfully
+    expect(response.data).toBeDefined();
+    expect(Array.isArray(response.data)).toBe(true);
+
+    // KEY ASSERTION: Verify the SQL has only ONE join to orders (not two)
+    const sqlLower = response.query.sql.toLowerCase();
+    const ordersJoinCount = (sqlLower.match(/join[^,]*\borders\b/g) || []).length;
+    expect(ordersJoinCount).toBe(1);
+
+    // Verify we also have the products join
+    const productsJoinCount = (sqlLower.match(/join[^,]*\bproducts\b/g) || []).length;
+    expect(productsJoinCount).toBe(1);
+
+    // Verify data is returned correctly
+    if (response.data.length > 0) {
+      const row = response.data[0];
+      expect(row.organisations_id).toBeDefined();
+      expect(row.organisations_name).toBeDefined();
+      expect(row["organisations.orders_id"]).toBeDefined();
+      expect(row["organisations.orders_subtotal"]).toBeDefined();
+      expect(row["organisations.orders.product_title"]).toBeDefined();
+    }
+  }, 15000);
 });

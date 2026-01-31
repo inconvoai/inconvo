@@ -114,11 +114,6 @@ describe("MSSQL findMany Operation", () => {
     // This test verifies the fix for MS SQL error 1013.
     // When multiple logical joins share the same hop (source → target),
     // only ONE SQL JOIN should be created, not multiple.
-    //
-    // Real-world example:
-    // - Join 1: Invoice → POS (single hop)
-    // - Join 2: Invoice → POS → Location (multi-hop, first hop same as Join 1)
-    // Should create: JOIN POS, JOIN Location (not: JOIN POS, JOIN POS, JOIN Location)
     const iql = {
       operation: "findMany" as const,
       table: "orders",
@@ -143,7 +138,6 @@ describe("MSSQL findMany Operation", () => {
           },
           {
             // Same hop as above, different logical alias
-            // Simulates a multi-hop join where the first hop is shared
             table: "products",
             name: "orders.productAlt",
             path: [
@@ -184,6 +178,88 @@ describe("MSSQL findMany Operation", () => {
       expect(row["orders.productAlt_title"]).toBeDefined();
       // Both should have the same value since they share the same join
       expect(row["orders.product_title"]).toEqual(row["orders.productAlt_title"]);
+    }
+  }, 15000);
+
+  test("deduplicates shared first hop in multi-hop joins", async () => {
+    // This test verifies the fix for MS SQL error 1013 with true multi-hop joins.
+    // When a single-hop join and a multi-hop join share the same first hop,
+    // only ONE SQL JOIN should be created for the shared hop.
+    //
+    // Example: organisations → orders (Join 1) and organisations → orders → products (Join 2)
+    // Should create: JOIN orders, JOIN products (not: JOIN orders, JOIN orders, JOIN products)
+    const iql = {
+      operation: "findMany" as const,
+      table: "organisations",
+      tableConditions: null,
+      whereAndArray: [],
+      operationParameters: {
+        select: {
+          organisations: ["id", "name"],
+          "organisations.orders": ["id", "subtotal"],
+          "organisations.orders.product": ["title"],
+        },
+        joins: [
+          {
+            // Single-hop join: organisations → orders
+            table: "orders",
+            name: "organisations.orders",
+            path: [
+              {
+                source: ["organisations.id"],
+                target: ["orders.organisation_id"],
+              },
+            ],
+          },
+          {
+            // Multi-hop join: organisations → orders → products
+            // First hop is identical to the single-hop join above
+            table: "products",
+            name: "organisations.orders.product",
+            path: [
+              {
+                source: ["organisations.id"],
+                target: ["orders.organisation_id"],
+              },
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+        orderBy: {
+          column: "id",
+          direction: "asc" as const,
+        },
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await findMany(db, parsed, ctx);
+
+    // Verify query executed successfully (no error 1013)
+    expect(response.data).toBeDefined();
+    expect(Array.isArray(response.data)).toBe(true);
+
+    // KEY ASSERTION: Verify the SQL has only ONE join to orders (not two)
+    const sqlLower = response.query.sql.toLowerCase();
+    const ordersJoinCount = (sqlLower.match(/join[^,]*\borders\b/g) || []).length;
+    expect(ordersJoinCount).toBe(1); // Should be exactly 1, not 2
+
+    // Verify we also have the products join
+    const productsJoinCount = (sqlLower.match(/join[^,]*\bproducts\b/g) || []).length;
+    expect(productsJoinCount).toBe(1);
+
+    // Verify data is returned correctly
+    if (response.data.length > 0) {
+      const row = response.data[0];
+      expect(row.organisations_id).toBeDefined();
+      expect(row.organisations_name).toBeDefined();
+      expect(row["organisations.orders_id"]).toBeDefined();
+      expect(row["organisations.orders_subtotal"]).toBeDefined();
+      expect(row["organisations.orders.product_title"]).toBeDefined();
     }
   }, 15000);
 });

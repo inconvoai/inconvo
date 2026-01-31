@@ -50,6 +50,8 @@ export async function findMany(
   // Track by alias to allow same table joined multiple times with different aliases
   const joinInfoMap = new Map<string, JoinInfo>();
   const usedSqlAliases = new Set<string>([table]);
+  // Track hops by source/target to deduplicate identical joins and reuse their SQL alias
+  const hopToSqlAlias = new Map<string, string>();
 
   for (const join of resolvedJoins) {
     for (let i = 0; i < join.hops.length; i++) {
@@ -69,14 +71,36 @@ export async function findMany(
       // Skip if we've already processed this exact alias
       if (joinInfoMap.has(aliasKey)) continue;
 
-      // Determine SQL alias - use table name if unique, otherwise use the aliasKey
-      // This allows joining the same table multiple times with different aliases
+      // Create a unique key for this hop based on source and target columns
+      const hopKey = `${sourceTable}.${sourceCol}|${targetTable}.${targetCol}`;
+
+      // Check if this exact hop was already processed
+      const existingAlias = hopToSqlAlias.get(hopKey);
+      if (existingAlias) {
+        // Reuse the existing SQL alias - don't create a duplicate join
+        joinInfoMap.set(aliasKey, {
+          tableName: targetTable,
+          alias: existingAlias,
+          sourceTable,
+          sourceCol,
+          targetCol,
+        });
+        continue;
+      }
+
+      // Use table name as SQL alias if unique, otherwise generate unique alias
+      // This preserves the original behavior for single joins while fixing duplicates
       let sqlAlias = targetTable;
-      if (usedSqlAliases.has(targetTable)) {
+      if (usedSqlAliases.has(sqlAlias)) {
         // Table already joined - need a unique SQL alias
-        sqlAlias = aliasKey.replace(/\./g, "_");
+        let counter = 2;
+        while (usedSqlAliases.has(`${targetTable}_${counter}`)) {
+          counter++;
+        }
+        sqlAlias = `${targetTable}_${counter}`;
       }
       usedSqlAliases.add(sqlAlias);
+      hopToSqlAlias.set(hopKey, sqlAlias);
 
       joinInfoMap.set(aliasKey, {
         tableName: targetTable,
@@ -127,7 +151,13 @@ export async function findMany(
   let dbQuery: any = db.selectFrom(tableId);
 
   // Add JOINs - use SQL alias when joining same table multiple times
+  // Track which SQL aliases we've already created JOINs for to avoid duplicates
+  const createdJoins = new Set<string>();
   for (const [, joinInfo] of joinInfoMap) {
+    // Skip if we've already created a JOIN for this SQL alias
+    if (createdJoins.has(joinInfo.alias)) continue;
+    createdJoins.add(joinInfo.alias);
+
     // Get schema-qualified table identifier for the joined table
     const joinedTable = schema.tables.find((t) => t.name === joinInfo.tableName);
     const joinedTableId = getTableIdentifier(joinInfo.tableName, joinedTable?.schema, dialect);

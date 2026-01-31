@@ -19,14 +19,41 @@ services:
       - SKIP_ENV_VALIDATION=true
       # User configuration (passed from CLI via ~/.inconvo/config.env)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - DATABASE_DIALECT=${DATABASE_DIALECT:-}
       - INCONVO_DATABASE_URL=${INCONVO_DATABASE_URL:-}
       - INCONVO_DATABASE_SCHEMA=${INCONVO_DATABASE_SCHEMA:-}
       - INCONVO_SECRET_KEY=${INCONVO_SECRET_KEY:-}
+      # Telemetry (set to true to disable)
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      - NEXT_PUBLIC_DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      # Demo mode
+      - USE_DEMO_DATABASE=${USE_DEMO_DATABASE:-false}
     depends_on:
       sandbox:
         condition: service_started
+      demo-db:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  demo-db:
+    image: postgres:16-alpine
+    profiles:
+      - demo
+    ports:
+      - "26687:5432"
+    environment:
+      - POSTGRES_USER=inconvo
+      - POSTGRES_PASSWORD=inconvo
+      - POSTGRES_DB=demo
+    volumes:
+      - demo-db-data:/var/lib/postgresql/data
+      - ${INCONVO_INIT_SCRIPT:-./demo-db-init.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inconvo -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   sandbox:
@@ -49,3 +76,5 @@ volumes:
     name: inconvo-data
   sandbox-data:
     name: inconvo-sandbox-data
+  demo-db-data:
+    name: inconvo-demo-db-data

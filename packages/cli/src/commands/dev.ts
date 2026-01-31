@@ -6,13 +6,16 @@ import * as os from "os";
 import { fileURLToPath } from "url";
 import * as p from "@clack/prompts";
 import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
-import { logInfo, logError, logGray } from "../process/output.js";
+import { logInfo, logError, logDim, COLORS } from "../process/output.js";
+import { seedDemoData } from "../seed/demo-data.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
-// Bundled compose file (shipped with npm package)
+const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
+// Bundled files (shipped with npm package)
 const BUNDLED_COMPOSE_FILE = path.join(__dirname, "..", "..", "docker-compose.yml");
+const BUNDLED_INIT_SCRIPT = path.join(__dirname, "..", "..", "demo-db-init.sql");
 
 function checkDockerRunning(): boolean {
   try {
@@ -81,11 +84,60 @@ async function waitForServer(url: string, maxAttempts = 60): Promise<boolean> {
   return false;
 }
 
-function copyBundledComposeFile(): void {
-  // Copy the bundled compose file to ~/.inconvo/
-  // This ensures the compose file version matches the CLI version
+/**
+ * Wait for the demo database to be ready and seed it with data
+ */
+async function waitForDemoDbAndSeed(maxAttempts = 60): Promise<void> {
+  const connectionString = "postgresql://inconvo:inconvo@localhost:26687/demo";
+
+  // Wait for database to be ready
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await seedDemoData(connectionString);
+      return;
+    } catch {
+      // Database not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  console.log(`${COLORS.dim}  Warning: Could not seed demo database${COLORS.reset}`);
+}
+
+/**
+ * Configure the dev-server's SQLite database for demo mode
+ * This sets up user context, computed columns, and table conditions
+ */
+async function configureDemoDatabase(devServerUrl: string, maxAttempts = 30): Promise<void> {
+  const setupUrl = `${devServerUrl}/api/demo/setup`;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(setupUrl, {
+        method: "POST",
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        logInfo("Demo database configured");
+        return;
+      }
+    } catch {
+      // Server not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  console.log(`${COLORS.dim}  Warning: Could not configure demo database${COLORS.reset}`);
+}
+
+function copyBundledFiles(): void {
+  // Copy the bundled files to ~/.inconvo/
+  // This ensures the file versions match the CLI version
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
   fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
+  fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
 }
 
 export const devCommand = new Command("dev")
@@ -125,7 +177,7 @@ export const devCommand = new Command("dev")
     spinner.start("Preparing Docker environment...");
 
     try {
-      copyBundledComposeFile();
+      copyBundledFiles();
       spinner.stop("Docker environment ready");
     } catch (error) {
       spinner.stop("Failed to prepare Docker environment");
@@ -136,9 +188,13 @@ export const devCommand = new Command("dev")
     // Generate shared API key for internal communication
     const sandboxApiKey = generateApiKey();
 
+    // Check if demo mode is enabled
+    const useDemo = configEnv.USE_DEMO_DATABASE === "true";
+
     // Rewrite localhost to host.docker.internal for Docker access to host services
+    // (not needed for demo mode since the database is in the same Docker network)
     const dockerEnv = { ...configEnv };
-    if (dockerEnv.INCONVO_DATABASE_URL) {
+    if (!useDemo && dockerEnv.INCONVO_DATABASE_URL) {
       dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(dockerEnv.INCONVO_DATABASE_URL);
     }
 
@@ -148,36 +204,71 @@ export const devCommand = new Command("dev")
       ...dockerEnv,
       INCONVO_VERSION: imageVersion,
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
+      INCONVO_INIT_SCRIPT: INIT_SCRIPT,
     };
 
+    // Set demo database URL when demo mode is enabled
+    if (useDemo) {
+      env.DATABASE_DIALECT = "postgres";
+      env.INCONVO_DATABASE_URL = "postgresql://inconvo:inconvo@demo-db:5432/demo";
+    }
+
     const devServerUrl = "http://localhost:26686";
+    const telemetryDisabled = configEnv.DISABLE_TELEMETRY === "true";
 
-    logGray("─".repeat(50));
-    logInfo("Starting Inconvo...");
-    logGray(`  dev-server: ${devServerUrl}`);
-    logGray("  sandbox:    http://localhost:8787");
-    logGray("─".repeat(50));
-    logGray("Press Ctrl+C to stop\n");
+    // Print startup banner
+    console.log("");
+    console.log(`${COLORS.cyan}${COLORS.bold}  Inconvo${COLORS.reset}`);
+    console.log("");
+    if (telemetryDisabled) {
+      console.log(`${COLORS.dim}  Telemetry disabled${COLORS.reset}`);
+    } else {
+      console.log(`${COLORS.dim}  Anonymous telemetry is enabled to help improve Inconvo.${COLORS.reset}`);
+      console.log(`${COLORS.dim}  Run 'inconvo telemetry off' to disable.${COLORS.reset}`);
+    }
+    console.log("");
+    logDim("  Press Ctrl+C to stop\n");
 
-    // Wait for server to be ready, then open browser (runs in background)
-    waitForServer(devServerUrl).then((ready) => {
-      if (ready) {
-        logInfo("Opening browser...");
-        openBrowser(devServerUrl);
-      }
-    }).catch(() => {
-      // Silently ignore errors
-    });
+    // Wait for demo database to be ready, seed it, and configure the dev-server (runs in background)
+    if (useDemo) {
+      (async () => {
+        // First seed the demo database
+        await waitForDemoDbAndSeed();
+        // Then wait for dev-server to be ready
+        const serverReady = await waitForServer(devServerUrl);
+        if (serverReady) {
+          // Configure the dev-server's SQLite database for demo mode
+          await configureDemoDatabase(devServerUrl);
+          logInfo("Opening browser...");
+          openBrowser(devServerUrl);
+        }
+      })().catch(() => {
+        // Silently ignore errors
+      });
+    } else {
+      // Non-demo mode: just wait for server and open browser
+      waitForServer(devServerUrl).then((ready) => {
+        if (ready) {
+          logInfo("Opening browser...");
+          openBrowser(devServerUrl);
+        }
+      }).catch(() => {
+        // Silently ignore errors
+      });
+    }
+
+    // Build docker compose arguments
+    const composeArgs = ["compose", "-f", COMPOSE_FILE];
+    if (useDemo) {
+      composeArgs.push("--profile", "demo");
+    }
+    composeArgs.push("up", "--pull", "always", "--remove-orphans");
 
     // Run docker compose up
-    const proc = spawn(
-      "docker",
-      ["compose", "-f", COMPOSE_FILE, "up", "--pull", "always", "--remove-orphans"],
-      {
-        env,
-        stdio: "inherit",
-      }
-    );
+    const proc = spawn("docker", composeArgs, {
+      env,
+      stdio: "inherit",
+    });
 
     let shuttingDown = false;
 
@@ -189,7 +280,10 @@ export const devCommand = new Command("dev")
 
       // Run docker compose down
       try {
-        execSync(`docker compose -f "${COMPOSE_FILE}" down`, {
+        const downCmd = useDemo
+          ? `docker compose -f "${COMPOSE_FILE}" --profile demo down`
+          : `docker compose -f "${COMPOSE_FILE}" down`;
+        execSync(downCmd, {
           stdio: "inherit",
           env,
         });

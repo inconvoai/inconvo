@@ -110,9 +110,9 @@ describe("MSSQL findMany Operation", () => {
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));
   }, 15000);
 
-  test("deduplicates overlapping join hops to prevent MS SQL error 1013", async () => {
-    // This test verifies that when multiple joins share the same hop,
-    // the query doesn't fail with "same exposed names" error (MS SQL 1013)
+  test("keeps duplicate hops when aliases are referenced", async () => {
+    // Multiple joins share the same hop but use different aliases.
+    // This must not trigger MS SQL error 1013 and should return both aliases.
     const iql = {
       operation: "findMany" as const,
       table: "orders",
@@ -122,6 +122,7 @@ describe("MSSQL findMany Operation", () => {
         select: {
           orders: ["id", "subtotal"],
           productJoin1: ["title"],
+          productJoin2: ["title"],
         },
         joins: [
           {
@@ -135,7 +136,7 @@ describe("MSSQL findMany Operation", () => {
             ],
           },
           {
-            // Second join with the exact same hop - should be deduplicated
+            // Second join with the exact same hop but a different alias
             table: "products",
             name: "productJoin2",
             path: [
@@ -151,27 +152,30 @@ describe("MSSQL findMany Operation", () => {
     };
 
     const parsed = QuerySchema.parse(iql);
-    // This would throw MS SQL error 1013 before the fix
     const response = await findMany(db, parsed, ctx);
 
     // Verify the query executed successfully and returned valid results
     const expectedRows = await db
       .selectFrom("orders as o")
-      .innerJoin("products as p", "p.id", "o.product_id")
+      .innerJoin("products as p1", "p1.id", "o.product_id")
+      .innerJoin("products as p2", "p2.id", "o.product_id")
       .select([
         sql<number>`o.id`.as("id"),
         sql<number>`o.subtotal`.as("subtotal"),
-        sql<string>`p.title`.as("title"),
+        sql<string>`p1.title`.as("title1"),
+        sql<string>`p2.title`.as("title2"),
       ])
       .limit(5)
       .execute();
 
     expect(response.data.length).toBe(expectedRows.length);
-    // Verify we got data back - the exact format may vary but we should have rows
     if (expectedRows.length > 0) {
-      expect(response.data[0]).toHaveProperty("orders_id");
-      expect(response.data[0]).toHaveProperty("orders_subtotal");
-      expect(response.data[0]).toHaveProperty("productJoin1_title");
+      const row = response.data[0];
+      expect(row).toHaveProperty("orders_id");
+      expect(row).toHaveProperty("orders_subtotal");
+      expect(row).toHaveProperty("productJoin1_title");
+      expect(row).toHaveProperty("productJoin2_title");
+      expect(row.productJoin1_title).toEqual(row.productJoin2_title);
     }
   }, 15000);
 });

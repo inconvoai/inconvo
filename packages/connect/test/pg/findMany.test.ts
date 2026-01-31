@@ -173,4 +173,68 @@ describe("PostgreSQL findMany Operation", () => {
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));
   }, 15000);
+
+  test("deduplicates overlapping join hops", async () => {
+    // This test verifies that when multiple joins share the same hop,
+    // the query doesn't fail with duplicate join errors
+    const iql = {
+      operation: "findMany" as const,
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operationParameters: {
+        select: {
+          orders: ["id", "subtotal"],
+          productJoin1: ["title"],
+        },
+        joins: [
+          {
+            table: "products",
+            name: "productJoin1",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+          {
+            // Second join with the exact same hop - should be deduplicated
+            table: "products",
+            name: "productJoin2",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await findMany(db, parsed, ctx);
+
+    // Verify the query executed successfully and returned valid results
+    const expectedRows = await db
+      .selectFrom("orders as o")
+      .innerJoin("products as p", "p.id", "o.product_id")
+      .select([
+        sql<number>`o.id`.as("id"),
+        sql<number>`o.subtotal`.as("subtotal"),
+        sql<string>`p.title`.as("title"),
+      ])
+      .limit(5)
+      .execute();
+
+    expect(response.data.length).toBe(expectedRows.length);
+    // Verify we got data back - the exact format may vary but we should have rows
+    if (expectedRows.length > 0) {
+      expect(response.data[0]).toHaveProperty("orders_id");
+      expect(response.data[0]).toHaveProperty("orders_subtotal");
+      expect(response.data[0]).toHaveProperty("productJoin1_title");
+    }
+  }, 15000);
 });

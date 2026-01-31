@@ -6,7 +6,10 @@ import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
-import { resolveJoinDescriptor } from "../utils/joinDescriptorHelpers";
+import {
+  resolveJoinDescriptor,
+  type QualifiedColumn,
+} from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
 
 interface JoinInfo {
@@ -50,11 +53,28 @@ export async function findMany(
   // Track by alias to allow same table joined multiple times with different aliases
   const joinInfoMap = new Map<string, JoinInfo>();
   const usedSqlAliases = new Set<string>([table]);
+  // Deduplicate hops to avoid duplicate table joins (MS SQL error 1013)
+  const appliedHops = new Set<string>();
 
   for (const join of resolvedJoins) {
     for (let i = 0; i < join.hops.length; i++) {
       const hop = join.hops[i];
       if (!hop || hop.source.length === 0 || hop.target.length === 0) continue;
+
+      // Create a unique key for this hop based on source and target columns
+      const sourceKey = hop.source
+        .map((c: QualifiedColumn) => `${c.tableName}.${c.columnName}`)
+        .sort()
+        .join(",");
+      const targetKey = hop.target
+        .map((c: QualifiedColumn) => `${c.tableName}.${c.columnName}`)
+        .sort()
+        .join(",");
+      const hopKey = `${sourceKey}|${targetKey}`;
+
+      // Skip duplicate hops to prevent MS SQL error 1013
+      if (appliedHops.has(hopKey)) continue;
+      appliedHops.add(hopKey);
 
       const sourceTable = hop.source[0]?.tableName;
       const sourceCol = hop.source[0]?.columnName;

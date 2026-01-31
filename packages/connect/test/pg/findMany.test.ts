@@ -210,6 +210,10 @@ describe("PostgreSQL findMany Operation", () => {
             ],
           },
         ],
+        orderBy: {
+          column: "id",
+          direction: "asc" as const,
+        },
         limit: 5,
       },
     };
@@ -226,6 +230,7 @@ describe("PostgreSQL findMany Operation", () => {
         sql<number>`o.subtotal`.as("subtotal"),
         sql<string>`p.title`.as("title"),
       ])
+      .orderBy("o.id", "asc")
       .limit(5)
       .execute();
 

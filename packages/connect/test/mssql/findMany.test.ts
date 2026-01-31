@@ -147,6 +147,10 @@ describe("MSSQL findMany Operation", () => {
             ],
           },
         ],
+        orderBy: {
+          column: "id",
+          direction: "asc" as const,
+        },
         limit: 5,
       },
     };
@@ -165,7 +169,8 @@ describe("MSSQL findMany Operation", () => {
         sql<string>`p1.title`.as("title1"),
         sql<string>`p2.title`.as("title2"),
       ])
-      .limit(5)
+      .orderBy("o.id", "asc")
+      .top(5)
       .execute();
 
     expect(response.data.length).toBe(expectedRows.length);

@@ -10,7 +10,12 @@ export const env = createEnv({
   server: {
     DATABASE_DIALECT: z.enum(["postgresql", "mysql", "mssql"]),
     INCONVO_DATABASE_URL: z.string().min(1),
-    INCONVO_DATABASE_SCHEMA: z.string().optional(),
+    INCONVO_DATABASE_SCHEMA: z
+      .string()
+      .optional()
+      .transform((val) =>
+        val ? val.split(",").map((s) => s.trim()).filter(Boolean) : undefined
+      ),
     INCONVO_SANDBOX_BASE_URL: z.string().url(),
     INCONVO_SANDBOX_API_KEY: z.string().min(1),
     OPENAI_API_KEY: z.string().min(1),

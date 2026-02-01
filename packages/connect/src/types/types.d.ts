@@ -49,7 +49,7 @@ export interface SchemaTable {
 
 export interface SchemaResponse {
   tables: SchemaTable[];
-  databaseSchema?: string | null;
+  databaseSchemas?: string[] | null;
 }
 
 export type DatabaseDialect =

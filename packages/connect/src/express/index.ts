@@ -114,7 +114,7 @@ export async function inconvo(): Promise<Router> {
       );
       const publicSchema = {
         tables: sanitizedTables,
-        databaseSchema: schema.databaseSchema,
+        databaseSchemas: schema.databaseSchemas,
       };
       res.setHeader("Content-Type", "application/json");
       res.send(safeJsonStringify(publicSchema));

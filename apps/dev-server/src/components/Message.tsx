@@ -2,9 +2,15 @@
 
 import { Text, Paper, Flex, Avatar } from "@mantine/core";
 import { IconUser } from "@tabler/icons-react";
+import dynamic from "next/dynamic";
 import { MessageContent } from "@repo/ui/chat";
 import type { InconvoResponse, InconvoMessage } from "@repo/types";
 import { Logo } from "@repo/ui";
+
+const VegaChart = dynamic(
+  () => import("@repo/ui/chat/VegaChart").then((mod) => mod.VegaChart),
+  { ssr: false }
+);
 
 interface MessageProps {
   message: InconvoResponse | { type: "user"; message: string };
@@ -29,6 +35,7 @@ export function Message({
       <MessageContent
         message={message as InconvoMessage}
         isStreaming={isStreaming}
+        renderVegaChart={(spec) => <VegaChart spec={spec} />}
       />
     );
   };

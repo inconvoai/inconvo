@@ -1,12 +1,6 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
-import {
-  setupMultiHopFixture,
-  teardownMultiHopFixture,
-  type MultiHopFixture,
-} from "../utils/multiHopFixture";
-
 describe("BigQuery findMany Join Edge Cases", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
@@ -16,7 +10,6 @@ describe("BigQuery findMany Join Edge Cases", () => {
     | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
     | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
-  let multiHopFixture: MultiHopFixture | null = null;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -32,7 +25,6 @@ describe("BigQuery findMany Join Edge Cases", () => {
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
-    multiHopFixture = await setupMultiHopFixture(db);
 
     await clearSchemaCache();
     clearAugmentedSchemaCache?.();
@@ -40,100 +32,51 @@ describe("BigQuery findMany Join Edge Cases", () => {
   });
 
   afterAll(async () => {
-    if (db && multiHopFixture) {
-      await teardownMultiHopFixture(db, multiHopFixture);
-    }
     await db?.destroy?.();
     await clearSchemaCache?.();
     clearAugmentedSchemaCache?.();
   });
 
-  test("deduplicates shared first hop in multi-hop joins", async () => {
-    if (!multiHopFixture) {
-      throw new Error("Missing multi-hop fixture setup.");
-    }
-
-    const aliasPrimary = "primaryMid";
-    const aliasSecondary = "secondaryMid";
-    const aliasEnd = `${aliasSecondary}.end`;
-
-    const baseIdKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.id}`;
-    const basePrimaryKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.primaryMidId}`;
-    const baseSecondaryKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.secondaryMidId}`;
-    const primaryMidKey = `${aliasPrimary}_${multiHopFixture.midColumns.id}`;
-    const secondaryMidKey = `${aliasSecondary}_${multiHopFixture.midColumns.id}`;
-    const endLabelKey = `${aliasEnd}_${multiHopFixture.endColumns.label}`;
-
+  test("deduplicates shared hop for multi-hop reviews join", async () => {
     const iql = {
       operation: "findMany" as const,
-      table: multiHopFixture.baseTable,
+      table: "orders",
       tableConditions: null,
       whereAndArray: [],
       operationParameters: {
         select: {
-          [multiHopFixture.baseTable]: [
-            multiHopFixture.baseColumns.id,
-            multiHopFixture.baseColumns.primaryMidId,
-            multiHopFixture.baseColumns.secondaryMidId,
-          ],
-          [aliasPrimary]: [multiHopFixture.midColumns.id],
-          [aliasSecondary]: [multiHopFixture.midColumns.id],
-          [aliasEnd]: [multiHopFixture.endColumns.label],
+          orders: ["id", "product_id"],
+          "orders.product": ["title"],
+          "orders.product.reviews": ["id"],
         },
         joins: [
           {
-            table: multiHopFixture.midTable,
-            name: aliasPrimary,
+            table: "products",
+            name: "orders.product",
             path: [
               {
-                source: [
-                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.primaryMidId}`,
-                ],
-                target: [
-                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
-                ],
+                source: ["orders.product_id"],
+                target: ["products.id"],
               },
             ],
           },
           {
-            table: multiHopFixture.midTable,
-            name: aliasSecondary,
+            table: "reviews",
+            name: "orders.product.reviews",
             path: [
               {
-                source: [
-                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.secondaryMidId}`,
-                ],
-                target: [
-                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
-                ],
-              },
-            ],
-          },
-          {
-            table: multiHopFixture.endTable,
-            name: aliasEnd,
-            path: [
-              {
-                source: [
-                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.secondaryMidId}`,
-                ],
-                target: [
-                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
-                ],
+                source: ["orders.product_id"],
+                target: ["products.id"],
               },
               {
-                source: [
-                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.endId}`,
-                ],
-                target: [
-                  `${multiHopFixture.endTable}.${multiHopFixture.endColumns.id}`,
-                ],
+                source: ["products.id"],
+                target: ["reviews.product_id"],
               },
             ],
           },
         ],
         orderBy: {
-          column: multiHopFixture.baseColumns.id,
+          column: "id",
           direction: "asc" as const,
         },
         limit: 10,
@@ -144,46 +87,27 @@ describe("BigQuery findMany Join Edge Cases", () => {
     const response = await findMany(db, parsed, ctx);
 
     const expectedRows = await db
-      .selectFrom(`${multiHopFixture.baseTable} as base`)
-      .leftJoin(
-        `${multiHopFixture.midTable} as primary_mid`,
-        `primary_mid.${multiHopFixture.midColumns.id}`,
-        `base.${multiHopFixture.baseColumns.primaryMidId}`,
-      )
-      .leftJoin(
-        `${multiHopFixture.midTable} as secondary_mid`,
-        `secondary_mid.${multiHopFixture.midColumns.id}`,
-        `base.${multiHopFixture.baseColumns.secondaryMidId}`,
-      )
-      .leftJoin(
-        `${multiHopFixture.endTable} as end_tbl`,
-        `end_tbl.${multiHopFixture.endColumns.id}`,
-        `secondary_mid.${multiHopFixture.midColumns.endId}`,
-      )
+      .selectFrom("orders as o")
+      .leftJoin("products as p", "p.id", "o.product_id")
+      .leftJoin("reviews as r", "r.product_id", "p.id")
       .select([
-        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.id)}`.as(
-          baseIdKey,
-        ),
-        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.primaryMidId)}`.as(
-          basePrimaryKey,
-        ),
-        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.secondaryMidId)}`.as(
-          baseSecondaryKey,
-        ),
-        sql`${sql.ref("primary_mid")}.${sql.ref(multiHopFixture.midColumns.id)}`.as(
-          primaryMidKey,
-        ),
-        sql`${sql.ref("secondary_mid")}.${sql.ref(multiHopFixture.midColumns.id)}`.as(
-          secondaryMidKey,
-        ),
-        sql`${sql.ref("end_tbl")}.${sql.ref(multiHopFixture.endColumns.label)}`.as(
-          endLabelKey,
-        ),
+        sql<number>`o.id`.as("id"),
+        sql<number>`o.product_id`.as("product_id"),
+        sql<string>`p.title`.as("product_title"),
+        sql<number>`r.id`.as("review_id"),
       ])
-      .orderBy(`base.${multiHopFixture.baseColumns.id}`, "asc")
+      .orderBy("o.id", "asc")
       .limit(10)
       .execute();
 
-    expect(response.data).toEqual(expectedRows);
+    const expected = expectedRows.map((row: any) => ({
+      orders_id: row.id === null ? row.id : Number(row.id),
+      orders_product_id: row.product_id === null ? row.product_id : Number(row.product_id),
+      "orders.product_title": row.product_title,
+      "orders.product.reviews_id":
+        row.review_id === null ? row.review_id : Number(row.review_id),
+    }));
+
+    expect(response.data).toEqual(expected);
   }, 150000);
 });

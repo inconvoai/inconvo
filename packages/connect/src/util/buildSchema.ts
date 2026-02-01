@@ -36,7 +36,7 @@ export async function buildSchema(): Promise<SchemaResponse> {
 
   const config: IntrospectionConfig = {
     dialect: env.DATABASE_DIALECT,
-    databaseSchema: env.INCONVO_DATABASE_SCHEMA,
+    databaseSchemas: env.INCONVO_DATABASE_SCHEMA, // Already transformed to array by env.ts
   };
 
   // Add BigQuery-specific config if needed

@@ -44,7 +44,7 @@ const tableSchema = z
 export const SchemaResponseSchema = z
   .object({
     tables: z.array(tableSchema),
-    databaseSchema: z.string().nullable().optional(),  // Default schema for the connection
+    databaseSchemas: z.array(z.string()).nullable().optional(),  // Schema(s) to include for the connection
   })
   .strict();
 

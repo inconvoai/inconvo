@@ -168,7 +168,7 @@ describe("PostgreSQL Multi-Schema Operations", () => {
           relations: [],
         },
       ],
-      databaseSchema: "hr",
+      databaseSchemas: ["hr"],
     };
 
     hrCtx = {

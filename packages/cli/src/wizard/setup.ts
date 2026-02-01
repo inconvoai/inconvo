@@ -99,7 +99,7 @@ async function testDatabaseConnection(
 interface SetupConfig {
   databaseDialect: DatabaseDialect;
   databaseUrl: string;
-  databaseSchema?: string;
+  databaseSchemas?: string[];
   openaiApiKey: string;
   langchainApiKey: string;
 }
@@ -119,8 +119,8 @@ async function writeEnvFile(
     `INCONVO_DATABASE_URL=${config.databaseUrl}`,
   ];
 
-  if (config.databaseSchema) {
-    lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchema}`);
+  if (config.databaseSchemas?.length) {
+    lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchemas.join(",")}`);
   }
 
   lines.push(
@@ -243,16 +243,20 @@ export async function runSetupWizard(): Promise<boolean> {
     return false;
   }
 
-  // Database schema (optional)
-  const databaseSchema = await p.text({
-    message: "Database schema (optional, press Enter to skip):",
-    placeholder: databaseDialect === "postgresql" ? "public" : "",
+  // Database schemas (optional, comma-separated)
+  const databaseSchemasInput = await p.text({
+    message: "Database schemas (optional, comma-separated, press Enter to skip):",
+    placeholder: databaseDialect === "postgresql" ? "public, sales" : "",
   });
 
-  if (p.isCancel(databaseSchema)) {
+  if (p.isCancel(databaseSchemasInput)) {
     p.cancel("Setup cancelled.");
     return false;
   }
+
+  const databaseSchemas = databaseSchemasInput
+    ? databaseSchemasInput.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
 
   // Test database connection
   const spinner = p.spinner();
@@ -322,7 +326,7 @@ export async function runSetupWizard(): Promise<boolean> {
       {
         databaseDialect: databaseDialect as DatabaseDialect,
         databaseUrl,
-        databaseSchema: databaseSchema || undefined,
+        databaseSchemas,
         openaiApiKey,
         langchainApiKey,
       },

@@ -24,8 +24,8 @@ export type IntrospectionDialect =
  */
 export interface IntrospectionConfig {
   dialect: IntrospectionDialect;
-  /** Target schema/dataset to introspect */
-  databaseSchema?: string;
+  /** Target schema(s)/dataset to introspect */
+  databaseSchemas?: string[];
   /** BigQuery-specific config */
   bigQuery?: {
     projectId: string;
@@ -186,7 +186,7 @@ interface ForeignKeyInfo {
 async function extractForeignKeys(
   db: Kysely<unknown>,
   config: IntrospectionConfig,
-  targetSchema: string | undefined,
+  targetSchemas: string[] | undefined,
   allowedTables: Set<string>,
   logger: IntrospectionLogger,
 ): Promise<Map<string, SchemaRelation[]>> {
@@ -225,7 +225,7 @@ async function extractForeignKeys(
             ON ccu.constraint_name = tc.constraint_name
             AND ccu.constraint_schema = tc.constraint_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
-        ${targetSchema ? sql`AND tc.table_schema = ${targetSchema}` : sql``}
+        ${targetSchemas?.length ? sql`AND tc.table_schema IN (${sql.join(targetSchemas.map((s) => sql`${s}`), sql`, `)})` : sql``}
       `;
 
       const result = await query.execute(db);
@@ -247,7 +247,7 @@ async function extractForeignKeys(
               ON tc.constraint_name = kcu.constraint_name
               AND tc.constraint_schema = kcu.constraint_schema
           WHERE tc.constraint_type = 'FOREIGN KEY'
-          ${targetSchema ? sql`AND tc.table_schema = ${targetSchema}` : sql``}
+          ${targetSchemas?.length ? sql`AND tc.table_schema IN (${sql.join(targetSchemas.map((s) => sql`${s}`), sql`, `)})` : sql``}
         `;
 
         const fallbackResult = await fallbackQuery.execute(db);
@@ -372,8 +372,8 @@ async function extractForeignKeys(
         WHERE
           REFERENCED_TABLE_NAME IS NOT NULL
           ${
-            targetSchema
-              ? sql`AND TABLE_SCHEMA = ${targetSchema}`
+            targetSchemas?.length
+              ? sql`AND TABLE_SCHEMA IN (${sql.join(targetSchemas.map((s) => sql`${s}`), sql`, `)})`
               : sql`AND TABLE_SCHEMA = DATABASE()`
           }
       `;
@@ -396,8 +396,8 @@ async function extractForeignKeys(
           sys.foreign_key_columns AS fc
           ON f.object_id = fc.constraint_object_id
         ${
-          targetSchema
-            ? sql`WHERE OBJECT_SCHEMA_NAME(f.parent_object_id) = ${targetSchema}`
+          targetSchemas?.length
+            ? sql`WHERE OBJECT_SCHEMA_NAME(f.parent_object_id) IN (${sql.join(targetSchemas.map((s) => sql`${s}`), sql`, `)})`
             : sql``
         }
       `;
@@ -406,7 +406,8 @@ async function extractForeignKeys(
       rows = result.rows as any[];
     } else if (dialect === "bigquery") {
       const projectId = config.bigQuery?.projectId;
-      const datasetName = targetSchema ?? config.bigQuery?.dataset;
+      // BigQuery uses single dataset - take first schema or fall back to config
+      const datasetName = targetSchemas?.[0] ?? config.bigQuery?.dataset;
 
       if (!projectId || !datasetName) {
         logger.warn(
@@ -429,8 +430,9 @@ async function extractForeignKeys(
           "CONSTRAINT_COLUMN_USAGE",
         );
 
+        // For BigQuery, use first target schema or dataset name for filtering
         const schemaFilter =
-          targetSchema && targetSchema.length > 0 ? targetSchema : datasetName;
+          targetSchemas?.[0] && targetSchemas[0].length > 0 ? targetSchemas[0] : datasetName;
         const constraintSchemaFilterClause = schemaFilter
           ? sql`AND constraint_schema = ${schemaFilter}`
           : sql``;
@@ -582,7 +584,7 @@ async function extractForeignKeys(
 
     if (fallbackUsed) {
       logger.info(
-        { databaseSchema: targetSchema ?? null },
+        { databaseSchemas: targetSchemas ?? null },
         "Schema Introspection - used fallback foreign key query",
       );
     }
@@ -591,7 +593,7 @@ async function extractForeignKeys(
       logger.warn(
         {
           skippedForeignKeys,
-          databaseSchema: targetSchema ?? null,
+          databaseSchemas: targetSchemas ?? null,
         },
         "Schema Introspection - skipped foreign keys due to incomplete metadata",
       );
@@ -727,18 +729,25 @@ export async function buildSchemaFromDb(
   const { dialect } = config;
 
   const introspector = db.introspection;
-  const configuredSchema =
+  // For BigQuery, use single dataset; for SQL dialects, use schemas array
+  const targetSchemas: string[] | undefined =
     dialect === "bigquery"
-      ? (config.bigQuery?.dataset ?? config.databaseSchema)?.trim()
-      : config.databaseSchema?.trim();
-  const targetSchema = configuredSchema ? configuredSchema : undefined;
+      ? config.bigQuery?.dataset
+        ? [config.bigQuery.dataset]
+        : undefined
+      : config.databaseSchemas?.map((s) => s.trim()).filter(Boolean);
 
-  const schemaLabel = targetSchema ? `schema "${targetSchema}"` : "all schemas";
+  const schemaLabel =
+    targetSchemas?.length === 1
+      ? `schema "${targetSchemas[0]}"`
+      : targetSchemas?.length
+        ? `schemas [${targetSchemas.join(", ")}]`
+        : "all schemas";
 
   logger.info(
     {
       dialect,
-      targetSchema: targetSchema ?? null,
+      targetSchemas: targetSchemas ?? null,
     },
     `Schema introspection starting for ${dialect} (${schemaLabel})`,
   );
@@ -751,25 +760,25 @@ export async function buildSchemaFromDb(
     {
       duration: tablesFetchDuration,
       tables: allTables.length,
-      databaseSchema: targetSchema ?? null,
+      databaseSchemas: targetSchemas ?? null,
     },
     `Schema introspection - fetched ${allTables.length} tables in ${tablesFetchDuration}ms`,
   );
 
-  const filteredTables = targetSchema
+  const filteredTables = targetSchemas?.length
     ? allTables.filter((table) => {
         const tableSchema = (table as any).schema ?? null;
-        return tableSchema === targetSchema;
+        return tableSchema !== null && targetSchemas.includes(tableSchema);
       })
     : allTables;
 
   logger.info(
     {
       filteredTables: filteredTables.length,
-      filterSchema: targetSchema ?? null,
+      filterSchemas: targetSchemas ?? null,
     },
-    targetSchema
-      ? `Schema introspection - filtered to ${filteredTables.length} tables in schema "${targetSchema}"`
+    targetSchemas?.length
+      ? `Schema introspection - filtered to ${filteredTables.length} tables in ${schemaLabel}`
       : `Schema introspection - no schema filter applied (${filteredTables.length} tables kept)`,
   );
 
@@ -779,7 +788,7 @@ export async function buildSchemaFromDb(
   const relationsMap = await extractForeignKeys(
     db,
     config,
-    targetSchema,
+    targetSchemas,
     allowedTables,
     logger,
   );
@@ -889,7 +898,7 @@ export async function buildSchemaFromDb(
 
     const schemaTable: SchemaTable = {
       name: table.name,
-      schema: (table as any).schema ?? targetSchema,
+      schema: (table as any).schema ?? (targetSchemas?.length === 1 ? targetSchemas[0] : undefined),
       columns,
       relations: relationsMap.get(table.name),
       computedColumns: [],
@@ -909,13 +918,13 @@ export async function buildSchemaFromDb(
       tables: schemaTables.length,
       columns: totalColumns,
       relations: totalRelations,
-      databaseSchema: targetSchema ?? null,
+      databaseSchemas: targetSchemas ?? null,
     },
     `Schema introspection complete – ${schemaTables.length} tables, ${totalColumns} columns, ${totalRelations} relations (${schemaLabel}) in ${duration}ms`,
   );
 
   return {
     tables: schemaTables,
-    databaseSchema: targetSchema ?? null,
+    databaseSchemas: targetSchemas ?? null,
   };
 }

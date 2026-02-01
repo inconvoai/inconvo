@@ -1,12 +1,31 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
+import {
+  setupMultiHopFixture,
+  teardownMultiHopFixture,
+  type MultiHopFixture,
+} from "../utils/multiHopFixture";
+
+const normalizeDynamicRows = (rows: any[]) =>
+  rows.map((row) => {
+    const normalized: Record<string, any> = {};
+    for (const [key, value] of Object.entries(row)) {
+      normalized[key] = value instanceof Date ? value.toISOString() : value;
+    }
+    return normalized;
+  });
 
 describe("BigQuery findMany Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache:
+    | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
+    | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
+  let multiHopFixture: MultiHopFixture | null = null;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -15,15 +34,27 @@ describe("BigQuery findMany Operation", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
+    ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    ({ clearAugmentedSchemaCache } = await import("~/util/augmentedSchemaCache"));
+
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    multiHopFixture = await setupMultiHopFixture(db);
+
+    await clearSchemaCache();
+    clearAugmentedSchemaCache?.();
     ctx = await getTestContext();
   });
 
   afterAll(async () => {
+    if (db && multiHopFixture) {
+      await teardownMultiHopFixture(db, multiHopFixture);
+    }
     await db?.destroy?.();
+    await clearSchemaCache?.();
+    clearAugmentedSchemaCache?.();
   });
 
   test("Which order recorded the highest revenue and what product was sold?", async () => {
@@ -172,80 +203,143 @@ describe("BigQuery findMany Operation", () => {
   }, 150000);
 
   test("deduplicates shared first hop in multi-hop joins", async () => {
-    // When a single-hop join and a multi-hop join share the same first hop,
-    // only ONE SQL JOIN should be created for the shared hop.
+    if (!multiHopFixture) {
+      throw new Error("Missing multi-hop fixture setup.");
+    }
+
+    const aliasPrimary = "primaryMid";
+    const aliasSecondary = "secondaryMid";
+    const aliasEnd = `${aliasSecondary}.end`;
+
+    const baseIdKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.id}`;
+    const basePrimaryKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.primaryMidId}`;
+    const baseSecondaryKey = `${multiHopFixture.baseTable}_${multiHopFixture.baseColumns.secondaryMidId}`;
+    const primaryMidKey = `${aliasPrimary}_${multiHopFixture.midColumns.id}`;
+    const secondaryMidKey = `${aliasSecondary}_${multiHopFixture.midColumns.id}`;
+    const endLabelKey = `${aliasEnd}_${multiHopFixture.endColumns.label}`;
+
     const iql = {
       operation: "findMany" as const,
-      table: "organisations",
+      table: multiHopFixture.baseTable,
       tableConditions: null,
       whereAndArray: [],
       operationParameters: {
         select: {
-          organisations: ["id", "name"],
-          "organisations.orders": ["id", "subtotal"],
-          "organisations.orders.product": ["title"],
+          [multiHopFixture.baseTable]: [
+            multiHopFixture.baseColumns.id,
+            multiHopFixture.baseColumns.primaryMidId,
+            multiHopFixture.baseColumns.secondaryMidId,
+          ],
+          [aliasPrimary]: [multiHopFixture.midColumns.id],
+          [aliasSecondary]: [multiHopFixture.midColumns.id],
+          [aliasEnd]: [multiHopFixture.endColumns.label],
         },
         joins: [
           {
-            // Single-hop join: organisations → orders
-            table: "orders",
-            name: "organisations.orders",
+            table: multiHopFixture.midTable,
+            name: aliasPrimary,
             path: [
               {
-                source: ["organisations.id"],
-                target: ["orders.organisation_id"],
+                source: [
+                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.primaryMidId}`,
+                ],
+                target: [
+                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
+                ],
               },
             ],
           },
           {
-            // Multi-hop join: organisations → orders → products
-            // First hop is identical to the single-hop join above
-            table: "products",
-            name: "organisations.orders.product",
+            table: multiHopFixture.midTable,
+            name: aliasSecondary,
             path: [
               {
-                source: ["organisations.id"],
-                target: ["orders.organisation_id"],
+                source: [
+                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.secondaryMidId}`,
+                ],
+                target: [
+                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
+                ],
+              },
+            ],
+          },
+          {
+            table: multiHopFixture.endTable,
+            name: aliasEnd,
+            path: [
+              {
+                source: [
+                  `${multiHopFixture.baseTable}.${multiHopFixture.baseColumns.secondaryMidId}`,
+                ],
+                target: [
+                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.id}`,
+                ],
               },
               {
-                source: ["orders.product_id"],
-                target: ["products.id"],
+                source: [
+                  `${multiHopFixture.midTable}.${multiHopFixture.midColumns.endId}`,
+                ],
+                target: [
+                  `${multiHopFixture.endTable}.${multiHopFixture.endColumns.id}`,
+                ],
               },
             ],
           },
         ],
         orderBy: {
-          column: "id",
+          column: multiHopFixture.baseColumns.id,
           direction: "asc" as const,
         },
-        limit: 5,
+        limit: 10,
       },
     };
 
     const parsed = QuerySchema.parse(iql);
     const response = await findMany(db, parsed, ctx);
 
-    // Verify query executed successfully
-    expect(response.data).toBeDefined();
-    expect(Array.isArray(response.data)).toBe(true);
+    const expectedRows = await db
+      .selectFrom(`${multiHopFixture.baseTable} as base`)
+      .leftJoin(
+        `${multiHopFixture.midTable} as primary_mid`,
+        `primary_mid.${multiHopFixture.midColumns.id}`,
+        `base.${multiHopFixture.baseColumns.primaryMidId}`,
+      )
+      .leftJoin(
+        `${multiHopFixture.midTable} as secondary_mid`,
+        `secondary_mid.${multiHopFixture.midColumns.id}`,
+        `base.${multiHopFixture.baseColumns.secondaryMidId}`,
+      )
+      .leftJoin(
+        `${multiHopFixture.endTable} as end_tbl`,
+        `end_tbl.${multiHopFixture.endColumns.id}`,
+        `secondary_mid.${multiHopFixture.midColumns.endId}`,
+      )
+      .select([
+        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.id)}`.as(
+          baseIdKey,
+        ),
+        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.primaryMidId)}`.as(
+          basePrimaryKey,
+        ),
+        sql`${sql.ref("base")}.${sql.ref(multiHopFixture.baseColumns.secondaryMidId)}`.as(
+          baseSecondaryKey,
+        ),
+        sql`${sql.ref("primary_mid")}.${sql.ref(multiHopFixture.midColumns.id)}`.as(
+          primaryMidKey,
+        ),
+        sql`${sql.ref("secondary_mid")}.${sql.ref(multiHopFixture.midColumns.id)}`.as(
+          secondaryMidKey,
+        ),
+        sql`${sql.ref("end_tbl")}.${sql.ref(multiHopFixture.endColumns.label)}`.as(
+          endLabelKey,
+        ),
+      ])
+      .orderBy(`base.${multiHopFixture.baseColumns.id}`, "asc")
+      .limit(10)
+      .execute();
 
-    // KEY ASSERTION: Verify the SQL has only ONE join to orders (not two)
-    const sqlLower = response.query.sql.toLowerCase();
-    const ordersJoinCount = (sqlLower.match(/join[^,]*\borders\b/g) || []).length;
-    expect(ordersJoinCount).toBe(1);
-
-    // Verify we also have the products join
-    const productsJoinCount = (sqlLower.match(/join[^,]*\bproducts\b/g) || []).length;
-    expect(productsJoinCount).toBe(1);
-
-    // Verify data is returned correctly
-    if (response.data.length > 0) {
-      const row = response.data[0];
-      expect(row.organisations_id).toBeDefined();
-      expect(row.organisations_name).toBeDefined();
-      expect(row["organisations.orders_id"]).toBeDefined();
-      expect(row["organisations.orders_subtotal"]).toBeDefined();
-      expect(row["organisations.orders.product_title"]).toBeDefined();
-    }
+    expect(normalizeDynamicRows(response.data)).toEqual(
+      normalizeDynamicRows(expectedRows),
+    );
   }, 150000);
 });

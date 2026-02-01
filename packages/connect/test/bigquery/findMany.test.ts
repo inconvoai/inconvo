@@ -125,6 +125,7 @@ describe("BigQuery findMany Operation", () => {
         select: {
           orders: ["id", "subtotal"],
           productJoin1: ["title"],
+          productJoin2: ["title"],
         },
         joins: [
           {
@@ -179,6 +180,10 @@ describe("BigQuery findMany Operation", () => {
       expect(response.data[0]).toHaveProperty("orders_id");
       expect(response.data[0]).toHaveProperty("orders_subtotal");
       expect(response.data[0]).toHaveProperty("productJoin1_title");
+      expect(response.data[0]).toHaveProperty("productJoin2_title");
+      expect(response.data[0].productJoin1_title).toEqual(
+        response.data[0].productJoin2_title,
+      );
     }
   }, 150000);
 

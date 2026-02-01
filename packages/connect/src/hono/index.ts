@@ -15,6 +15,7 @@ import { findDistinctByEditDistance } from "../operations/findDistinctByEditDist
 import { unifiedAugmentationSchema } from "../types/customSchema";
 import type { SchemaTable, SchemaResponse } from "../types/types";
 import type { DatabaseDialect, OperationContext } from "../operations/types";
+import { QueryExecutionError } from "../util/queryErrors";
 
 /**
  * Logger interface for structured logging.
@@ -397,6 +398,19 @@ export function createApp(deps: LambdaDeps) {
           issues: error.issues,
         });
         return c.json({ error: error }, 400);
+      }
+
+      if (error instanceof QueryExecutionError) {
+        logger.error("Query execution failed with details", error, {
+          durationMs: duration,
+          sql: error.details.sql,
+          operation: error.details.operation,
+        });
+        return c.body(
+          safeJsonStringify({ error: error.details }),
+          500,
+          { "Content-Type": "application/json" },
+        );
       }
 
       logger.error("Query execution failed", error, { durationMs: duration });

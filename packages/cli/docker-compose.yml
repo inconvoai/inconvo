@@ -2,7 +2,7 @@ name: inconvo-oss
 
 services:
   dev-server:
-    image: ghcr.io/ten-dev/inconvo/dev-server:${INCONVO_VERSION:-latest}
+    image: ghcr.io/inconvoai/inconvo/dev-server:${INCONVO_VERSION:-latest}
     ports:
       - "26686:26686"
     extra_hosts:
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
 
   sandbox:
-    image: ghcr.io/ten-dev/inconvo/sandbox:${INCONVO_VERSION:-latest}
+    image: ghcr.io/inconvoai/inconvo/sandbox:${INCONVO_VERSION:-latest}
     ports:
       - "8787:8787"
     volumes:

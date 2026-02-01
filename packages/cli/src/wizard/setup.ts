@@ -231,13 +231,13 @@ export async function runSetupWizard(): Promise<boolean> {
   const useDemo = databaseSource === "demo";
   let databaseDialect: DatabaseDialect;
   let databaseUrl: string;
-  let databaseSchema: string | undefined;
+  let databaseSchemas: string[] | undefined;
 
   if (useDemo) {
     // Demo database configuration - uses Docker container
     databaseDialect = "postgresql";
     databaseUrl = "postgresql://inconvo:inconvo@demo-db:5432/demo";
-    databaseSchema = "public";
+    databaseSchemas = ["public"];
     p.log.info("Demo database will be started in a Docker container.");
   } else {
     // User's own database
@@ -285,10 +285,10 @@ export async function runSetupWizard(): Promise<boolean> {
 
     databaseUrl = urlInput;
 
-    // Database schema (optional)
+    // Database schemas (optional, comma-separated)
     const schemaInput = await p.text({
-      message: "Database schema (optional, press Enter to skip):",
-      placeholder: databaseDialect === "postgresql" ? "public" : "",
+      message: "Database schemas (optional, comma-separated, press Enter to skip):",
+      placeholder: databaseDialect === "postgresql" ? "public, sales" : "",
     });
 
     if (p.isCancel(schemaInput)) {
@@ -296,7 +296,9 @@ export async function runSetupWizard(): Promise<boolean> {
       return false;
     }
 
-    databaseSchema = schemaInput || undefined;
+    databaseSchemas = schemaInput
+      ? schemaInput.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
 
     // Test database connection
     const spinner = p.spinner();
@@ -350,7 +352,7 @@ export async function runSetupWizard(): Promise<boolean> {
       {
         databaseDialect,
         databaseUrl,
-        databaseSchemas: databaseSchema ? [databaseSchema] : undefined,
+        databaseSchemas,
         openaiApiKey,
         useDemo,
       },

@@ -378,8 +378,26 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   };
 
   const executeQuery = async (state: typeof DatabaseAgentState.State) => {
-    const queryResponse = await params.connector.query(state.query);
-    return { queryResponse: queryResponse };
+    try {
+      const queryResponse = await params.connector.query(state.query);
+      return { queryResponse: queryResponse };
+    } catch (e) {
+      // Handle ConnectQueryError with structured details
+      if (
+        e instanceof Error &&
+        e.name === "ConnectQueryError" &&
+        "details" in e
+      ) {
+        const details = (e as { details: Record<string, unknown> }).details;
+        return { error: details };
+      }
+      // Fallback for other errors - just message, no stack trace
+      return {
+        error: {
+          message: e instanceof Error ? e.message : String(e),
+        },
+      };
+    }
   };
 
   const formatDatabaseResponse = async (
@@ -457,7 +475,15 @@ export async function databaseRetrieverAgent(params: RequestParams) {
     .addEdge("set_context_filters", "set_message_derived_filters")
     .addEdge("set_message_derived_filters", "build_query")
     .addEdge("build_query", "execute_query")
-    .addEdge("execute_query", "format_database_response")
+    .addConditionalEdges("execute_query", (state) => {
+      if (state.error) {
+        return "end";
+      }
+      return "format_database_response";
+    }, {
+      end: END,
+      format_database_response: "format_database_response",
+    })
     .addEdge("format_database_response", END);
 
   return workflow.compile();

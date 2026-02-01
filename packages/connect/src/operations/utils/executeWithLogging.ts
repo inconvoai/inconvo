@@ -1,5 +1,7 @@
 import type { CompiledQuery } from "kysely";
 import { logger } from "../../util/logger";
+import { QueryExecutionError } from "../../util/queryErrors";
+import type { QueryExecutionErrorDetails } from "@repo/types";
 
 /**
  * Interface for Kysely query objects that can be both compiled and executed.
@@ -12,6 +14,23 @@ interface ExecutableQuery<T> {
 export interface QueryExecutionResult<T> {
   rows: T[];
   compiled: CompiledQuery;
+}
+
+function extractDbErrorDetails(error: unknown): {
+  code?: string;
+  detail?: string;
+  hint?: string;
+} {
+  if (!error || typeof error !== "object") {
+    return {};
+  }
+
+  const record = error as Record<string, unknown>;
+  return {
+    code: typeof record.code === "string" ? record.code : undefined,
+    detail: typeof record.detail === "string" ? record.detail : undefined,
+    hint: typeof record.hint === "string" ? record.hint : undefined,
+  };
 }
 
 /**
@@ -37,6 +56,15 @@ export async function executeWithLogging<T>(
       },
       "Query execution failed",
     );
-    throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    const details: QueryExecutionErrorDetails = {
+      type: "query_execution",
+      message,
+      sql: compiled.sql,
+      params: Array.from(compiled.parameters),
+      operation: context?.operation,
+      ...extractDbErrorDetails(error),
+    };
+    throw new QueryExecutionError(details, error);
   }
 }

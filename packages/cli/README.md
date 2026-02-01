@@ -58,7 +58,7 @@ Configuration is stored in `~/.inconvo/config.env`.
 If you want to contribute or develop locally, clone the repository instead:
 
 ```bash
-git clone https://github.com/ten-dev/inconvo.git
+git clone https://github.com/inconvoai/inconvo.git
 cd inconvo
 pnpm install
 pnpm dev

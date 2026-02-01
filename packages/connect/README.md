@@ -1,4 +1,4 @@
-# @ten-dev/inconvo
+# @inconvoai-internal/inconvo
 
 Internal database connector used by the Inconvo agent runtime and server. Built on Kysely and not intended as a public API.
 

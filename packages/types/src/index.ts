@@ -14,6 +14,30 @@ export const queryResponseSchema = z
 
 export type QueryResponse = z.infer<typeof queryResponseSchema>;
 
+export const queryExecutionErrorSchema = z
+  .object({
+    type: z.literal("query_execution"),
+    message: z.string(),
+    sql: z.string(),
+    params: z.array(z.unknown()),
+    operation: z.string().optional(),
+    code: z.string().optional(),
+    detail: z.string().optional(),
+    hint: z.string().optional(),
+  })
+  .strict();
+
+export const queryErrorResponseSchema = z
+  .object({
+    error: queryExecutionErrorSchema,
+  })
+  .strict();
+
+export type QueryExecutionErrorDetails = z.infer<
+  typeof queryExecutionErrorSchema
+>;
+export type QueryErrorResponse = z.infer<typeof queryErrorResponseSchema>;
+
 const columnSchema = z
   .object({
     name: z.string(),

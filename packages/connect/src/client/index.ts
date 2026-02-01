@@ -11,9 +11,21 @@ import {
   type Query,
   type QueryResponse,
   queryResponseSchema,
+  queryErrorResponseSchema,
+  type QueryExecutionErrorDetails,
   unifiedAugmentationsSyncSchema,
   type UnifiedAugmentationsSync,
 } from "@repo/types";
+
+export class ConnectQueryError extends Error {
+  details: QueryExecutionErrorDetails;
+
+  constructor(details: QueryExecutionErrorDetails) {
+    super(details.message);
+    this.name = "ConnectQueryError";
+    this.details = details;
+  }
+}
 
 export class UserDatabaseConnector {
   private client: AxiosInstance;
@@ -90,6 +102,14 @@ export class UserDatabaseConnector {
       const parsedResponse = queryResponseSchema.parse(response.data);
       return parsedResponse;
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data) {
+        const parsedError = queryErrorResponseSchema.safeParse(
+          error.response.data,
+        );
+        if (parsedError.success) {
+          throw new ConnectQueryError(parsedError.data.error);
+        }
+      }
       if (error instanceof ZodError) {
         throw new Error(`Validation error for Query: ${error.message}`);
       }

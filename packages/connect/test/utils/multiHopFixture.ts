@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 
 export type MultiHopFixture = {
   baseTable: string;
@@ -22,6 +22,10 @@ export type MultiHopFixture = {
 export const setupMultiHopFixture = async (
   db: Kysely<any>,
 ): Promise<MultiHopFixture> => {
+  const dialect = process.env.DATABASE_DIALECT;
+  const idType = dialect === "bigquery" ? sql.raw("int64") : "integer";
+  const labelType = dialect === "bigquery" ? sql.raw("string") : "varchar(255)";
+
   const fixture: MultiHopFixture = {
     baseTable: "inconvo_join_base",
     midTable: "inconvo_join_mid",
@@ -47,21 +51,21 @@ export const setupMultiHopFixture = async (
 
   await db.schema
     .createTable(fixture.endTable)
-    .addColumn(fixture.endColumns.id, "integer", (col) => col.primaryKey())
-    .addColumn(fixture.endColumns.label, "varchar(255)")
+    .addColumn(fixture.endColumns.id, idType, (col) => col.primaryKey())
+    .addColumn(fixture.endColumns.label, labelType)
     .execute();
 
   await db.schema
     .createTable(fixture.midTable)
-    .addColumn(fixture.midColumns.id, "integer", (col) => col.primaryKey())
-    .addColumn(fixture.midColumns.endId, "integer")
+    .addColumn(fixture.midColumns.id, idType, (col) => col.primaryKey())
+    .addColumn(fixture.midColumns.endId, idType)
     .execute();
 
   await db.schema
     .createTable(fixture.baseTable)
-    .addColumn(fixture.baseColumns.id, "integer", (col) => col.primaryKey())
-    .addColumn(fixture.baseColumns.primaryMidId, "integer")
-    .addColumn(fixture.baseColumns.secondaryMidId, "integer")
+    .addColumn(fixture.baseColumns.id, idType, (col) => col.primaryKey())
+    .addColumn(fixture.baseColumns.primaryMidId, idType)
+    .addColumn(fixture.baseColumns.secondaryMidId, idType)
     .execute();
 
   await db

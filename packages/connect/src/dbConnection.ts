@@ -151,16 +151,14 @@ export async function getDb(): Promise<Kysely<any>> {
     }
 
     const projectId = env.INCONVO_BIGQUERY_PROJECT_ID;
-    const dataset = env.INCONVO_BIGQUERY_DATASET ?? env.INCONVO_DATABASE_SCHEMA;
+    const dataset = env.INCONVO_BIGQUERY_DATASET;
 
     if (!projectId) {
       throw new Error("INCONVO_BIGQUERY_PROJECT_ID is required for BigQuery");
     }
 
     if (!dataset) {
-      throw new Error(
-        "INCONVO_BIGQUERY_DATASET or INCONVO_DATABASE_SCHEMA is required for BigQuery",
-      );
+      throw new Error("INCONVO_BIGQUERY_DATASET is required for BigQuery");
     }
 
     const dialectConfig: BigQueryDialectConfig = {

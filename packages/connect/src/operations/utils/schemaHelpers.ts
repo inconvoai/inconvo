@@ -66,9 +66,11 @@ export function getSchemaBoundDb<DB>(
   schema: SchemaResponse,
   dialect: DatabaseDialect,
 ): Kysely<DB> {
-  if (!schema.databaseSchema || dialect === "bigquery") {
+  const schemas = schema.databaseSchemas;
+  // Only use withSchema when exactly one schema is configured
+  // For multiple schemas, rely on fully-qualified table names (tableSchema on queries)
+  if (!schemas?.length || schemas.length > 1 || dialect === "bigquery") {
     return db;
   }
-
-  return db.withSchema(schema.databaseSchema);
+  return db.withSchema(schemas[0]!);
 }

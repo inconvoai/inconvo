@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 /**
@@ -21,12 +21,12 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     ({ clearSchemaCache } = await import("~/util/schemaCache"));
-    await clearSchemaCache();
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    await clearSchemaCache();
     ctx = await getTestContext();
   });
 
@@ -225,6 +225,82 @@ describe("PostgreSQL findMany Join Edge Cases", () => {
       const sql = response.query.sql.toLowerCase();
       expect(sql).toContain("left join");
       expect(sql).toContain("products");
+    });
+  });
+
+  describe("shared-hop dedupe", () => {
+    test("deduplicates shared hop for multi-hop reviews join", async () => {
+      const iql = {
+        operation: "findMany" as const,
+        table: "orders",
+        tableConditions: null,
+        whereAndArray: [],
+        operationParameters: {
+          select: {
+            orders: ["id", "product_id"],
+            "orders.product": ["title"],
+            "orders.product.reviews": ["id"],
+          },
+          joins: [
+            {
+              table: "products",
+              name: "orders.product",
+              path: [
+                {
+                  source: ["orders.product_id"],
+                  target: ["products.id"],
+                },
+              ],
+            },
+            {
+              table: "reviews",
+              name: "orders.product.reviews",
+              path: [
+                {
+                  source: ["orders.product_id"],
+                  target: ["products.id"],
+                },
+                {
+                  source: ["products.id"],
+                  target: ["reviews.product_id"],
+                },
+              ],
+            },
+          ],
+          orderBy: {
+            column: "id",
+            direction: "asc" as const,
+          },
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await findMany(db, parsed, ctx);
+
+      const expectedRows = await db
+        .selectFrom("orders as o")
+        .leftJoin("products as p", "p.id", "o.product_id")
+        .leftJoin("reviews as r", "r.product_id", "p.id")
+        .select([
+          sql<number>`o.id`.as("id"),
+          sql<number>`o.product_id`.as("product_id"),
+          sql<string>`p.title`.as("product_title"),
+          sql<number>`r.id`.as("review_id"),
+        ])
+        .orderBy("o.id", "asc")
+        .limit(10)
+        .execute();
+
+      const expected = expectedRows.map((row: any) => ({
+        orders_id: row.id === null ? row.id : Number(row.id),
+        orders_product_id: row.product_id === null ? row.product_id : Number(row.product_id),
+        "orders.product_title": row.product_title,
+        "orders.product.reviews_id":
+          row.review_id === null ? row.review_id : Number(row.review_id),
+      }));
+
+      expect(response.data).toEqual(expected);
     });
   });
 });

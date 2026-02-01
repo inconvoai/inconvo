@@ -6,6 +6,10 @@ describe("BigQuery aggregate Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache:
+    | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
+    | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
@@ -15,15 +19,22 @@ describe("BigQuery aggregate Operation", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
+    ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    ({ clearAugmentedSchemaCache } = await import("~/util/augmentedSchemaCache"));
+
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     aggregate = (await import("~/operations/aggregate")).aggregate;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    await clearSchemaCache();
+    clearAugmentedSchemaCache?.();
     ctx = await getTestContext();
   });
 
   afterAll(async () => {
     await db?.destroy?.();
+    await clearSchemaCache?.();
+    clearAugmentedSchemaCache?.();
   });
 
   test("aggregates subtotal stats", async () => {

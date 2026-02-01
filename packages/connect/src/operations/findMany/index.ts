@@ -12,9 +12,14 @@ import { executeWithLogging } from "../utils/executeWithLogging";
 interface JoinInfo {
   tableName: string;
   alias: string; // SQL alias for the joined table (may differ from tableName for duplicate joins)
-  sourceTable: string;
+}
+
+interface JoinEdge {
+  sourceAlias: string; // SQL alias or identifier for the source side of the hop
   sourceCol: string;
+  targetTable: string;
   targetCol: string;
+  targetAlias: string; // SQL alias for the target table
 }
 
 interface ColumnInfo {
@@ -46,44 +51,65 @@ export async function findMany(
     }),
   );
 
-  // Build join info map
-  // Track by alias to allow same table joined multiple times with different aliases
+  // Build join info map for selections and a join plan that tracks SQL aliases per hop.
   const joinInfoMap = new Map<string, JoinInfo>();
+  const joinEdges: JoinEdge[] = [];
   const usedSqlAliases = new Set<string>([table]);
+  const hopToSqlAlias = new Map<string, string>();
+  const baseTableId = getTableIdentifier(table, query.tableSchema, dialect);
+  const baseAlias = dialect === "bigquery" ? table : baseTableId;
+
+  const allocateSqlAlias = (tableName: string) => {
+    if (!usedSqlAliases.has(tableName)) {
+      usedSqlAliases.add(tableName);
+      return tableName;
+    }
+    let counter = 2;
+    while (usedSqlAliases.has(`${tableName}_${counter}`)) {
+      counter++;
+    }
+    const alias = `${tableName}_${counter}`;
+    usedSqlAliases.add(alias);
+    return alias;
+  };
 
   for (const join of resolvedJoins) {
-    for (let i = 0; i < join.hops.length; i++) {
-      const hop = join.hops[i];
+    let sourceAlias = baseAlias;
+    let lastTargetTable: string | null = null;
+
+    for (const hop of join.hops) {
       if (!hop || hop.source.length === 0 || hop.target.length === 0) continue;
 
-      const sourceTable = hop.source[0]?.tableName;
       const sourceCol = hop.source[0]?.columnName;
       const targetTable = hop.target[0]?.tableName;
       const targetCol = hop.target[0]?.columnName;
 
-      if (!sourceTable || !sourceCol || !targetTable || !targetCol) continue;
+      if (!sourceCol || !targetTable || !targetCol) continue;
 
-      const isLastHop = i === join.hops.length - 1;
-      const aliasKey = isLastHop ? join.alias : targetTable;
+      // Include the current SQL alias in the hop key to avoid misbinding multi-hop joins.
+      const hopKey = `${sourceAlias}.${sourceCol}|${targetTable}.${targetCol}`;
+      let targetAlias = hopToSqlAlias.get(hopKey);
 
-      // Skip if we've already processed this exact alias
-      if (joinInfoMap.has(aliasKey)) continue;
-
-      // Determine SQL alias - use table name if unique, otherwise use the aliasKey
-      // This allows joining the same table multiple times with different aliases
-      let sqlAlias = targetTable;
-      if (usedSqlAliases.has(targetTable)) {
-        // Table already joined - need a unique SQL alias
-        sqlAlias = aliasKey.replace(/\./g, "_");
+      if (!targetAlias) {
+        targetAlias = allocateSqlAlias(targetTable);
+        hopToSqlAlias.set(hopKey, targetAlias);
+        joinEdges.push({
+          sourceAlias,
+          sourceCol,
+          targetTable,
+          targetCol,
+          targetAlias,
+        });
       }
-      usedSqlAliases.add(sqlAlias);
 
-      joinInfoMap.set(aliasKey, {
-        tableName: targetTable,
-        alias: sqlAlias,
-        sourceTable,
-        sourceCol,
-        targetCol,
+      sourceAlias = targetAlias;
+      lastTargetTable = targetTable;
+    }
+
+    if (lastTargetTable) {
+      joinInfoMap.set(join.alias, {
+        tableName: lastTargetTable,
+        alias: sourceAlias,
       });
     }
   }
@@ -123,30 +149,33 @@ export async function findMany(
   }
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  const tableId = baseTableId;
   let dbQuery: any = db.selectFrom(tableId);
 
   // Add JOINs - use SQL alias when joining same table multiple times
-  for (const [, joinInfo] of joinInfoMap) {
-    // Get schema-qualified table identifier for the joined table
-    const joinedTable = schema.tables.find((t) => t.name === joinInfo.tableName);
-    const joinedTableId = getTableIdentifier(joinInfo.tableName, joinedTable?.schema, dialect);
+  // Track which SQL aliases we've already created JOINs for to avoid duplicates
+  const createdJoins = new Set<string>();
+  for (const joinEdge of joinEdges) {
+    if (createdJoins.has(joinEdge.targetAlias)) continue;
+    createdJoins.add(joinEdge.targetAlias);
 
-    // If alias differs from table name, use "table AS alias" syntax
+    const joinedTable = schema.tables.find((t) => t.name === joinEdge.targetTable);
+    const joinedTableId = getTableIdentifier(
+      joinEdge.targetTable,
+      joinedTable?.schema,
+      dialect,
+    );
+
     const joinTarget =
-      joinInfo.alias !== joinInfo.tableName
-        ? `${joinedTableId} as ${joinInfo.alias}`
+      joinEdge.targetAlias !== joinEdge.targetTable
+        ? `${joinedTableId} as ${joinEdge.targetAlias}`
         : joinedTableId;
-
-    // Get schema-qualified identifier for source table
-    const sourceTable = schema.tables.find((t) => t.name === joinInfo.sourceTable);
-    const sourceTableId = getTableIdentifier(joinInfo.sourceTable, sourceTable?.schema, dialect);
 
     dbQuery = dbQuery.leftJoin(joinTarget, (join: any) =>
       join.onRef(
-        `${sourceTableId}.${joinInfo.sourceCol}`,
+        `${joinEdge.sourceAlias}.${joinEdge.sourceCol}`,
         "=",
-        `${joinInfo.alias}.${joinInfo.targetCol}`,
+        `${joinEdge.targetAlias}.${joinEdge.targetCol}`,
       ),
     );
   }

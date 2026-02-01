@@ -54,7 +54,7 @@ ${whereConditionDocsSummary}
 - When joining tables, add a joins array where each hop pairs fully-qualified source/target columns (for example: "path": [{ "source": ["users.id"], "target": ["orders.user_id"] }])
 - Column names in joined queries must use 'table.column' format
 - **Filtering on joined tables:** When you have joins, you can filter directly on joined table columns using table.column format in where conditions (e.g., { "orders.status": { equals: "active" } }). This is simpler than using relation-based subquery filters when you already have a join defined.
-- **findMany output format:** Results are returned with flattened column names: \`{table}_{column}\` for base table columns (e.g., \`users_id\`), and \`{alias}_{column}\` for joined columns with dots replaced by double underscores (e.g., \`users__orders_subtotal\`).
+- **findMany output format:** Results are returned with flattened column names: \`{table}_{column}\` for base table columns (e.g., \`users_id\`), and \`{alias}_{column}\` for joined columns where the alias keeps its dots (e.g., \`users.orders_subtotal\`).
 - **Multiple joins to same table:** You can join the same table multiple times using different aliases (e.g., join \`users\` as both \`orders.buyer\` and \`orders.seller\`). Each alias creates a separate join with its own columns in the output.
 - OrderBy is optional for operations that support it - set to null if not needed
 - Limit can be used to restrict the number of results returned

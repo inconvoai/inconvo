@@ -8,6 +8,9 @@ describe("MSSQL findMany Operation", () => {
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache:
+    | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
+    | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
@@ -17,18 +20,21 @@ describe("MSSQL findMany Operation", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     ({ clearSchemaCache } = await import("~/util/schemaCache"));
-    await clearSchemaCache();
+    ({ clearAugmentedSchemaCache } = await import("~/util/augmentedSchemaCache"));
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    await clearSchemaCache();
+    clearAugmentedSchemaCache?.();
     ctx = await getTestContext();
   });
 
   afterAll(async () => {
     if (db) await db.destroy();
     await clearSchemaCache?.();
+    clearAugmentedSchemaCache?.();
   });
 
   test("Which order recorded the highest subtotal and what product was sold?", async () => {
@@ -109,4 +115,70 @@ describe("MSSQL findMany Operation", () => {
 
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));
   }, 15000);
+
+  test("deduplicates identical hops and creates only one SQL join", async () => {
+    // This test verifies the fix for MS SQL error 1013.
+    // When multiple logical joins share the same hop (source → target),
+    // only ONE SQL JOIN should be created, not multiple.
+    const iql = {
+      operation: "findMany" as const,
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operationParameters: {
+        select: {
+          orders: ["id", "subtotal"],
+          "orders.product": ["title"],
+          "orders.productAlt": ["title"],
+        },
+        joins: [
+          {
+            table: "products",
+            name: "orders.product",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+          {
+            // Same hop as above, different logical alias
+            table: "products",
+            name: "orders.productAlt",
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+          },
+        ],
+        orderBy: {
+          column: "id",
+          direction: "asc" as const,
+        },
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await findMany(db, parsed, ctx);
+
+    // Verify query executed successfully (no error 1013)
+    expect(response.data).toBeDefined();
+    expect(Array.isArray(response.data)).toBe(true);
+
+    // Verify both logical aliases return the same data (they share the underlying join)
+    if (response.data.length > 0) {
+      const row = response.data[0];
+      expect(row.orders_id).toBeDefined();
+      expect(row.orders_subtotal).toBeDefined();
+      expect(row["orders.product_title"]).toBeDefined();
+      expect(row["orders.productAlt_title"]).toBeDefined();
+      // Both should have the same value since they share the same join
+      expect(row["orders.product_title"]).toEqual(row["orders.productAlt_title"]);
+    }
+  }, 15000);
+
 });

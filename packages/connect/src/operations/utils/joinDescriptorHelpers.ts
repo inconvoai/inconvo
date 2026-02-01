@@ -72,6 +72,7 @@ export function applyJoinHop(
   // Build column refs with schema-qualified table names
   const getTableId = (tableName: string) => {
     if (!schema || !dialect) return tableName;
+    if (dialect === "bigquery") return tableName;
     const table = schema.tables.find((t) => t.name === tableName);
     return getTableIdentifier(tableName, table?.schema, dialect);
   };

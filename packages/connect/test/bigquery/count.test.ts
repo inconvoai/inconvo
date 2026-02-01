@@ -6,6 +6,10 @@ describe("BigQuery count Operation", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let count: (typeof import("~/operations/count"))["count"];
+  let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache:
+    | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
+    | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
@@ -15,15 +19,22 @@ describe("BigQuery count Operation", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
+    ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    ({ clearAugmentedSchemaCache } = await import("~/util/augmentedSchemaCache"));
+
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     count = (await import("~/operations/count")).count;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    await clearSchemaCache();
+    clearAugmentedSchemaCache?.();
     ctx = await getTestContext();
   });
 
   afterAll(async () => {
     await db?.destroy?.();
+    await clearSchemaCache?.();
+    clearAugmentedSchemaCache?.();
   });
 
   test("How many orders have we recorded?", async () => {

@@ -338,9 +338,16 @@ function buildRelationFilter(
   ];
 
   // Build schema-qualified table identifiers for cross-schema support
-  const currentTableId = getTableIdentifier(currentTableName, currentTable.schema, dialect);
-  const targetTableId = getTableIdentifier(targetTable, targetSchema, dialect);
-  const targetTableRef = sql.table(targetTableId);
+  const currentTableId =
+    dialect === "bigquery"
+      ? currentTableName
+      : getTableIdentifier(currentTableName, currentTable.schema, dialect);
+  const targetTableId =
+    dialect === "bigquery"
+      ? targetTable
+      : getTableIdentifier(targetTable, targetSchema, dialect);
+  const targetTableFromId = getTableIdentifier(targetTable, targetSchema, dialect);
+  const targetTableRef = sql.table(targetTableFromId);
 
   // Build table condition expression for the target table (row-level security)
   // Use schema-qualified table name for cross-schema relations

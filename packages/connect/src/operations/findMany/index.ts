@@ -57,6 +57,7 @@ export async function findMany(
   const usedSqlAliases = new Set<string>([table]);
   const hopToSqlAlias = new Map<string, string>();
   const baseTableId = getTableIdentifier(table, query.tableSchema, dialect);
+  const baseAlias = dialect === "bigquery" ? table : baseTableId;
 
   const allocateSqlAlias = (tableName: string) => {
     if (!usedSqlAliases.has(tableName)) {
@@ -73,7 +74,7 @@ export async function findMany(
   };
 
   for (const join of resolvedJoins) {
-    let sourceAlias = baseTableId;
+    let sourceAlias = baseAlias;
     let lastTargetTable: string | null = null;
 
     for (const hop of join.hops) {

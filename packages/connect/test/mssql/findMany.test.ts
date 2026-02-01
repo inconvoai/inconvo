@@ -8,6 +8,9 @@ describe("MSSQL findMany Operation", () => {
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
+  let clearAugmentedSchemaCache:
+    | (typeof import("~/util/augmentedSchemaCache"))["clearAugmentedSchemaCache"]
+    | undefined;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
   beforeAll(async () => {
@@ -17,17 +20,21 @@ describe("MSSQL findMany Operation", () => {
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
     ({ clearSchemaCache } = await import("~/util/schemaCache"));
+    ({ clearAugmentedSchemaCache } = await import("~/util/augmentedSchemaCache"));
 
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     const { getDb } = await import("~/dbConnection");
     db = await getDb();
+    await clearSchemaCache();
+    clearAugmentedSchemaCache?.();
     ctx = await getTestContext();
   });
 
   afterAll(async () => {
     if (db) await db.destroy();
     await clearSchemaCache?.();
+    clearAugmentedSchemaCache?.();
   });
 
   test("Which order recorded the highest subtotal and what product was sold?", async () => {

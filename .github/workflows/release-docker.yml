@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ten-dev/inconvo
+  IMAGE_PREFIX: inconvoai/inconvo
 
 # Top-level permissions for all jobs (can be overridden per-job)
 permissions:
@@ -301,7 +301,7 @@ jobs:
           pnpm install
 
       - name: Build CLI
-        run: pnpm --filter @ten-dev/inconvo build
+        run: pnpm --filter @inconvoai-internal/inconvo build
 
       - name: Set CLI version
         working-directory: packages/cli
@@ -347,8 +347,8 @@ jobs:
 
             ```bash
             # Configure npm for GitHub Packages (one-time)
-            npm config set @ten-dev:registry https://npm.pkg.github.com
+            npm config set @inconvoai-internal:registry https://npm.pkg.github.com
 
             # Run
-            npx @ten-dev/inconvo dev
+            npx @inconvoai-internal/inconvo dev
             ```

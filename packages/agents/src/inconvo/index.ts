@@ -496,6 +496,23 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             })
           ).invoke({});
 
+          // Check for errors from the database agent
+          if (databaseRetrieverResponse.error) {
+            return new ToolMessage({
+              status: "error",
+              name: "databaseRetriever",
+              content: JSON.stringify(
+                {
+                  error: databaseRetrieverResponse.error,
+                  database: input.database,
+                },
+                null,
+                2,
+              ),
+              tool_call_id: toolCallId,
+            });
+          }
+
           // Store raw response in state for process_database_results node
           return new Command({
             update: {
@@ -511,8 +528,18 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             },
           });
         } catch (e) {
+          // Fallback for unexpected errors
           return new ToolMessage({
-            content: `Tool error: Please check your input and try again. (${e instanceof Error ? e.message : String(e)})`,
+            status: "error",
+            name: "databaseRetriever",
+            content: JSON.stringify(
+              {
+                error: { message: e instanceof Error ? e.message : String(e) },
+                database: input.database,
+              },
+              null,
+              2,
+            ),
             tool_call_id: toolCallId,
           });
         }

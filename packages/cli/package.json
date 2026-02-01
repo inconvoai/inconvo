@@ -1,10 +1,10 @@
 {
-  "name": "@ten-dev/inconvo",
+  "name": "@inconvoai-internal/inconvo",
   "version": "0.1.0",
   "description": "CLI for Inconvo development environment",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ten-dev/inconvo.git",
+    "url": "https://github.com/inconvoai/inconvo.git",
     "directory": "packages/cli"
   },
   "type": "module",

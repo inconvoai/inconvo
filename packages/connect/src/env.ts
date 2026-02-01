@@ -14,7 +14,12 @@ export const env = createEnv({
   server: {
     DATABASE_DIALECT: z.enum(ALL_DIALECTS),
     INCONVO_DATABASE_URL: z.string().optional(),
-    INCONVO_DATABASE_SCHEMA: z.string().optional(),
+    INCONVO_DATABASE_SCHEMA: z
+      .string()
+      .optional()
+      .transform((val) =>
+        val ? val.split(",").map((s) => s.trim()).filter(Boolean) : undefined
+      ),
     INCONVO_SECRET_KEY: z.string(),
     NODE_ENV: z.enum(["development", "production", "test"]),
     INCONVO_BIGQUERY_PROJECT_ID: z.string().optional(),

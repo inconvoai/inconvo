@@ -1,9 +1,9 @@
 // @ts-nocheck
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
 import {
-  resolveAugmentationsDir,
   writeAugmentationFile,
 } from "../utils/augmentations";
 
@@ -15,12 +15,10 @@ describe("BigQuery aggregate with column conversions", () => {
   let getAugmentedSchema: (typeof import("~/util/augmentedSchemaCache"))["getAugmentedSchema"];
   let getSchemaColumnConversions: (typeof import("~/util/columnConversions"))["getSchemaColumnConversions"];
   let db: import("kysely").Kysely<any>;
-  let originalAugmentations: string | null = null;
+  let originalAugmentationsDir: string | undefined;
+  let tempAugmentDir: string | null = null;
+  let augmentationsFile: string;
   let ctx: Awaited<ReturnType<typeof getTestContext>>;
-
-  // Use the runtime augmentations dir configured by jest.setup (falls back to a temp under /test)
-  const augmentDir = resolveAugmentationsDir("");
-  const augmentationsFile = path.resolve(augmentDir, "augmentations.json");
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -30,12 +28,12 @@ describe("BigQuery aggregate with column conversions", () => {
     jest.resetModules();
     delete (globalThis as any).__INCONVO_KYSELY_DB__;
 
-    // Save original content to restore later
-    try {
-      originalAugmentations = await fs.readFile(augmentationsFile, "utf8");
-    } catch {
-      originalAugmentations = null;
-    }
+    originalAugmentationsDir = process.env.SCHEMA_AUGMENTATIONS_DIR;
+    tempAugmentDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "inconvo-augmentations-"),
+    );
+    process.env.SCHEMA_AUGMENTATIONS_DIR = tempAugmentDir;
+    augmentationsFile = path.resolve(tempAugmentDir, "augmentations.json");
 
     await writeAugmentationFile(augmentationsFile, {
       relations: [],
@@ -86,9 +84,13 @@ describe("BigQuery aggregate with column conversions", () => {
     await db?.destroy?.();
     await clearSchemaCache();
     await clearAugmentedSchemaCache();
-    // Restore original fixture content
-    if (originalAugmentations !== null) {
-      await fs.writeFile(augmentationsFile, originalAugmentations, "utf8");
+    if (originalAugmentationsDir !== undefined) {
+      process.env.SCHEMA_AUGMENTATIONS_DIR = originalAugmentationsDir;
+    } else {
+      delete process.env.SCHEMA_AUGMENTATIONS_DIR;
+    }
+    if (tempAugmentDir) {
+      await fs.rm(tempAugmentDir, { recursive: true, force: true });
     }
   });
 

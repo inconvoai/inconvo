@@ -99,7 +99,7 @@ async function testDatabaseConnection(
 interface SetupConfig {
   databaseDialect: DatabaseDialect;
   databaseUrl: string;
-  databaseSchema?: string;
+  databaseSchemas?: string[];
   openaiApiKey: string;
   useDemo: boolean;
 }
@@ -119,8 +119,8 @@ async function writeEnvFile(
     `INCONVO_DATABASE_URL=${config.databaseUrl}`,
   ];
 
-  if (config.databaseSchema) {
-    lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchema}`);
+  if (config.databaseSchemas?.length) {
+    lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchemas.join(",")}`);
   }
 
   lines.push(
@@ -350,7 +350,7 @@ export async function runSetupWizard(): Promise<boolean> {
       {
         databaseDialect,
         databaseUrl,
-        databaseSchema,
+        databaseSchemas: databaseSchema ? [databaseSchema] : undefined,
         openaiApiKey,
         useDemo,
       },

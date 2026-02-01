@@ -26,6 +26,7 @@ import { checkDatabaseHealth } from "../util/healthCheck";
 import { logDatabaseHealthCheckHint } from "../util/databaseDiagnostics";
 import { env } from "../env";
 import type { OperationContext } from "../operations/types";
+import { QueryExecutionError } from "../util/queryErrors";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {
@@ -114,7 +115,7 @@ export async function inconvo(): Promise<Router> {
       );
       const publicSchema = {
         tables: sanitizedTables,
-        databaseSchema: schema.databaseSchema,
+        databaseSchemas: schema.databaseSchemas,
       };
       res.setHeader("Content-Type", "application/json");
       res.send(safeJsonStringify(publicSchema));
@@ -221,6 +222,21 @@ export async function inconvo(): Promise<Router> {
           .status(400)
           .setHeader("Content-Type", "application/json")
           .send(safeJsonStringify({ error: error }));
+      }
+      if (error instanceof QueryExecutionError) {
+        logger.error(
+          {
+            duration,
+            error: error.details,
+            sql: error.details.sql,
+            operation: error.details.operation,
+          },
+          `POST / - Query execution failed with details after ${duration}ms`,
+        );
+        return res
+          .status(500)
+          .setHeader("Content-Type", "application/json")
+          .send(safeJsonStringify({ error: error.details }));
       }
       logger.error(
         { error, duration },

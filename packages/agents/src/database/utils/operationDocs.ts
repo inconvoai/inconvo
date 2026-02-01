@@ -1,7 +1,7 @@
 export const operationDocs = {
   findMany: {
     description:
-      "Returns one or more records for a given table using a `select` map keyed by table alias. Each key lists the columns to fetch for that alias. You can optionally include joins and an order clause (set to null if not ordering). Output columns are flattened with format: `table_column` for base table, `alias_column` for joined tables (dots in alias become underscores).",
+      "Returns one or more records for a given table using a `select` map keyed by table alias. Each key lists the columns to fetch for that alias. You can optionally include joins and an order clause (set to null if not ordering). Output columns are flattened with format: `table_column` for base table, `alias_column` for joined tables (alias dots are preserved).",
     examples: [
       {
         question:
@@ -36,19 +36,19 @@ export const operationDocs = {
         response: [
           {
             user_name: "John",
-            "user__address_line1": "123 Main St",
-            "user__address_line2": "Apt 2",
-            "user__address_city": "Boston",
-            "user__address_state": "MA",
-            "user__address_zip": "02110",
+            "user.address_line1": "123 Main St",
+            "user.address_line2": "Apt 2",
+            "user.address_city": "Boston",
+            "user.address_state": "MA",
+            "user.address_zip": "02110",
           },
           {
             user_name: "Joe",
-            "user__address_line1": "456 Elm St",
-            "user__address_line2": "Apt 3",
-            "user__address_city": "New York",
-            "user__address_state": "NY",
-            "user__address_zip": "10001",
+            "user.address_line1": "456 Elm St",
+            "user.address_line2": "Apt 3",
+            "user.address_city": "New York",
+            "user.address_state": "NY",
+            "user.address_zip": "10001",
           },
         ],
       },
@@ -102,10 +102,10 @@ export const operationDocs = {
             users_id: 1,
             users_name: "Alice",
             users_created_at: "2024-10-01T12:00:00.000Z",
-            "users__orders_id": 301,
-            "users__orders_subtotal": 199.99,
-            "users__orders_created_at": "2024-10-02T09:00:00.000Z",
-            "users__orders__products_title": "Noise Cancelling Headphones",
+            "users.orders_id": 301,
+            "users.orders_subtotal": 199.99,
+            "users.orders_created_at": "2024-10-02T09:00:00.000Z",
+            "users.orders.products_title": "Noise Cancelling Headphones",
           },
         ],
       },

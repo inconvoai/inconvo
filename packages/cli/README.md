@@ -10,8 +10,8 @@ npx inconvo dev
 
 This will:
 1. Run the setup wizard (first time only)
-2. Pull Docker images for the dev server and sandbox
-3. Start the services via Docker Compose
+2. Pull Docker images for the dev server
+3. Start the dev server in Docker and the sandbox on your machine
 
 Then open http://localhost:26686 to start chatting with your data.
 

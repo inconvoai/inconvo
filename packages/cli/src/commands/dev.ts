@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { execSync, spawn } from "child_process";
+import { execSync, spawn, spawnSync, type ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -13,9 +13,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
 const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
+const SANDBOX_DIR = path.join(INCONVO_DIR, "sandbox");
+const SANDBOX_ENV_FILE = path.join(SANDBOX_DIR, ".dev.vars");
+
+const SANDBOX_BASE_URL = "http://host.docker.internal:8787";
+const SANDBOX_PORT = "8787";
+const WRANGLER_VERSION = "4.61.1";
+
 // Bundled files (shipped with npm package)
 const BUNDLED_COMPOSE_FILE = path.join(__dirname, "..", "..", "docker-compose.yml");
 const BUNDLED_INIT_SCRIPT = path.join(__dirname, "..", "..", "demo-db-init.sql");
+const BUNDLED_SANDBOX_DIR = path.join(__dirname, "..", "..", "assets", "sandbox");
 
 function checkDockerRunning(): boolean {
   try {
@@ -138,6 +146,106 @@ function copyBundledFiles(): void {
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
   fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
   fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
+
+  if (!fs.existsSync(BUNDLED_SANDBOX_DIR)) {
+    throw new Error("Sandbox assets not found. Run `pnpm --filter inconvo build` first.");
+  }
+
+  fs.rmSync(SANDBOX_DIR, { recursive: true, force: true });
+  fs.cpSync(BUNDLED_SANDBOX_DIR, SANDBOX_DIR, { recursive: true });
+}
+
+function writeSandboxEnv(apiKey: string): void {
+  const lines = [
+    `INTERNAL_API_KEY=${apiKey}`,
+    "SKIP_BUCKET_MOUNT=true",
+    "",
+  ];
+  fs.writeFileSync(SANDBOX_ENV_FILE, lines.join("\n"));
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv; cwd?: string; stdio?: "inherit" | "pipe" }
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      env: options.env,
+      cwd: options.cwd,
+      stdio: options.stdio ?? "inherit",
+    });
+
+    proc.on("error", (error) => reject(error));
+    proc.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} exited with code ${code ?? "unknown"}`));
+      }
+    });
+  });
+}
+
+function pipeWithPrefix(stream: NodeJS.ReadableStream, prefix: string): void {
+  let buffer = "";
+  stream.on("data", (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.trim() === "") continue;
+      console.log(`${prefix} ${line}`);
+    }
+  });
+  stream.on("end", () => {
+    if (buffer.trim() !== "") {
+      console.log(`${prefix} ${buffer}`);
+    }
+  });
+}
+
+function startDockerLogs(
+  env: NodeJS.ProcessEnv,
+  useDemo: boolean
+): ChildProcess {
+  const args = ["compose", "-f", COMPOSE_FILE];
+  if (useDemo) {
+    args.push("--profile", "demo");
+  }
+  args.push("logs", "-f", "--no-color", "dev-server");
+
+  return spawn("docker", args, {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function startSandbox(): ChildProcess {
+  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  const args = [
+    "--yes",
+    `wrangler@${WRANGLER_VERSION}`,
+    "dev",
+    "--config",
+    "wrangler.jsonc",
+    "--env",
+    "dev",
+    "--local",
+    "--port",
+    SANDBOX_PORT,
+    "--ip",
+    "127.0.0.1",
+  ];
+
+  return spawn(npxCmd, args, {
+    cwd: SANDBOX_DIR,
+    env: {
+      ...process.env,
+      WRANGLER_SEND_METRICS: "false",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 export const devCommand = new Command("dev")
@@ -172,15 +280,15 @@ export const devCommand = new Command("dev")
     // Read config from ~/.inconvo/config.env
     const configEnv = await readEnvFile();
 
-    // Copy bundled docker-compose.yml to ~/.inconvo/
+    // Copy bundled files to ~/.inconvo/
     const spinner = p.spinner();
-    spinner.start("Preparing Docker environment...");
+    spinner.start("Preparing local assets...");
 
     try {
       copyBundledFiles();
-      spinner.stop("Docker environment ready");
+      spinner.stop("Local assets ready");
     } catch (error) {
-      spinner.stop("Failed to prepare Docker environment");
+      spinner.stop("Failed to prepare local assets");
       logError(`Error: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
@@ -204,14 +312,17 @@ export const devCommand = new Command("dev")
       ...dockerEnv,
       INCONVO_VERSION: imageVersion,
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
+      INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
       INCONVO_INIT_SCRIPT: INIT_SCRIPT,
     };
 
     // Set demo database URL when demo mode is enabled
     if (useDemo) {
-      env.DATABASE_DIALECT = "postgres";
+      env.DATABASE_DIALECT = "postgresql";
       env.INCONVO_DATABASE_URL = "postgresql://inconvo:inconvo@demo-db:5432/demo";
     }
+
+    writeSandboxEnv(sandboxApiKey);
 
     const devServerUrl = "http://localhost:26686";
     const telemetryDisabled = configEnv.DISABLE_TELEMETRY === "true";
@@ -227,7 +338,89 @@ export const devCommand = new Command("dev")
       console.log(`${COLORS.dim}  Run 'inconvo telemetry off' to disable.${COLORS.reset}`);
     }
     console.log("");
+    logDim(`  dev-server: ${devServerUrl}`);
+    logDim(`  sandbox:    http://localhost:${SANDBOX_PORT}`);
     logDim("  Press Ctrl+C to stop\n");
+
+    logDim("Starting Docker services...");
+    try {
+      const composeArgs = ["compose", "-f", COMPOSE_FILE];
+      if (useDemo) {
+        composeArgs.push("--profile", "demo");
+      }
+      composeArgs.push("up", "--pull", "always", "--remove-orphans", "-d");
+      await runCommand("docker", composeArgs, { env, stdio: "inherit" });
+    } catch (error) {
+      logError(`Failed to start Docker services: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+
+    const dockerLogsProc = startDockerLogs(env, useDemo);
+    const sandboxProc = startSandbox();
+
+    pipeWithPrefix(dockerLogsProc.stdout!, `${COLORS.cyan}[dev-server]${COLORS.reset}`);
+    pipeWithPrefix(dockerLogsProc.stderr!, `${COLORS.cyan}[dev-server]${COLORS.reset}`);
+    pipeWithPrefix(sandboxProc.stdout!, `${COLORS.yellow}[sandbox]${COLORS.reset}`);
+    pipeWithPrefix(sandboxProc.stderr!, `${COLORS.yellow}[sandbox]${COLORS.reset}`);
+
+    let shuttingDown = false;
+
+    const shutdown = (code = 0) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+
+      console.log(`\n${COLORS.gray}Shutting down...${COLORS.reset}`);
+
+      if (sandboxProc && !sandboxProc.killed) {
+        sandboxProc.kill("SIGINT");
+      }
+      if (dockerLogsProc && !dockerLogsProc.killed) {
+        dockerLogsProc.kill("SIGTERM");
+      }
+
+      try {
+        const downArgs = ["compose", "-f", COMPOSE_FILE];
+        if (useDemo) {
+          downArgs.push("--profile", "demo");
+        }
+        downArgs.push("down");
+        spawnSync("docker", downArgs, {
+          stdio: "inherit",
+          env,
+        });
+      } catch {
+        // Ignore errors during shutdown
+      }
+
+      process.exit(code);
+    };
+
+    process.on("SIGINT", () => shutdown(0));
+    process.on("SIGTERM", () => shutdown(0));
+
+    sandboxProc.on("error", (error) => {
+      logError(`Failed to start sandbox: ${error.message}`);
+      shutdown(1);
+    });
+
+    sandboxProc.on("exit", (code) => {
+      if (!shuttingDown) {
+        logError("Sandbox exited unexpectedly.");
+        shutdown(code ?? 1);
+      }
+    });
+
+    dockerLogsProc.on("error", (error) => {
+      logError(`Failed to stream dev-server logs: ${error.message}`);
+      shutdown(1);
+    });
+
+    dockerLogsProc.on("exit", (code) => {
+      if (!shuttingDown) {
+        logError("Dev-server logs stopped unexpectedly.");
+        shutdown(code ?? 1);
+      }
+    });
 
     // Wait for demo database to be ready, seed it, and configure the dev-server (runs in background)
     if (useDemo) {
@@ -247,64 +440,15 @@ export const devCommand = new Command("dev")
       });
     } else {
       // Non-demo mode: just wait for server and open browser
-      waitForServer(devServerUrl).then((ready) => {
-        if (ready) {
-          logInfo("Opening browser...");
-          openBrowser(devServerUrl);
-        }
-      }).catch(() => {
-        // Silently ignore errors
-      });
-    }
-
-    // Build docker compose arguments
-    const composeArgs = ["compose", "-f", COMPOSE_FILE];
-    if (useDemo) {
-      composeArgs.push("--profile", "demo");
-    }
-    composeArgs.push("up", "--pull", "always", "--remove-orphans");
-
-    // Run docker compose up
-    const proc = spawn("docker", composeArgs, {
-      env,
-      stdio: "inherit",
-    });
-
-    let shuttingDown = false;
-
-    const shutdown = () => {
-      if (shuttingDown) return;
-      shuttingDown = true;
-
-      console.log("\n\x1b[90mShutting down...\x1b[0m");
-
-      // Run docker compose down
-      try {
-        const downCmd = useDemo
-          ? `docker compose -f "${COMPOSE_FILE}" --profile demo down`
-          : `docker compose -f "${COMPOSE_FILE}" down`;
-        execSync(downCmd, {
-          stdio: "inherit",
-          env,
+      waitForServer(devServerUrl)
+        .then((ready) => {
+          if (ready) {
+            logInfo("Opening browser...");
+            openBrowser(devServerUrl);
+          }
+        })
+        .catch(() => {
+          // Silently ignore errors
         });
-      } catch {
-        // Ignore errors during shutdown
-      }
-
-      process.exit(0);
-    };
-
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-
-    proc.on("error", (error) => {
-      logError(`Failed to start Docker: ${error.message}`);
-      process.exit(1);
-    });
-
-    proc.on("exit", (code) => {
-      if (!shuttingDown) {
-        process.exit(code || 0);
-      }
-    });
+    }
   });

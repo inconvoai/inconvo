@@ -21,6 +21,7 @@ interface SDKResponse {
   conversationId: string;
   type: string;
   message: string;
+  spec?: unknown;
   chart?: unknown;
   table?: unknown;
 }
@@ -128,7 +129,11 @@ export async function POST(
         message: response.message,
       };
       if (response.type === "chart") {
-        return { ...base, chart: response.spec };
+        return {
+          ...base,
+          spec: response.spec,
+          chart: response.chart,
+        };
       }
       if (response.type === "table") {
         return { ...base, table: response.table };

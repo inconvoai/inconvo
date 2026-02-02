@@ -54,15 +54,19 @@ export async function POST() {
       if (subtotalCol && discountCol && taxCol) {
         // AST for: subtotal - discount + tax
         const totalAst = {
-          type: "binary_expr",
+          type: "operation",
           operator: "+",
-          left: {
-            type: "binary_expr",
-            operator: "-",
-            left: { type: "column_ref", table: null, column: "subtotal" },
-            right: { type: "column_ref", table: null, column: "discount" },
-          },
-          right: { type: "column_ref", table: null, column: "tax" },
+          operands: [
+            {
+              type: "operation",
+              operator: "-",
+              operands: [
+                { type: "column", name: "subtotal" },
+                { type: "column", name: "discount" },
+              ],
+            },
+            { type: "column", name: "tax" },
+          ],
         };
 
         await prisma.computedColumn.upsert({

@@ -22,9 +22,25 @@ const SANDBOX_PORT = "8787";
 const WRANGLER_VERSION = "4.61.1";
 
 // Bundled files (shipped with npm package)
-const BUNDLED_COMPOSE_FILE = path.join(__dirname, "..", "..", "docker-compose.yml");
-const BUNDLED_INIT_SCRIPT = path.join(__dirname, "..", "..", "demo-db-init.sql");
-const BUNDLED_SANDBOX_DIR = path.join(__dirname, "..", "..", "assets", "sandbox");
+const BUNDLED_COMPOSE_FILE = path.join(
+  __dirname,
+  "..",
+  "..",
+  "docker-compose.yml",
+);
+const BUNDLED_INIT_SCRIPT = path.join(
+  __dirname,
+  "..",
+  "..",
+  "demo-db-init.sql",
+);
+const BUNDLED_SANDBOX_DIR = path.join(
+  __dirname,
+  "..",
+  "..",
+  "assets",
+  "sandbox",
+);
 
 function checkDockerRunning(): boolean {
   try {
@@ -64,7 +80,12 @@ function rewriteLocalhostForDocker(url: string): string {
  */
 function openBrowser(url: string): void {
   const platform = process.platform;
-  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+  const cmd =
+    platform === "darwin"
+      ? "open"
+      : platform === "win32"
+        ? "start"
+        : "xdg-open";
   try {
     execSync(`${cmd} ${url}`, { stdio: "ignore" });
   } catch {
@@ -109,14 +130,19 @@ async function waitForDemoDbAndSeed(maxAttempts = 60): Promise<void> {
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  console.log(`${COLORS.dim}  Warning: Could not seed demo database${COLORS.reset}`);
+  console.log(
+    `${COLORS.dim}  Warning: Could not seed demo database${COLORS.reset}`,
+  );
 }
 
 /**
  * Configure the dev-server's SQLite database for demo mode
  * This sets up user context, computed columns, and table conditions
  */
-async function configureDemoDatabase(devServerUrl: string, maxAttempts = 30): Promise<void> {
+async function configureDemoDatabase(
+  devServerUrl: string,
+  maxAttempts = 30,
+): Promise<void> {
   const setupUrl = `${devServerUrl}/api/demo/setup`;
 
   for (let i = 0; i < maxAttempts; i++) {
@@ -138,7 +164,9 @@ async function configureDemoDatabase(devServerUrl: string, maxAttempts = 30): Pr
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  console.log(`${COLORS.dim}  Warning: Could not configure demo database${COLORS.reset}`);
+  console.log(
+    `${COLORS.dim}  Warning: Could not configure demo database${COLORS.reset}`,
+  );
 }
 
 function copyBundledFiles(): void {
@@ -150,7 +178,9 @@ function copyBundledFiles(): void {
   fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
 
   if (!fs.existsSync(BUNDLED_SANDBOX_DIR)) {
-    throw new Error("Sandbox assets not found. Run `pnpm --filter inconvo build` first.");
+    throw new Error(
+      "Sandbox assets not found. Run `pnpm --filter inconvo build` first.",
+    );
   }
 
   fs.rmSync(SANDBOX_DIR, { recursive: true, force: true });
@@ -158,18 +188,18 @@ function copyBundledFiles(): void {
 }
 
 function writeSandboxEnv(apiKey: string): void {
-  const lines = [
-    `INTERNAL_API_KEY=${apiKey}`,
-    "SKIP_BUCKET_MOUNT=true",
-    "",
-  ];
+  const lines = [`INTERNAL_API_KEY=${apiKey}`, "SKIP_BUCKET_MOUNT=true", ""];
   fs.writeFileSync(SANDBOX_ENV_FILE, lines.join("\n"));
 }
 
 function runCommand(
   command: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv; cwd?: string; stdio?: "inherit" | "pipe" }
+  options: {
+    env?: NodeJS.ProcessEnv;
+    cwd?: string;
+    stdio?: "inherit" | "pipe";
+  },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -209,7 +239,7 @@ function pipeWithPrefix(stream: NodeJS.ReadableStream, prefix: string): void {
 
 function startDockerLogs(
   env: NodeJS.ProcessEnv,
-  useDemo: boolean
+  useDemo: boolean,
 ): ChildProcess {
   const args = ["compose", "-f", COMPOSE_FILE];
   if (useDemo) {
@@ -240,31 +270,47 @@ function startSandbox(): ChildProcess {
     "127.0.0.1",
   ];
 
+  const sandboxEnv: Record<string, string> = {
+    ...process.env,
+    WRANGLER_SEND_METRICS: "false",
+  };
+  for (const key of Object.keys(sandboxEnv)) {
+    if (key.startsWith("npm_package_")) {
+      delete sandboxEnv[key];
+    }
+  }
+  delete sandboxEnv.npm_config_package;
+  delete sandboxEnv.npm_config_argv;
+
   return spawn(npxCmd, args, {
     cwd: SANDBOX_DIR,
-    env: {
-      ...process.env,
-      WRANGLER_SEND_METRICS: "false",
-    },
+    env: sandboxEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
-  .option("--image-version <version>", "Use a specific Docker image version (default: latest)")
+  .option(
+    "--image-version <version>",
+    "Use a specific Docker image version (default: latest)",
+  )
   .action(async (options: { imageVersion?: string }) => {
     const imageVersion = options.imageVersion || "latest";
 
     // Check Docker is running
     if (!checkDockerRunning()) {
-      logError("Docker is not running. Please start Docker Desktop or Docker daemon.");
+      logError(
+        "Docker is not running. Please start Docker Desktop or Docker daemon.",
+      );
       process.exit(1);
     }
 
     // Check docker compose is available
     if (!checkDockerComposeAvailable()) {
-      logError("Docker Compose is not available. Please install Docker Desktop or docker-compose.");
+      logError(
+        "Docker Compose is not available. Please install Docker Desktop or docker-compose.",
+      );
       process.exit(1);
     }
 
@@ -291,7 +337,9 @@ export const devCommand = new Command("dev")
       spinner.stop("Local assets ready");
     } catch (error) {
       spinner.stop("Failed to prepare local assets");
-      logError(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      logError(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
       process.exit(1);
     }
 
@@ -305,12 +353,14 @@ export const devCommand = new Command("dev")
     // (not needed for demo mode since the database is in the same Docker network)
     const dockerEnv = { ...configEnv };
     if (!useDemo && dockerEnv.INCONVO_DATABASE_URL) {
-      dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(dockerEnv.INCONVO_DATABASE_URL);
+      dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(
+        dockerEnv.INCONVO_DATABASE_URL,
+      );
     }
 
     // Build environment for docker compose
     const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...(process.env as Record<string, string>),
       ...dockerEnv,
       INCONVO_VERSION: imageVersion,
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
@@ -322,7 +372,8 @@ export const devCommand = new Command("dev")
     // Set demo database URL when demo mode is enabled
     if (useDemo) {
       env.DATABASE_DIALECT = "postgresql";
-      env.INCONVO_DATABASE_URL = "postgresql://inconvo:inconvo@demo-db:5432/demo";
+      env.INCONVO_DATABASE_URL =
+        "postgresql://inconvo:inconvo@demo-db:5432/demo";
     }
 
     writeSandboxEnv(sandboxApiKey);
@@ -337,8 +388,12 @@ export const devCommand = new Command("dev")
     if (telemetryDisabled) {
       console.log(`${COLORS.dim}  Telemetry disabled${COLORS.reset}`);
     } else {
-      console.log(`${COLORS.dim}  Anonymous telemetry is enabled to help improve Inconvo.${COLORS.reset}`);
-      console.log(`${COLORS.dim}  Run 'inconvo telemetry off' to disable.${COLORS.reset}`);
+      console.log(
+        `${COLORS.dim}  Anonymous telemetry is enabled to help improve Inconvo.${COLORS.reset}`,
+      );
+      console.log(
+        `${COLORS.dim}  Run 'inconvo telemetry off' to disable.${COLORS.reset}`,
+      );
     }
     console.log("");
     logDim(`  dev-server: ${devServerUrl}`);
@@ -354,17 +409,31 @@ export const devCommand = new Command("dev")
       composeArgs.push("up", "--pull", "always", "--remove-orphans", "-d");
       await runCommand("docker", composeArgs, { env, stdio: "inherit" });
     } catch (error) {
-      logError(`Failed to start Docker services: ${error instanceof Error ? error.message : String(error)}`);
+      logError(
+        `Failed to start Docker services: ${error instanceof Error ? error.message : String(error)}`,
+      );
       process.exit(1);
     }
 
     const dockerLogsProc = startDockerLogs(env, useDemo);
     const sandboxProc = startSandbox();
 
-    pipeWithPrefix(dockerLogsProc.stdout!, `${COLORS.cyan}[dev-server]${COLORS.reset}`);
-    pipeWithPrefix(dockerLogsProc.stderr!, `${COLORS.cyan}[dev-server]${COLORS.reset}`);
-    pipeWithPrefix(sandboxProc.stdout!, `${COLORS.yellow}[sandbox]${COLORS.reset}`);
-    pipeWithPrefix(sandboxProc.stderr!, `${COLORS.yellow}[sandbox]${COLORS.reset}`);
+    pipeWithPrefix(
+      dockerLogsProc.stdout!,
+      `${COLORS.cyan}[dev-server]${COLORS.reset}`,
+    );
+    pipeWithPrefix(
+      dockerLogsProc.stderr!,
+      `${COLORS.cyan}[dev-server]${COLORS.reset}`,
+    );
+    pipeWithPrefix(
+      sandboxProc.stdout!,
+      `${COLORS.yellow}[sandbox]${COLORS.reset}`,
+    );
+    pipeWithPrefix(
+      sandboxProc.stderr!,
+      `${COLORS.yellow}[sandbox]${COLORS.reset}`,
+    );
 
     let shuttingDown = false;
 

@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { inconvoAgent } from "@repo/agents";
+import {
+  aiMessageContainsJsonLikeText,
+  extractTextFromMessage,
+  inconvoAgent,
+} from "@repo/agents";
 import { getConnector } from "~/lib/connector";
 import { getCheckpointer } from "~/lib/checkpointer";
 import { getSchema } from "~/lib/schema";
@@ -255,7 +259,7 @@ export async function POST(
             id: runId,
           });
 
-          // Stream events from the agent
+          // Stream events from the agent with keep-alive progress
           const eventStream = graph.streamEvents(
             {
               userQuestion: message,
@@ -272,8 +276,80 @@ export async function POST(
           );
 
           let lastResponse: InconvoResponse | undefined;
+          const seenMessageKeys = new Set<string>();
+          let fallbackMessageCounter = 0;
+          let lastMessage: string | null = null;
+          const KEEP_ALIVE_INTERVAL = 30000;
+          let lastYieldTime = Date.now();
 
-          for await (const event of eventStream) {
+          const streamIterator = eventStream[Symbol.asyncIterator]();
+
+          const getMessageKey = (messageValue: unknown): string => {
+            if (messageValue && typeof messageValue === "object") {
+              const possibleId = (messageValue as { id?: string }).id;
+              if (possibleId) return possibleId;
+            }
+            fallbackMessageCounter += 1;
+            try {
+              return `message-${fallbackMessageCounter}-${JSON.stringify(
+                messageValue,
+              )}`;
+            } catch {
+              return `message-${fallbackMessageCounter}`;
+            }
+          };
+
+          type LangGraphIteratorResult = Awaited<
+            ReturnType<typeof streamIterator.next>
+          >;
+
+          const waitForNextStreamResult = async (): Promise<
+            "timeout" | LangGraphIteratorResult
+          > => {
+            const timeSinceLastYield = Date.now() - lastYieldTime;
+            const timeUntilKeepAlive = Math.max(
+              0,
+              KEEP_ALIVE_INTERVAL - timeSinceLastYield,
+            );
+            let timeoutId: ReturnType<typeof setTimeout> | undefined;
+            const timeoutPromise = new Promise<"timeout">((resolve) => {
+              timeoutId = setTimeout(
+                () => resolve("timeout"),
+                timeUntilKeepAlive,
+              );
+            });
+
+            let nextPromise: Promise<LangGraphIteratorResult>;
+            try {
+              nextPromise = streamIterator.next();
+            } catch (error) {
+              if (timeoutId) clearTimeout(timeoutId);
+              throw error;
+            }
+
+            try {
+              return await Promise.race([nextPromise, timeoutPromise]);
+            } finally {
+              if (timeoutId) clearTimeout(timeoutId);
+            }
+          };
+
+          while (true) {
+            const result = await waitForNextStreamResult();
+
+            if (result === "timeout") {
+              sendEvent({
+                type: "response.progress",
+                id: runId,
+                message: lastMessage ? `${lastMessage}\n⋯` : "Processing...",
+              });
+              lastYieldTime = Date.now();
+              continue;
+            }
+
+            if (result.done) break;
+            const event = result.value;
+
             // Handle chain end events
             if (event.event === "on_chain_end") {
               // Progress updates from inconvo_agent node
@@ -283,34 +359,35 @@ export async function POST(
                   | undefined;
                 if (output?.messages) {
                   const messages = Array.isArray(output.messages)
-                    ? (output.messages as Array<{
-                        _getType?: () => string;
-                        content?: unknown;
-                      }>)
-                    : [
-                        output.messages as {
-                          _getType?: () => string;
-                          content?: unknown;
-                        },
-                      ];
+                    ? output.messages
+                    : [output.messages];
                   for (const msg of messages) {
-                    if (msg?._getType?.() === "ai" && msg.content) {
-                      const content =
-                        typeof msg.content === "string"
-                          ? msg.content
-                          : JSON.stringify(msg.content);
-                      // Only send non-empty, non-JSON content as progress
-                      if (
-                        content &&
-                        !content.startsWith("{") &&
-                        !content.startsWith("[")
-                      ) {
-                        sendEvent({
-                          type: "response.progress",
-                          id: runId,
-                          message: content,
-                        });
-                      }
+                    const messageValue = msg as
+                      | { _getType?: () => string }
+                      | undefined;
+                    if (messageValue?._getType?.() !== "ai") continue;
+                    const messageKey = getMessageKey(msg);
+                    if (seenMessageKeys.has(messageKey)) continue;
+                    seenMessageKeys.add(messageKey);
+
+                    const jsonLike = aiMessageContainsJsonLikeText(
+                      msg as Parameters<typeof aiMessageContainsJsonLikeText>[0],
+                    );
+                    if (jsonLike) continue;
+
+                    const textParts = extractTextFromMessage(
+                      msg as Parameters<typeof extractTextFromMessage>[0],
+                    );
+                    for (const part of textParts) {
+                      const content = part.trim();
+                      if (!content) continue;
+                      lastMessage = content;
+                      sendEvent({
+                        type: "response.progress",
+                        id: runId,
+                        message: content,
+                      });
+                      lastYieldTime = Date.now();
                     }
                   }
                 }

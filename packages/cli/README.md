@@ -10,8 +10,8 @@ npx inconvo dev
 
 This will:
 1. Run the setup wizard (first time only)
-2. Pull Docker images for the dev server and sandbox
-3. Start the services via Docker Compose
+2. Pull Docker images for the dev server
+3. Start the dev server in Docker and the sandbox on your machine
 
 Then open http://localhost:26686 to start chatting with your data.
 
@@ -47,9 +47,9 @@ On first run, the CLI will prompt you for:
 
 - **Database connection** - PostgreSQL, MySQL, or SQL Server
 - **OpenAI API key** - For the LLM
-- **LangChain API key** - For prompt management
 
 Configuration is stored in `~/.inconvo/config.env`.
+The CLI stores the dev-server SQLite database at `~/.inconvo/data/inconvo.db`.
 
 > **Note**: When developing locally from a cloned repo, the dev-server uses `.inconvo.env` in the `apps/dev-server/` directory instead. These are separate configurations.
 

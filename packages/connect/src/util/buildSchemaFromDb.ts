@@ -730,12 +730,19 @@ export async function buildSchemaFromDb(
 
   const introspector = db.introspection;
   // For BigQuery, use single dataset; for SQL dialects, use schemas array
+  const rawSchemas = (config as { databaseSchemas?: string[] | string | null })
+    .databaseSchemas;
+  const schemaList = Array.isArray(rawSchemas)
+    ? rawSchemas
+    : typeof rawSchemas === "string"
+      ? rawSchemas.split(",")
+      : undefined;
   const targetSchemas: string[] | undefined =
     dialect === "bigquery"
       ? config.bigQuery?.dataset
         ? [config.bigQuery.dataset]
         : undefined
-      : config.databaseSchemas?.map((s) => s.trim()).filter(Boolean);
+      : schemaList?.map((s) => s.trim()).filter(Boolean);
 
   const schemaLabel =
     targetSchemas?.length === 1

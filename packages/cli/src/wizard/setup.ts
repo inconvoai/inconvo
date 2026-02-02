@@ -101,7 +101,7 @@ interface SetupConfig {
   databaseUrl: string;
   databaseSchemas?: string[];
   openaiApiKey: string;
-  langchainApiKey: string;
+  useDemo: boolean;
 }
 
 async function writeEnvFile(
@@ -131,8 +131,12 @@ async function writeEnvFile(
     "# LLM Configuration",
     `OPENAI_API_KEY=${config.openaiApiKey}`,
     "",
-    "# LangChain Configuration",
-    `LANGCHAIN_API_KEY=${config.langchainApiKey}`,
+    "# Demo Mode",
+    `USE_DEMO_DATABASE=${config.useDemo ? "true" : "false"}`,
+    "",
+    "# Telemetry (anonymous usage data to help improve Inconvo)",
+    "# Run 'inconvo telemetry off' to disable",
+    "DISABLE_TELEMETRY=false",
     ""
   );
 
@@ -181,6 +185,11 @@ export async function readEnvFile(): Promise<Record<string, string>> {
   }
 }
 
+const maskSecret = (value: string, visibleChars = 20): string => {
+  if (value.length <= visibleChars) return value;
+  return `${value.slice(0, visibleChars)}${"*".repeat(value.length - visibleChars)}`;
+};
+
 export async function runSetupWizard(): Promise<boolean> {
   p.intro("Inconvo Configuration Setup");
 
@@ -202,95 +211,132 @@ export async function runSetupWizard(): Promise<boolean> {
     }
   }
 
-  // Database type selection
-  const databaseDialect = await p.select({
-    message: "Select your database type:",
+  // Database source selection
+  const databaseSource = await p.select({
+    message: "Choose your database:",
     options: [
-      { value: "postgresql", label: "PostgreSQL", hint: "recommended" },
-      { value: "mysql", label: "MySQL" },
-      { value: "mssql", label: "Microsoft SQL Server" },
+      {
+        value: "demo",
+        label: "Demo database",
+        hint: "PostgreSQL in Docker - great for trying out Inconvo",
+      },
+      {
+        value: "own",
+        label: "My own database",
+        hint: "Connect to your existing database",
+      },
     ],
   });
 
-  if (p.isCancel(databaseDialect)) {
+  if (p.isCancel(databaseSource)) {
     p.cancel("Setup cancelled.");
     return false;
   }
 
-  // Connection string
-  const placeholders: Record<DatabaseDialect, string> = {
-    postgresql: "postgresql://user:password@localhost:5432/database",
-    mysql: "mysql://user:password@localhost:3306/database",
-    mssql: "mssql://user:password@localhost:1433/database",
-  };
+  const useDemo = databaseSource === "demo";
+  let databaseDialect: DatabaseDialect;
+  let databaseUrl: string;
+  let databaseSchemas: string[] | undefined;
 
-  const databaseUrl = await p.text({
-    message: "Enter your database connection string:",
-    placeholder: placeholders[databaseDialect as DatabaseDialect],
-    validate: (value) => {
-      if (!value) return "Connection string is required";
-      try {
-        new URL(value);
-        return undefined;
-      } catch {
-        return "Please enter a valid connection URL";
-      }
-    },
-  });
-
-  if (p.isCancel(databaseUrl)) {
-    p.cancel("Setup cancelled.");
-    return false;
-  }
-
-  // Database schemas (optional, comma-separated)
-  const databaseSchemasInput = await p.text({
-    message: "Database schemas (optional, comma-separated, press Enter to skip):",
-    placeholder: databaseDialect === "postgresql" ? "public, sales" : "",
-  });
-
-  if (p.isCancel(databaseSchemasInput)) {
-    p.cancel("Setup cancelled.");
-    return false;
-  }
-
-  const databaseSchemas = databaseSchemasInput
-    ? databaseSchemasInput.split(",").map((s) => s.trim()).filter(Boolean)
-    : undefined;
-
-  // Test database connection
-  const spinner = p.spinner();
-  spinner.start("Testing database connection...");
-
-  try {
-    await testDatabaseConnection(
-      databaseDialect as DatabaseDialect,
-      databaseUrl
-    );
-    spinner.stop("Database connection successful!");
-  } catch (error) {
-    spinner.stop("Database connection failed");
-    p.log.error(
-      `Connection error: ${error instanceof Error ? error.message : String(error)}`
-    );
-
-    const retry = await p.confirm({
-      message: "Would you like to enter a different connection string?",
-      initialValue: true,
+  if (useDemo) {
+    // Demo database configuration - uses Docker container
+    databaseDialect = "postgresql";
+    databaseUrl = "postgresql://inconvo:inconvo@demo-db:5432/demo";
+    databaseSchemas = ["public"];
+    p.log.info("Demo database will be started in a Docker container.");
+  } else {
+    // User's own database
+    const dialectChoice = await p.select({
+      message: "Select your database type:",
+      options: [
+        { value: "postgresql", label: "PostgreSQL", hint: "recommended" },
+        { value: "mysql", label: "MySQL" },
+        { value: "mssql", label: "Microsoft SQL Server" },
+      ],
     });
 
-    if (p.isCancel(retry) || !retry) {
+    if (p.isCancel(dialectChoice)) {
       p.cancel("Setup cancelled.");
       return false;
     }
 
-    return runSetupWizard();
+    databaseDialect = dialectChoice as DatabaseDialect;
+
+    // Connection string
+    const placeholders: Record<DatabaseDialect, string> = {
+      postgresql: "postgresql://user:password@localhost:5432/database",
+      mysql: "mysql://user:password@localhost:3306/database",
+      mssql: "mssql://user:password@localhost:1433/database",
+    };
+
+    const urlInput = await p.text({
+      message: "Enter your database connection string:",
+      placeholder: placeholders[databaseDialect],
+      validate: (value) => {
+        if (!value) return "Connection string is required";
+        try {
+          new URL(value);
+          return undefined;
+        } catch {
+          return "Please enter a valid connection URL";
+        }
+      },
+    });
+
+    if (p.isCancel(urlInput)) {
+      p.cancel("Setup cancelled.");
+      return false;
+    }
+
+    databaseUrl = urlInput;
+
+    // Database schemas (optional, comma-separated)
+    const schemaInput = await p.text({
+      message: "Database schemas (optional, comma-separated, press Enter to skip):",
+      placeholder: databaseDialect === "postgresql" ? "public, sales" : "",
+    });
+
+    if (p.isCancel(schemaInput)) {
+      p.cancel("Setup cancelled.");
+      return false;
+    }
+
+    databaseSchemas = schemaInput
+      ? schemaInput.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    // Test database connection
+    const spinner = p.spinner();
+    spinner.start("Testing database connection...");
+
+    try {
+      await testDatabaseConnection(databaseDialect, databaseUrl);
+      spinner.stop("Database connection successful!");
+    } catch (error) {
+      spinner.stop("Database connection failed");
+      p.log.error(
+        `Connection error: ${error instanceof Error ? error.message : String(error)}`
+      );
+
+      const retry = await p.confirm({
+        message: "Would you like to enter a different connection string?",
+        initialValue: true,
+      });
+
+      if (p.isCancel(retry) || !retry) {
+        p.cancel("Setup cancelled.");
+        return false;
+      }
+
+      return runSetupWizard();
+    }
   }
 
   // OpenAI API key
-  const openaiApiKey = await p.text({
+  const openaiApiKey = await p.password({
     message: "Enter your OpenAI API key:",
-    placeholder: "sk-...",
+    mask: "*",
+    clearOnError: true,
     validate: (value) => {
       if (!value) return "OpenAI API key is required";
       if (!value.startsWith("sk-")) return "Invalid OpenAI API key format";
@@ -302,39 +348,27 @@ export async function runSetupWizard(): Promise<boolean> {
     p.cancel("Setup cancelled.");
     return false;
   }
-
-  // LangChain API key
-  const langchainApiKey = await p.text({
-    message: "Enter your LangChain API key (for prompts):",
-    placeholder: "lsv2_pt_...",
-    validate: (value) => {
-      if (!value) return "LangChain API key is required";
-      return undefined;
-    },
-  });
-
-  if (p.isCancel(langchainApiKey)) {
-    p.cancel("Setup cancelled.");
-    return false;
-  }
+  const openaiApiKeyValue = openaiApiKey as string;
 
   // Write configuration
-  spinner.start("Saving configuration...");
+  const saveSpinner = p.spinner();
+  saveSpinner.start("Saving configuration...");
 
   try {
     await writeEnvFile(
       {
-        databaseDialect: databaseDialect as DatabaseDialect,
+        databaseDialect,
         databaseUrl,
         databaseSchemas,
-        openaiApiKey,
-        langchainApiKey,
+        openaiApiKey: openaiApiKeyValue,
+        useDemo,
       },
       envPath
     );
-    spinner.stop(`Configuration saved to ${envPath}`);
+    saveSpinner.stop(`Configuration saved to ${envPath}`);
+    p.log.info(`OpenAI API key saved as ${maskSecret(openaiApiKeyValue)}`);
   } catch (error) {
-    spinner.stop("Failed to save configuration");
+    saveSpinner.stop("Failed to save configuration");
     p.log.error(
       `Error: ${error instanceof Error ? error.message : String(error)}`
     );

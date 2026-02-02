@@ -8,44 +8,52 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - inconvo-data:/data
+      - ${INCONVO_DATA_DIR:?INCONVO_DATA_DIR is required}:/data
     environment:
       # Database path inside container
       - INCONVO_LOCAL_DB_PATH=/data/inconvo.db
-      # Internal communication with sandbox
-      - INCONVO_SANDBOX_BASE_URL=http://sandbox:8787
+      # Internal communication with sandbox (runs on host)
+      - INCONVO_SANDBOX_BASE_URL=${INCONVO_SANDBOX_BASE_URL:-http://host.docker.internal:8787}
       - INCONVO_SANDBOX_API_KEY=${INCONVO_SANDBOX_API_KEY:?INCONVO_SANDBOX_API_KEY is required}
       # Skip env validation (validated at CLI level)
       - SKIP_ENV_VALIDATION=true
       # User configuration (passed from CLI via ~/.inconvo/config.env)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - DATABASE_DIALECT=${DATABASE_DIALECT:-}
       - INCONVO_DATABASE_URL=${INCONVO_DATABASE_URL:-}
       - INCONVO_DATABASE_SCHEMA=${INCONVO_DATABASE_SCHEMA:-}
       - INCONVO_SECRET_KEY=${INCONVO_SECRET_KEY:-}
+      # Telemetry (set to true to disable)
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      - NEXT_PUBLIC_DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      # Demo mode
+      - USE_DEMO_DATABASE=${USE_DEMO_DATABASE:-false}
     depends_on:
-      sandbox:
-        condition: service_started
+      demo-db:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
 
-  sandbox:
-    image: ghcr.io/inconvoai/inconvo/sandbox:${INCONVO_VERSION:-latest}
+  demo-db:
+    image: postgres:16-alpine
+    profiles:
+      - demo
     ports:
-      - "8787:8787"
-    volumes:
-      # Mount Docker socket for container spawning
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Persistent storage for wrangler state
-      - sandbox-data:/data
+      - "26687:5432"
     environment:
-      - INTERNAL_API_KEY=${INCONVO_SANDBOX_API_KEY:?INCONVO_SANDBOX_API_KEY is required}
-      - SKIP_BUCKET_MOUNT=true
-      - WRANGLER_SEND_METRICS=false
+      - POSTGRES_USER=inconvo
+      - POSTGRES_PASSWORD=inconvo
+      - POSTGRES_DB=demo
+    volumes:
+      - demo-db-data:/var/lib/postgresql/data
+      - ${INCONVO_INIT_SCRIPT:-./demo-db-init.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inconvo -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
-  inconvo-data:
-    name: inconvo-data
-  sandbox-data:
-    name: inconvo-sandbox-data
+  demo-db-data:
+    name: inconvo-demo-db-data

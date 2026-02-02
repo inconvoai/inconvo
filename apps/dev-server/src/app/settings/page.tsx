@@ -50,7 +50,6 @@ export default function SettingsPage() {
               <Code>INCONVO_DATABASE_URL</Code>
               <Code>INCONVO_DATABASE_SCHEMA</Code>
               <Code>OPENAI_API_KEY</Code>
-              <Code>LANGCHAIN_API_KEY</Code>
             </Stack>
           </Stack>
         </Paper>

@@ -172,6 +172,10 @@ jobs:
           VERSION="${VERSION#v}"
           npm version "$VERSION" --no-git-tag-version
 
+      - name: Resolve CLI catalog versions
+        working-directory: packages/cli
+        run: node scripts/resolve-catalog.js
+
       - name: Pack CLI tarball
         id: pack
         working-directory: packages/cli

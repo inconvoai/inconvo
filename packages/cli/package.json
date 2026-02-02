@@ -1,5 +1,5 @@
 {
-  "name": "@inconvoai-internal/inconvo",
+  "name": "@inconvoai/inconvo",
   "version": "0.1.0",
   "description": "CLI for Inconvo development environment",
   "repository": {

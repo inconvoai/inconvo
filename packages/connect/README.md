@@ -1,4 +1,4 @@
-# @inconvoai-internal/inconvo
+# @repo/connect
 
 Internal database connector used by the Inconvo agent runtime and server. Built on Kysely and not intended as a public API.
 
@@ -82,7 +82,3 @@ mysql://user:password@localhost:3306/database
 ```
 mssql://user:password@localhost:1433/database?encrypt=true&trustServerCertificate=true
 ```
-
-## License
-
-UNLICENSED

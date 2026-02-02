@@ -140,6 +140,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      tarball_name: ${{ steps.pack.outputs.tarball_name }}
 
     steps:
       - name: Checkout
@@ -160,7 +162,7 @@ jobs:
           pnpm install
 
       - name: Build CLI
-        run: pnpm --filter @inconvoai-internal/inconvo build
+        run: pnpm --filter @inconvoai/inconvo build
 
       - name: Set CLI version
         working-directory: packages/cli
@@ -170,11 +172,25 @@ jobs:
           VERSION="${VERSION#v}"
           npm version "$VERSION" --no-git-tag-version
 
+      - name: Pack CLI tarball
+        id: pack
+        working-directory: packages/cli
+        run: |
+          FILE=$(npm pack --json | node -e "const fs=require('fs');const data=fs.readFileSync(0,'utf8');console.log(JSON.parse(data)[0].filename)")
+          echo "tarball_name=$FILE" >> $GITHUB_OUTPUT
+          echo "Packed $FILE"
+
       - name: Publish CLI to GitHub Packages
         working-directory: packages/cli
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CLI tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: packages/cli/${{ steps.pack.outputs.tarball_name }}
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]
@@ -186,6 +202,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download CLI tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-tarball
+          path: dist
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -194,6 +216,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
+          files: dist/${{ needs.publish-cli.outputs.tarball_name }}
           body: |
             ## Docker Images
 
@@ -201,12 +224,14 @@ jobs:
             docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
             ```
 
+            ## CLI Tarball (recommended)
+
+            ```bash
+            npx --package https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.version }}/${{ needs.publish-cli.outputs.tarball_name }} inconvo dev
+            ```
+
             ## Quick Start
 
             ```bash
-            # Configure npm for GitHub Packages (one-time)
-            npm config set @inconvoai-internal:registry https://npm.pkg.github.com
-
-            # Run
-            npx @inconvoai-internal/inconvo dev
+            npx --package https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.version }}/${{ needs.publish-cli.outputs.tarball_name }} inconvo dev
             ```

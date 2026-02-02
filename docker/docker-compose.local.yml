@@ -7,9 +7,3 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.dev-server
-
-  sandbox:
-    image: inconvo-sandbox:local
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.sandbox

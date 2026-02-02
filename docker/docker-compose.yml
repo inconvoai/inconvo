@@ -5,13 +5,15 @@ services:
     image: ghcr.io/inconvoai/inconvo/dev-server:${INCONVO_VERSION:-latest}
     ports:
       - "26686:26686"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - inconvo-data:/data
     environment:
       # Database path inside container
       - INCONVO_LOCAL_DB_PATH=/data/inconvo.db
-      # Internal communication with sandbox
-      - INCONVO_SANDBOX_BASE_URL=http://sandbox:8787
+      # Internal communication with sandbox (runs on host)
+      - INCONVO_SANDBOX_BASE_URL=${INCONVO_SANDBOX_BASE_URL:-http://host.docker.internal:8787}
       - INCONVO_SANDBOX_API_KEY=${INCONVO_SANDBOX_API_KEY:?INCONVO_SANDBOX_API_KEY is required}
       # Skip env validation (validated at CLI level)
       - SKIP_ENV_VALIDATION=true
@@ -22,28 +24,8 @@ services:
       - INCONVO_DATABASE_URL=${INCONVO_DATABASE_URL:-}
       - INCONVO_DATABASE_SCHEMA=${INCONVO_DATABASE_SCHEMA:-}
       - INCONVO_SECRET_KEY=${INCONVO_SECRET_KEY:-}
-    depends_on:
-      sandbox:
-        condition: service_started
-    restart: unless-stopped
-
-  sandbox:
-    image: ghcr.io/inconvoai/inconvo/sandbox:${INCONVO_VERSION:-latest}
-    ports:
-      - "8787:8787"
-    volumes:
-      # Mount Docker socket for container spawning
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Persistent storage for wrangler state
-      - sandbox-data:/data
-    environment:
-      - INTERNAL_API_KEY=${INCONVO_SANDBOX_API_KEY:?INCONVO_SANDBOX_API_KEY is required}
-      - SKIP_BUCKET_MOUNT=true
-      - WRANGLER_SEND_METRICS=false
     restart: unless-stopped
 
 volumes:
   inconvo-data:
     name: inconvo-data
-  sandbox-data:
-    name: inconvo-sandbox-data

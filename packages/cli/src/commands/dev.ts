@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
 const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
+const DATA_DIR = path.join(INCONVO_DIR, "data");
 const SANDBOX_DIR = path.join(INCONVO_DIR, "sandbox");
 const SANDBOX_ENV_FILE = path.join(SANDBOX_DIR, ".dev.vars");
 
@@ -144,6 +145,7 @@ function copyBundledFiles(): void {
   // Copy the bundled files to ~/.inconvo/
   // This ensures the file versions match the CLI version
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
   fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
 
@@ -314,6 +316,7 @@ export const devCommand = new Command("dev")
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
       INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
       INCONVO_INIT_SCRIPT: INIT_SCRIPT,
+      INCONVO_DATA_DIR: DATA_DIR,
     };
 
     // Set demo database URL when demo mode is enabled

@@ -26,8 +26,6 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       prisma_version: ${{ steps.catalog.outputs.prisma }}
-      wrangler_version: ${{ steps.catalog.outputs.wrangler }}
-      zod_version: ${{ steps.catalog.outputs.zod }}
 
     steps:
       - name: Checkout
@@ -51,8 +49,6 @@ jobs:
           }
 
           echo "prisma=$(extract_version prisma)" >> $GITHUB_OUTPUT
-          echo "wrangler=$(extract_version wrangler)" >> $GITHUB_OUTPUT
-          echo "zod=$(extract_version zod)" >> $GITHUB_OUTPUT
 
           echo "Extracted versions:"
           cat $GITHUB_OUTPUT
@@ -138,145 +134,8 @@ jobs:
 
           docker manifest push ${IMAGE}:latest
 
-  # Build sandbox for each architecture natively
-  build-sandbox:
-    needs: prepare
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            platform: linux/amd64
-            suffix: amd64
-          - runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            suffix: arm64
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Prepare sandbox package.json
-        run: |
-          cd apps/sandbox
-
-          # Resolve zod catalog reference
-          sed -i "s/\"zod\": \"catalog:\"/\"zod\": \"^${{ needs.prepare.outputs.zod_version }}\"/" package.json
-
-          # Remove workspace: and catalog: dependencies
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-
-            for (const depType of ['dependencies', 'devDependencies']) {
-              if (!pkg[depType]) continue;
-              for (const [name, version] of Object.entries(pkg[depType])) {
-                if (typeof version === 'string') {
-                  if (version.startsWith('workspace:') || version === 'catalog:') {
-                    delete pkg[depType][name];
-                  }
-                }
-                // Remove wrangler (installed globally in container)
-                if (name === 'wrangler') {
-                  delete pkg[depType][name];
-                }
-              }
-            }
-
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-
-          echo "Prepared package.json:"
-          cat package.json
-
-      - name: Prepare sandbox tsconfig.json
-        run: |
-          cat > apps/sandbox/tsconfig.json << 'EOF'
-          {
-            "$schema": "https://json.schemastore.org/tsconfig",
-            "compilerOptions": {
-              "target": "ESNext",
-              "lib": ["ESNext"],
-              "module": "ESNext",
-              "moduleResolution": "Bundler",
-              "noEmit": true,
-              "declaration": false,
-              "esModuleInterop": true,
-              "isolatedModules": true,
-              "skipLibCheck": true,
-              "strict": true,
-              "types": ["./worker-configuration.d.ts", "@types/node"]
-            },
-            "include": ["src/**/*.ts", "worker-configuration.d.ts"]
-          }
-          EOF
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push sandbox image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.sandbox
-          push: true
-          platforms: ${{ matrix.platform }}
-          provenance: false
-          build-args: |
-            WRANGLER_VERSION=${{ needs.prepare.outputs.wrangler_version }}
-            ZOD_VERSION=${{ needs.prepare.outputs.zod_version }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}-${{ matrix.suffix }}
-          cache-from: type=gha,scope=sandbox-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=sandbox-${{ matrix.suffix }}
-
-  # Create multi-arch manifest for sandbox
-  manifest-sandbox:
-    needs: [prepare, build-sandbox]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create and push manifest
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sandbox"
-
-          # Create manifest for versioned tag
-          docker manifest create ${IMAGE}:${VERSION} \
-            ${IMAGE}:${VERSION}-amd64 \
-            ${IMAGE}:${VERSION}-arm64
-
-          docker manifest push ${IMAGE}:${VERSION}
-
-          # Create manifest for latest tag
-          docker manifest create ${IMAGE}:latest \
-            ${IMAGE}:${VERSION}-amd64 \
-            ${IMAGE}:${VERSION}-arm64
-
-          docker manifest push ${IMAGE}:latest
-
   publish-cli:
-    needs: [prepare, manifest-dev-server, manifest-sandbox]
+    needs: [prepare, manifest-dev-server]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -318,7 +177,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   create-release:
-    needs: [prepare, manifest-dev-server, manifest-sandbox, publish-cli]
+    needs: [prepare, manifest-dev-server, publish-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -340,7 +199,6 @@ jobs:
 
             ```bash
             docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
-            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/sandbox:${{ needs.prepare.outputs.version }}
             ```
 
             ## Quick Start

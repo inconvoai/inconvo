@@ -50,6 +50,7 @@ On first run, the CLI will prompt you for:
 - **LangChain API key** - For prompt management
 
 Configuration is stored in `~/.inconvo/config.env`.
+The CLI stores the dev-server SQLite database at `~/.inconvo/data/inconvo.db`.
 
 > **Note**: When developing locally from a cloned repo, the dev-server uses `.inconvo.env` in the `apps/dev-server/` directory instead. These are separate configurations.
 

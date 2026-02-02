@@ -47,7 +47,6 @@ On first run, the CLI will prompt you for:
 
 - **Database connection** - PostgreSQL, MySQL, or SQL Server
 - **OpenAI API key** - For the LLM
-- **LangChain API key** - For prompt management
 
 Configuration is stored in `~/.inconvo/config.env`.
 The CLI stores the dev-server SQLite database at `~/.inconvo/data/inconvo.db`.

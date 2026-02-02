@@ -19,7 +19,6 @@ services:
       - SKIP_ENV_VALIDATION=true
       # User configuration (passed from CLI via ~/.inconvo/config.env)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - DATABASE_DIALECT=${DATABASE_DIALECT:-}
       - INCONVO_DATABASE_URL=${INCONVO_DATABASE_URL:-}
       - INCONVO_DATABASE_SCHEMA=${INCONVO_DATABASE_SCHEMA:-}

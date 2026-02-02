@@ -19,7 +19,6 @@ export const env = createEnv({
     INCONVO_SANDBOX_BASE_URL: z.string().url(),
     INCONVO_SANDBOX_API_KEY: z.string().min(1),
     OPENAI_API_KEY: z.string().min(1),
-    LANGCHAIN_API_KEY: z.string().min(1),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),

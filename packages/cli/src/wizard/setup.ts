@@ -185,6 +185,11 @@ export async function readEnvFile(): Promise<Record<string, string>> {
   }
 }
 
+const maskSecret = (value: string, visibleChars = 20): string => {
+  if (value.length <= visibleChars) return value;
+  return `${value.slice(0, visibleChars)}${"*".repeat(value.length - visibleChars)}`;
+};
+
 export async function runSetupWizard(): Promise<boolean> {
   p.intro("Inconvo Configuration Setup");
 
@@ -328,9 +333,10 @@ export async function runSetupWizard(): Promise<boolean> {
   }
 
   // OpenAI API key
-  const openaiApiKey = await p.text({
+  const openaiApiKey = await p.password({
     message: "Enter your OpenAI API key:",
-    placeholder: "sk-...",
+    mask: "*",
+    clearOnError: true,
     validate: (value) => {
       if (!value) return "OpenAI API key is required";
       if (!value.startsWith("sk-")) return "Invalid OpenAI API key format";
@@ -342,6 +348,7 @@ export async function runSetupWizard(): Promise<boolean> {
     p.cancel("Setup cancelled.");
     return false;
   }
+  const openaiApiKeyValue = openaiApiKey as string;
 
   // Write configuration
   const saveSpinner = p.spinner();
@@ -353,12 +360,13 @@ export async function runSetupWizard(): Promise<boolean> {
         databaseDialect,
         databaseUrl,
         databaseSchemas,
-        openaiApiKey,
+        openaiApiKey: openaiApiKeyValue,
         useDemo,
       },
       envPath
     );
     saveSpinner.stop(`Configuration saved to ${envPath}`);
+    p.log.info(`OpenAI API key saved as ${maskSecret(openaiApiKeyValue)}`);
   } catch (error) {
     saveSpinner.stop("Failed to save configuration");
     p.log.error(

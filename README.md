@@ -4,6 +4,15 @@
 
 <p align="center"> 💬📊 Build chat-with-data agents for customer-facing applications 📊💬 </p>
 
+<div align="center">
+
+[Website](https://inconvo.com) | [Docs](https://inconvo.com/docs) | [Issues](https://github.com/inconvoai/inconvo/issues)
+  
+[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red.svg)](https://github.com/inconvoai/inconvo)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/inconvoai/inconvo/blob/main/LICENSE)
+
+</div>
+
 ## About Inconvo
 
 Inconvo is the open-source platform for building data agents on production data. With safe queries, permissions, and structured outputs.

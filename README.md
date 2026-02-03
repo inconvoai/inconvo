@@ -63,7 +63,7 @@ console.log(agentResponse);
 
 ### Inconvo Cloud
 
-The fastest and most reliable way to get started with Inconvo is signing up for free to [Inconvo Cloud](app.inconvo.ai), and following the onboarding instructions.
+The fastest and most reliable way to get started with Inconvo is signing up for free to [Inconvo Cloud](https://app.inconvo.ai), and following the onboarding instructions.
 
 Useful links:
 - [Quick start](https://inconvo.com/docs/getting-started/quickstart/) - get up and running in minutes

@@ -58,3 +58,26 @@ console.log(agentResponse);
 }
 **/
 ```
+
+## Getting started with Inconvo
+
+### Inconvo Cloud
+
+The fastest and most reliable way to get started with Inconvo is signing up for free to [Inconvo Cloud](app.inconvo.ai), and following the onboarding instructions.
+
+Useful links:
+- [Quick start](https://inconvo.com/docs/getting-started/quickstart/) - get up and running in minutes
+
+### Run Inconvo locally
+
+Run Inconvo on your own machine, perfect for evaluation.
+
+```bash
+npx inconvo dev
+```
+
+Open the dashboard at http://localhost:26686
+
+
+
+

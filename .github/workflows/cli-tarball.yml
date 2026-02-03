@@ -1,0 +1,90 @@
+name: Build CLI Tarball
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch, tag, or SHA) to build"
+        required: true
+        default: "main"
+      pr_number:
+        description: "PR number to comment with artifact link (optional)"
+        required: false
+        default: ""
+
+jobs:
+  build-cli-tarball:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: |
+          pnpm config set node-linker hoisted
+          pnpm install --frozen-lockfile
+
+      - name: Build CLI
+        run: pnpm --filter @inconvoai/inconvo build
+
+      - name: Resolve CLI catalog versions
+        working-directory: packages/cli
+        run: node scripts/resolve-catalog.js
+
+      - name: Pack CLI tarball
+        id: pack
+        working-directory: packages/cli
+        run: |
+          FILE=$(npm pack --json | node -e "const fs=require('fs');const data=fs.readFileSync(0,'utf8');console.log(JSON.parse(data)[0].filename)")
+          echo "tarball_name=$FILE" >> $GITHUB_OUTPUT
+          echo "Packed $FILE"
+
+      - name: Upload CLI tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: packages/cli/${{ steps.pack.outputs.tarball_name }}
+
+      - name: Comment on PR
+        if: ${{ inputs.pr_number != '' }}
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REF: ${{ inputs.ref }}
+          TARBALL_NAME: ${{ steps.pack.outputs.tarball_name }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            if (!prNumber) {
+              core.warning("No PR number provided; skipping comment.");
+              return;
+            }
+
+            const body = [
+              `CLI tarball built from \`${process.env.REF}\`.`,
+              "",
+              `Artifact: \`${process.env.TARBALL_NAME}\``,
+              `Download: ${process.env.RUN_URL}`,
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });

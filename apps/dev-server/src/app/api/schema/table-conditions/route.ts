@@ -88,3 +88,51 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/**
+ * DELETE /api/schema/table-conditions
+ * Delete a table condition (row-level security)
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = (await request.json()) as {
+      tableId?: string;
+    };
+    const { tableId } = body;
+
+    if (!tableId) {
+      return NextResponse.json(
+        { error: "tableId is required" },
+        { status: 400 },
+      );
+    }
+
+    // Check if condition exists
+    const existingCondition = await prisma.tableCondition.findUnique({
+      where: { tableId },
+    });
+
+    if (!existingCondition) {
+      return NextResponse.json(
+        { error: "Table condition not found" },
+        { status: 404 },
+      );
+    }
+
+    // Delete the condition
+    await prisma.tableCondition.delete({
+      where: { tableId },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete table condition:", error);
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to delete condition",
+      },
+      { status: 500 },
+    );
+  }
+}

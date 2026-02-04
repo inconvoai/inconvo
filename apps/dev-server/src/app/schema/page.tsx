@@ -771,14 +771,14 @@ function SchemaPageContent() {
       const table = tables.find((t) => t.id === tableId);
       if (!table) return;
 
-      const res = await fetch(
-        `/api/schema/tables/${encodeURIComponent(table.name)}/context-filter`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
+      const res = await fetch("/api/schema/table-conditions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+          ...payload,
+        }),
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
@@ -798,12 +798,11 @@ function SchemaPageContent() {
       const table = tables.find((t) => t.id === tableId);
       if (!table) return;
 
-      const res = await fetch(
-        `/api/schema/tables/${encodeURIComponent(table.name)}/context-filter`,
-        {
-          method: "DELETE",
-        },
-      );
+      const res = await fetch(`/api/schema/table-conditions`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId: table.id }),
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 

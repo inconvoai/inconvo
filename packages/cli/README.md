@@ -5,7 +5,7 @@ Try out Inconvo without cloning the repository.
 ## Quick Start
 
 ```bash
-npx inconvo dev
+npx inconvo@latest dev
 ```
 
 This will:
@@ -27,7 +27,7 @@ Then open http://localhost:26686 to start chatting with your data.
 Start the Inconvo development environment.
 
 ```bash
-npx inconvo dev
+npx inconvo@latest dev
 ```
 
 Options:
@@ -38,7 +38,7 @@ Options:
 Re-run the configuration wizard to update your settings.
 
 ```bash
-npx inconvo configure
+npx inconvo@latest configure
 ```
 
 ## Configuration
@@ -68,4 +68,4 @@ See the main repository README for development instructions.
 
 ## License
 
-MIT
+Apache-2.0

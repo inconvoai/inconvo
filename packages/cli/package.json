@@ -1,6 +1,7 @@
 {
   "name": "inconvo",
   "version": "2.0.0",
+  "license": "Apache-2.0",
   "description": "CLI for Inconvo development environment",
   "repository": {
     "type": "git",

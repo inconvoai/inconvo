@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Inconvo Sandbox - Cloudflare Worker",
   "scripts": {
     "deploy": "wrangler deploy",

@@ -1,6 +1,7 @@
 {
   "name": "inconvo",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "build": "turbo run build",
     "build:cli": "turbo run build --filter=inconvo",

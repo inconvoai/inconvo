@@ -452,17 +452,14 @@ function SchemaPageContent() {
   };
 
   // Callbacks for SemanticModelEditor
-  const onTableSelect = useCallback(
-    (tableId: string) => {
-      setSelectedTableId(tableId);
+  const onTableSelect = useCallback((tableId: string) => {
+    setSelectedTableId(tableId);
 
-      // Track table selection
-      trackFeatureUsageClient(posthog, "schema_editor", {
-        action: "table_selected",
-      });
-    },
-    [],
-  );
+    // Track table selection
+    trackFeatureUsageClient(posthog, "schema_editor", {
+      action: "table_selected",
+    });
+  }, []);
 
   const onUpdateTable = useCallback(
     async (
@@ -759,6 +756,62 @@ function SchemaPageContent() {
     [selectedTable],
   );
 
+  // Context filter callbacks
+  const onUpsertContextFilter = useCallback(
+    async (
+      tableId: string,
+      payload: { columnId: string; userContextFieldId: string },
+    ) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch(
+        `/api/schema/tables/${encodeURIComponent(table.name)}/context-filter`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Track context filter creation
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "context_field_created",
+      });
+
+      // Refresh table detail
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onDeleteContextFilter = useCallback(
+    async (tableId: string) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch(
+        `/api/schema/tables/${encodeURIComponent(table.name)}/context-filter`,
+        {
+          method: "DELETE",
+        },
+      );
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      // Track context filter deletion
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "context_field_deleted",
+      });
+
+      // Refresh table detail
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail],
+  );
+
   // Column conversion callbacks
   const onCreateColumnConversion = useCallback(
     async (
@@ -1012,6 +1065,9 @@ function SchemaPageContent() {
           onCreateManualRelation={onCreateManualRelation}
           onUpdateManualRelation={onUpdateManualRelation}
           onDeleteManualRelation={onDeleteManualRelation}
+          // Context filter callbacks
+          onUpsertContextFilter={onUpsertContextFilter}
+          onDeleteContextFilter={onDeleteContextFilter}
           // Column conversion callbacks
           onCreateColumnConversion={onCreateColumnConversion}
           onUpdateColumnConversion={onUpdateColumnConversion}

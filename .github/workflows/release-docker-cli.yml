@@ -182,14 +182,9 @@ jobs:
             npm version "$VERSION" --no-git-tag-version
           fi
 
-      - name: Clear npm auth token
-        run: npm config delete //registry.npmjs.org/:_authToken || true
-
       - name: Publish CLI to npmjs
         working-directory: packages/cli
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ""
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]

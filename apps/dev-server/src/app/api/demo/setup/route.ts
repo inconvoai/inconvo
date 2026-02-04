@@ -19,6 +19,21 @@ export async function POST() {
       create: { key: "organisationId", type: "NUMBER" },
     });
 
+    // 1b. Enable user context by default for demo mode
+    const existingConfig = await prisma.userContextConfig.findFirst({
+      select: { id: true },
+    });
+    if (existingConfig) {
+      await prisma.userContextConfig.update({
+        where: { id: existingConfig.id },
+        data: { status: "ENABLED" },
+      });
+    } else {
+      await prisma.userContextConfig.create({
+        data: { status: "ENABLED" },
+      });
+    }
+
     // 2. Get tables we need to configure
     const ordersTable = await prisma.table.findUnique({
       where: { name: "orders" },
@@ -126,31 +141,36 @@ export async function POST() {
     }
 
     // 5. Set table conditions (row-level filtering) for multi-tenant tables
-    const tablesWithOrgId = [
-      ordersTable,
-      usersTable,
-      productsTable,
-      reviewsTable,
-    ].filter(Boolean) as NonNullable<typeof ordersTable>[];
+    const tableConditionTargets = [
+      { table: ordersTable, columnName: "organisation_id" },
+      { table: usersTable, columnName: "organisation_id" },
+      { table: productsTable, columnName: "organisation_id" },
+      { table: reviewsTable, columnName: "organisation_id" },
+      { table: organisationsTable, columnName: "id" },
+    ];
+    const configuredTableConditions: string[] = [];
 
-    for (const table of tablesWithOrgId) {
-      const orgIdColumn = table.columns.find(
-        (c) => c.name === "organisation_id",
+    for (const target of tableConditionTargets) {
+      if (!target.table) continue;
+      const column = target.table.columns.find(
+        (c) => c.name === target.columnName,
       );
-      if (orgIdColumn) {
-        await prisma.tableCondition.upsert({
-          where: { tableId: table.id },
-          update: {
-            columnId: orgIdColumn.id,
-            userContextFieldId: userContextField.id,
-          },
-          create: {
-            tableId: table.id,
-            columnId: orgIdColumn.id,
-            userContextFieldId: userContextField.id,
-          },
-        });
-      }
+      if (!column) continue;
+
+      await prisma.tableCondition.upsert({
+        where: { tableId: target.table.id },
+        update: {
+          columnId: column.id,
+          userContextFieldId: userContextField.id,
+        },
+        create: {
+          tableId: target.table.id,
+          columnId: column.id,
+          userContextFieldId: userContextField.id,
+        },
+      });
+
+      configuredTableConditions.push(target.table.name);
     }
 
     // 6. Enable all tables as QUERYABLE
@@ -167,7 +187,7 @@ export async function POST() {
       configured: {
         userContextField: userContextField.key,
         computedColumns: ordersTable ? ["orders.total"] : [],
-        tableConditions: tablesWithOrgId.map((t) => t.name),
+        tableConditions: configuredTableConditions,
         tablesEnabled: await prisma.table.count(),
       },
     });

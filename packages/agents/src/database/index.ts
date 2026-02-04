@@ -39,6 +39,7 @@ interface RequestParams {
   userContext: Record<string, string | number>;
   connector: DatabaseConnector;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -53,7 +54,7 @@ export type ContextCondition = {
 export async function databaseRetrieverAgent(params: RequestParams) {
   const promptCacheKey = buildPromptCacheKey({
     agentId: params.agentId,
-    userContext: params.userContext,
+    userIdentifier: params.userIdentifier,
   });
   const OverallStateAnnotation = Annotation.Root({
     question: Annotation<string>({
@@ -218,6 +219,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       question: state.question,
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     }).invoke({});
 
@@ -297,6 +299,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       joinedTableNames: state.joinedTableNames,
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     return { questionConditions: questionWhereAgentResponse };

@@ -45,7 +45,7 @@ export function ContextFieldsTable({
   onBeforeDelete,
   loading = false,
   deletingFieldId,
-  emptyMessage = 'No context fields defined. Add fields like "user_id" or "tenant_id" to enable row-level security.',
+  emptyMessage = "No context fields defined.",
   title = "Context Fields",
 }: ContextFieldsTableProps) {
   const handleDelete = async (field: ContextField) => {

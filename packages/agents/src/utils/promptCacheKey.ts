@@ -2,19 +2,18 @@ import crypto from "crypto";
 
 export type CacheKeyInput = {
   agentId: string | number;
-  userContext?: Record<string, string | number>;
+  userIdentifier?: string | null;
 };
 
-function hashContext(context: Record<string, string | number>): string {
-  const flattened = Object.keys(context)
-    .sort()
-    .map((key) => `${key}:${String(context[key])}`)
-    .join("|");
+const MAX_CACHE_KEY_LENGTH = 64;
+const HASH_LENGTH = 16;
+
+function hashIdentifier(identifier: string): string {
   return crypto
     .createHash("sha256")
-    .update(flattened)
+    .update(identifier)
     .digest("hex")
-    .slice(0, 16);
+    .slice(0, HASH_LENGTH);
 }
 
 /**
@@ -23,12 +22,22 @@ function hashContext(context: Record<string, string | number>): string {
  */
 export function buildPromptCacheKey({
   agentId,
-  userContext,
+  userIdentifier,
 }: CacheKeyInput): string {
-  if (!userContext || Object.keys(userContext).length === 0) {
-    return `${agentId}:noctx`;
+  if (!userIdentifier) {
+    return `${agentId}:nouser`;
   }
 
-  const contextHash = hashContext(userContext);
-  return `${agentId}:${contextHash}`;
+  const rawKey = `${agentId}:${userIdentifier}`;
+  if (rawKey.length <= MAX_CACHE_KEY_LENGTH) {
+    return rawKey;
+  }
+
+  const hashed = hashIdentifier(userIdentifier);
+  const shortKey = `${agentId}:u_${hashed}`;
+  if (shortKey.length <= MAX_CACHE_KEY_LENGTH) {
+    return shortKey;
+  }
+
+  return `k_${hashIdentifier(rawKey)}`;
 }

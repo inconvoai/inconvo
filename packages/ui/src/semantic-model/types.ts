@@ -6,6 +6,7 @@ export type {
   LogicalCastType,
   SQLComputedColumnAst,
   SQLCastExpressionAst,
+  UserContextStatus,
 } from "@repo/types";
 
 // Import for internal use
@@ -113,11 +114,11 @@ export interface Relation {
 }
 
 // =============================================================================
-// Table Condition (Row-Level Security)
+// Table Condition (Row-Level Access Constraints)
 // =============================================================================
 
 /**
- * Row-level security condition on a table
+ * Row-level access constraint on a table
  */
 export interface TableCondition {
   column: { id: string; name: string };

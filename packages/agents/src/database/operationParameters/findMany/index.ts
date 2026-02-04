@@ -30,6 +30,7 @@ export interface DefineFindManyOperationParametersParams {
   operation: "findMany";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -172,7 +173,7 @@ export async function defineFindManyOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      userContext: params.userContext,
+      userIdentifier: params.userIdentifier,
     }),
     provider: params.provider,
     tool: applyFindManyOperationParametersTool,

@@ -35,7 +35,7 @@ export interface TableConditionsTableProps {
   deletingConditionId?: string;
   /** Custom empty state message */
   emptyMessage?: string;
-  /** Custom title (defaults to "Table Conditions") */
+  /** Custom title (defaults to "Access Constraints") */
   title?: string;
   /** Description text shown below the title */
   description?: string;
@@ -49,9 +49,9 @@ export function TableConditionsTable({
   disabled = false,
   loading = false,
   deletingConditionId,
-  emptyMessage = "No table conditions defined. Add conditions to enable automatic row-level filtering.",
-  title = "Table Conditions",
-  description = "Map context fields to table columns. Queries will automatically filter rows where the column value matches the context value.",
+  emptyMessage = "No access constraints defined. Add constraints to filter rows based on user context.",
+  title = "Access Constraints",
+  description = "Map context fields to table columns. Queries will filter rows where the column value matches the context value.",
 }: TableConditionsTableProps) {
   const handleDelete = async (condition: TableCondition) => {
     if (onBeforeDelete) {
@@ -80,7 +80,7 @@ export function TableConditionsTable({
           onClick={onAddClick}
           disabled={disabled}
         >
-          Add Condition
+          Add Constraint
         </Button>
       </Group>
 

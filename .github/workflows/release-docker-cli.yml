@@ -159,6 +159,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -184,6 +185,8 @@ jobs:
       - name: Publish CLI to npmjs
         working-directory: packages/cli
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]

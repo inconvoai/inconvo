@@ -19,6 +19,7 @@ env:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   prepare:
@@ -148,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -158,8 +159,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: "https://npm.pkg.github.com"
-          scope: "@inconvoai"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -175,13 +175,18 @@ jobs:
           # Strip 'v' prefix for npm version
           VERSION="${{ needs.prepare.outputs.version }}"
           VERSION="${VERSION#v}"
-          npm version "$VERSION" --no-git-tag-version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "CLI version already $VERSION; skipping npm version."
+          else
+            npm version "$VERSION" --no-git-tag-version
+          fi
 
-      - name: Publish CLI to GitHub Packages
+      - name: Publish CLI to npmjs
         working-directory: packages/cli
-        run: npm publish
+        run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]
@@ -211,4 +216,4 @@ jobs:
 
             ## CLI
 
-            Published to GitHub Packages for now (npmjs.com later).
+            Published to npmjs.

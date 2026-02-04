@@ -1025,6 +1025,14 @@ export const contextValueSchema = z
 
 export type ContextValue = z.infer<typeof contextValueSchema>;
 
+export const userContextStatusSchema = z.enum([
+  "UNSET",
+  "ENABLED",
+  "DISABLED",
+]);
+
+export type UserContextStatus = z.infer<typeof userContextStatusSchema>;
+
 export const inconvoExampleStatusSchema = z.enum(["PASS", "FAIL", "REVIEW"]);
 
 export const inconvoExampleSchema = z

@@ -26,6 +26,7 @@ export interface DefineCountOperationParametersParams {
   operation: "count";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -85,7 +86,7 @@ export async function defineCountOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      userContext: params.userContext,
+      userIdentifier: params.userIdentifier,
     }),
     provider: params.provider,
     tool: applyCountOperationParametersTool,

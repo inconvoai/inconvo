@@ -54,6 +54,7 @@ interface ApiTableId {
   id: string;
   name: string;
   access: string;
+  hasCondition: boolean;
 }
 
 interface ApiColumn {
@@ -254,6 +255,9 @@ function SchemaPageContent() {
   const [userContextFields, setUserContextFields] = useState<
     UserContextField[]
   >([]);
+  const [userContextStatus, setUserContextStatus] = useState<
+    "UNSET" | "ENABLED" | "DISABLED"
+  >("UNSET");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -307,7 +311,7 @@ function SchemaPageContent() {
         selectedColumnCount: 0,
         computedColumnCount: 0,
         relationCount: 0,
-        hasCondition: false,
+        hasCondition: table.hasCondition,
       }));
 
       setTables(transformed);
@@ -328,6 +332,7 @@ function SchemaPageContent() {
       const data = (await res.json()) as {
         error?: string;
         fields?: Array<{ id: string; key: string; type: string }>;
+        status?: "UNSET" | "ENABLED" | "DISABLED";
       };
       if (data.error) throw new Error(data.error);
       setUserContextFields(
@@ -337,6 +342,7 @@ function SchemaPageContent() {
           type: f.type as "STRING" | "NUMBER",
         })),
       );
+      setUserContextStatus(data.status ?? "UNSET");
     } catch (err) {
       console.error("Failed to fetch user context:", err);
     }
@@ -1040,6 +1046,7 @@ function SchemaPageContent() {
           tables={tables}
           selectedTable={selectedTable}
           userContextFields={userContextFields}
+          userContextStatus={userContextStatus}
           availableTables={availableTables}
           listLoading={syncing}
           detailLoading={detailLoading}

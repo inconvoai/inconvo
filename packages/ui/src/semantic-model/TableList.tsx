@@ -23,10 +23,13 @@ import {
   IconCircleOff,
   IconX,
   IconLock,
+  IconLockOff,
+  IconLockOpen,
+  IconAlertCircle,
   IconDatabase,
 } from "@tabler/icons-react";
 import { useDebouncedCallback } from "@mantine/hooks";
-import type { TableSummary, TableAccess } from "./types";
+import type { TableSummary, TableAccess, UserContextStatus } from "./types";
 import { AccessControl } from "./AccessControl";
 
 export type FilterValue = "active" | "queryable" | "joinable" | "off" | "all";
@@ -69,6 +72,8 @@ export interface TableListProps {
   selectedConnectionId?: string | null;
   /** Callback when connection changes */
   onConnectionChange?: (connectionId: string | null) => void;
+  /** User context status for access constraints */
+  userContextStatus?: UserContextStatus;
 }
 
 function getAccessColor(access: TableAccess): string {
@@ -114,6 +119,7 @@ export function TableList({
   connections,
   selectedConnectionId,
   onConnectionChange,
+  userContextStatus = "UNSET",
 }: TableListProps) {
   // Internal state for uncontrolled mode
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
@@ -194,6 +200,20 @@ export function TableList({
     label: c.name,
   }));
   const showConnectionSelector = connections && connections.length >= 1;
+  const accessConstraintLabel =
+    userContextStatus === "ENABLED"
+      ? "On"
+      : userContextStatus === "DISABLED"
+        ? "Off"
+        : "Not configured";
+  const accessConstraintIcon =
+    userContextStatus === "ENABLED" ? (
+      <IconLock size={14} color="var(--mantine-color-blue-6)" />
+    ) : userContextStatus === "DISABLED" ? (
+      <IconLockOff size={14} color="var(--mantine-color-gray-6)" />
+    ) : (
+      <IconAlertCircle size={14} color="var(--mantine-color-gray-6)" />
+    );
 
   return (
     <Stack gap="sm" h="100%" p="sm">
@@ -247,6 +267,13 @@ export function TableList({
         ]}
       />
 
+      <Group gap="xs">
+        {accessConstraintIcon}
+        <Text size="xs" c="dimmed">
+          Access constraints: {accessConstraintLabel}
+        </Text>
+      </Group>
+
       {/* Table list */}
       <ScrollArea style={{ flex: 1 }}>
         {loading ? (
@@ -295,8 +322,35 @@ export function TableList({
                     >
                       {table.name}
                     </Text>
-                    {table.hasCondition && (
-                      <IconLock size={12} color="var(--mantine-color-blue-6)" />
+                    {userContextStatus === "ENABLED" ? (
+                      <Box
+                        title={
+                          table.hasCondition
+                            ? "Access constraint active"
+                            : "No access constraint"
+                        }
+                      >
+                        {table.hasCondition ? (
+                          <IconLock
+                            size={12}
+                            color="var(--mantine-color-blue-6)"
+                          />
+                        ) : (
+                          <IconLockOpen
+                            size={12}
+                            color="var(--mantine-color-gray-6)"
+                          />
+                        )}
+                      </Box>
+                    ) : (
+                      table.hasCondition && (
+                        <Box title="Access constraint inactive">
+                          <IconLockOff
+                            size={12}
+                            color="var(--mantine-color-gray-6)"
+                          />
+                        </Box>
+                      )
                     )}
                   </Group>
                   {onTableAccessChange ? (

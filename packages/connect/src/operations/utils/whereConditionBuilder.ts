@@ -680,14 +680,3 @@ function buildOperatorCondition(
       return sql`${columnRef} = ${processedValue}`;
   }
 }
-
-function isDateString(value: string): boolean {
-  // Check if the string matches common date formats
-  // ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ
-  const isoDateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
-  if (isoDateRegex.test(value)) {
-    const date = new Date(value);
-    return !isNaN(date.getTime());
-  }
-  return false;
-}

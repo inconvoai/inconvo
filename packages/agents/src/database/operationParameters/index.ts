@@ -28,6 +28,7 @@ interface RequestParams {
   question: string;
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -126,6 +127,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "findMany",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     assert(operationParams, "Failed to define findMany operation parameters");
@@ -145,6 +147,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "groupBy",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     assert(
@@ -169,6 +172,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "countRelations",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     assert(
@@ -191,6 +195,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "aggregate",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     return {
@@ -210,6 +215,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "aggregateGroups",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     assert(
@@ -231,6 +237,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "count",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     return {
@@ -250,6 +257,7 @@ export function operationParametersAgent(params: RequestParams) {
       operation: "findDistinct",
       userContext: params.userContext,
       agentId: params.agentId,
+      userIdentifier: params.userIdentifier,
       provider: params.provider,
     });
     return {

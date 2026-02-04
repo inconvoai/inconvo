@@ -48,6 +48,7 @@ interface RequestParams {
   joinedTableNames: string[];
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -55,7 +56,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const llm = getAIModel(params.provider, "gpt-5.1", {
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      userContext: params.userContext,
+      userIdentifier: params.userIdentifier,
     }),
   });
 

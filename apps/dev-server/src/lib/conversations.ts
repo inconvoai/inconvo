@@ -129,7 +129,6 @@ export async function updateConversation(
     const data: {
       userIdentifier?: string;
       title?: string | null;
-      userContext?: string | null;
     } = {};
 
     if (updates.userIdentifier !== undefined) {
@@ -139,9 +138,7 @@ export async function updateConversation(
       data.title = updates.title;
     }
     if (updates.userContext !== undefined) {
-      data.userContext = updates.userContext
-        ? JSON.stringify(updates.userContext)
-        : null;
+      throw new Error("Updating userContext on an existing conversation is not allowed.");
     }
 
     const conversation = await prisma.conversation.update({

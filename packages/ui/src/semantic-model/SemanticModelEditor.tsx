@@ -8,6 +8,7 @@ import type {
   TableSchema,
   TableAccess,
   UserContextField,
+  UserContextStatus,
   TableWithColumns,
   UpdateTablePayload,
   ColumnUpdatePayload,
@@ -35,8 +36,10 @@ export interface SemanticModelEditorProps {
   tables: TableSummary[];
   /** Currently selected table (full details) */
   selectedTable: TableSchema | null;
-  /** User context fields for RLS configuration */
+  /** User context fields for access constraints */
   userContextFields: UserContextField[];
+  /** User context status for access constraints */
+  userContextStatus?: UserContextStatus;
   /** Available tables for manual relations */
   availableTables: TableWithColumns[];
   /** Whether the table list is loading */
@@ -159,6 +162,7 @@ export function SemanticModelEditor({
   tables,
   selectedTable,
   userContextFields,
+  userContextStatus,
   availableTables,
   listLoading = false,
   detailLoading = false,
@@ -358,6 +362,8 @@ export function SemanticModelEditor({
     [selectedTable, onUpdateComputedColumnUnit],
   );
 
+  const resolvedUserContextStatus = userContextStatus ?? "UNSET";
+
   return (
     <Flex h="100%" gap={0}>
       {/* Left Sidebar - Table List */}
@@ -388,6 +394,7 @@ export function SemanticModelEditor({
           connections={connections}
           selectedConnectionId={selectedConnectionId}
           onConnectionChange={onConnectionChange}
+          userContextStatus={resolvedUserContextStatus}
         />
       </Box>
 
@@ -406,6 +413,7 @@ export function SemanticModelEditor({
           <TableDetail
             table={selectedTable}
             userContextFields={userContextFields}
+            userContextStatus={resolvedUserContextStatus}
             availableTables={availableTables}
             loading={detailLoading}
             readOnly={readOnly}

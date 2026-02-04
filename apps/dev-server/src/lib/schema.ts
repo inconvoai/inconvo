@@ -45,7 +45,10 @@ function resolveEffectiveColumnType(
  * - Only includes columns that are selected
  * - Only includes relations that are selected, VALID, and target accessible tables
  */
-export async function getSchema(): Promise<Schema> {
+export async function getSchema(params?: {
+  includeConditions?: boolean;
+}): Promise<Schema> {
+  const includeConditions = params?.includeConditions ?? true;
   const tables = await prisma.table.findMany({
     where: {
       access: { not: "OFF" },
@@ -241,14 +244,15 @@ export async function getSchema(): Promise<Schema> {
       columns,
       computedColumns,
       outwardRelations,
-      condition: table.condition
-        ? {
-            column: { name: table.condition.column.name },
-            userContextField: {
-              key: table.condition.userContextField.key,
-            },
-          }
-        : null,
+      condition:
+        includeConditions && table.condition
+          ? {
+              column: { name: table.condition.column.name },
+              userContextField: {
+                key: table.condition.userContextField.key,
+              },
+            }
+          : null,
     };
   });
 
@@ -599,13 +603,23 @@ export async function getTableIds(params: {
       id: true,
       name: true,
       access: true,
+      condition: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: { name: "asc" },
     skip: pagination ? (pagination.page - 1) * pagination.perPage : undefined,
     take: pagination?.perPage,
   });
 
-  return tables;
+  return tables.map((table) => ({
+    id: table.id,
+    name: table.name,
+    access: table.access,
+    hasCondition: !!table.condition,
+  }));
 }
 
 /**

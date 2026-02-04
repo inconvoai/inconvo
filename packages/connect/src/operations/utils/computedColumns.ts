@@ -122,7 +122,7 @@ function generateComputedColumnAsSQL(
   numericRequired: boolean,
 ): RawBuilder<unknown> {
   switch (ast.type) {
-    case "column":
+    case "column": {
       // If a conversion exists, use it; otherwise enforce numeric when required
       const table = schema.tables.find((t) => t.name === tableName);
       const conversion = table?.columnConversions?.find(
@@ -142,6 +142,7 @@ function generateComputedColumnAsSQL(
         }
       }
       return sql`${sql.ref(tableName)}.${sql.ref(ast.name)}`;
+    }
 
     case "value":
       return sql`${ast.value}`;
@@ -167,7 +168,7 @@ function generateComputedColumnAsSQL(
       }
     }
 
-    case "brackets":
+    case "brackets": {
       const inner = generateComputedColumnAsSQL(
         ast.expression,
         tableName,
@@ -176,6 +177,7 @@ function generateComputedColumnAsSQL(
         numericRequired,
       );
       return sql`(${inner})`;
+    }
 
     default:
       throw new Error(`Unknown AST node type: ${(ast as any).type}`);

@@ -2,7 +2,7 @@
 
 import { Box, Text } from "@mantine/core";
 import type { VegaLiteSpec } from "@repo/types";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { VegaEmbed } from "react-vega";
 import type { VisualizationSpec } from "vega-embed";
 
@@ -18,6 +18,50 @@ export interface VegaChartProps {
 const DEFAULT_CHART_WIDTH = 500;
 const DEFAULT_CHART_HEIGHT = 350;
 
+type VegaChartInnerProps = {
+  fullSpec: VisualizationSpec;
+  height: number;
+};
+
+const VegaChartInner = ({ fullSpec, height }: VegaChartInnerProps) => {
+  const [error, setError] = useState<string | null>(null);
+
+  const handleError = (err: unknown) => {
+    console.error("Vega-Lite render error:", err);
+    setError(err instanceof Error ? err.message : String(err));
+  };
+
+  if (error) {
+    return (
+      <Box
+        p="md"
+        style={{
+          border: "1px solid var(--mantine-color-red-3)",
+          borderRadius: "var(--mantine-radius-sm)",
+          backgroundColor: "var(--mantine-color-red-0)",
+        }}
+      >
+        <Text c="red" fw={500} size="sm">
+          Chart Error
+        </Text>
+        <Text c="red" size="sm">
+          {error}
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box style={{ width: "100%", minHeight: height }}>
+      <VegaEmbed
+        spec={fullSpec}
+        options={{ actions: false }}
+        onError={handleError}
+      />
+    </Box>
+  );
+};
+
 /**
  * Renders a Vega-Lite v6 visualization.
  * Handles error states gracefully.
@@ -28,8 +72,6 @@ export const VegaChart = memo(
     width = DEFAULT_CHART_WIDTH,
     height = DEFAULT_CHART_HEIGHT,
   }: VegaChartProps) {
-    const [error, setError] = useState<string | null>(null);
-
     // Merge default sizing with spec, memoized to prevent unnecessary re-renders
     // Cast to VisualizationSpec since our Zod schema is looser than the library types
     const fullSpec = useMemo(
@@ -42,45 +84,12 @@ export const VegaChart = memo(
         }) as VisualizationSpec,
       [spec, width, height],
     );
-
-    useEffect(() => {
-      setError(null);
-    }, [spec]);
-
-    const handleError = (err: unknown) => {
-      console.error("Vega-Lite render error:", err);
-      setError(err instanceof Error ? err.message : String(err));
-    };
-
-    if (error) {
-      return (
-        <Box
-          p="md"
-          style={{
-            border: "1px solid var(--mantine-color-red-3)",
-            borderRadius: "var(--mantine-radius-sm)",
-            backgroundColor: "var(--mantine-color-red-0)",
-          }}
-        >
-          <Text c="red" fw={500} size="sm">
-            Chart Error
-          </Text>
-          <Text c="red" size="sm">
-            {error}
-          </Text>
-        </Box>
-      );
-    }
-
-    return (
-      <Box style={{ width: "100%", minHeight: height }}>
-        <VegaEmbed
-          spec={fullSpec}
-          options={{ actions: false }}
-          onError={handleError}
-        />
-      </Box>
+    const specKey = useMemo(
+      () => JSON.stringify({ spec, width, height }),
+      [spec, width, height],
     );
+
+    return <VegaChartInner key={specKey} fullSpec={fullSpec} height={height} />;
   },
   (prevProps, nextProps) => {
     // Deep compare specs to prevent unnecessary re-renders

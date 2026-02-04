@@ -31,6 +31,7 @@ import type {
   ComputedColumn,
   Relation,
   UserContextField,
+  UserContextStatus,
   TableWithColumns,
   UpdateTablePayload,
   UpdateColumnPayload,
@@ -58,8 +59,10 @@ import { ColumnConversionForm } from "./ColumnConversionForm";
 export interface TableDetailProps {
   /** The table to display */
   table: TableSchema;
-  /** User context fields for RLS configuration */
+  /** User context fields for access constraints */
   userContextFields: UserContextField[];
+  /** User context status for access constraints */
+  userContextStatus?: UserContextStatus;
   /** Available tables for manual relations */
   availableTables: TableWithColumns[];
   /** Whether the component is loading */
@@ -136,6 +139,7 @@ type ModalState =
 export function TableDetail({
   table,
   userContextFields,
+  userContextStatus = "UNSET",
   availableTables,
   loading = false,
   readOnly = false,
@@ -161,6 +165,13 @@ export function TableDetail({
   const [descriptionValue, setDescriptionValue] = useState(table.context ?? "");
 
   const isDisabled = readOnly || table.access === "OFF";
+  const isContextEnabled = userContextStatus === "ENABLED";
+  const canEditAccessConstraints = isContextEnabled && !isDisabled;
+  const constraintLabel = table.condition
+    ? isContextEnabled
+      ? "Constraint active"
+      : "Constraint inactive"
+    : "Add constraint";
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -223,7 +234,7 @@ export function TableDetail({
       case "units":
         return "Configure Units";
       case "contextFilter":
-        return "Row-Level Security";
+        return "Row-level access constraint";
       case "manualRelation":
         return modalState.relation ? "Edit Relation" : "Add Relation";
       case "computedColumn":
@@ -302,11 +313,12 @@ export function TableDetail({
             )}
           </div>
 
-          {/* Where Condition (RLS) */}
+          {/* Where Condition (Access Constraint) */}
           {table.condition && (
             <WhereCondition
               tableName={table.name}
               condition={table.condition}
+              userContextStatus={userContextStatus}
             />
           )}
 
@@ -371,11 +383,12 @@ export function TableDetail({
                 </Button.Group>
               </Group>
 
-              {/* Security Actions Group */}
+              {/* Access Constraints Group */}
               <Group gap="sm">
                 <Text size="xs" c="dimmed" fw={500} tt="uppercase">
-                  Security
+                  Access Constraints
                 </Text>
+                <Stack gap={2}>
                 <Button
                   variant={table.condition ? "filled" : "outline"}
                   color="blue"
@@ -384,11 +397,21 @@ export function TableDetail({
                   rightSection={
                     table.condition ? <IconCheck size={12} /> : undefined
                   }
-                  onClick={() => setModalState({ type: "contextFilter" })}
-                  disabled={isDisabled}
+                  onClick={() => {
+                    if (canEditAccessConstraints) {
+                      setModalState({ type: "contextFilter" });
+                    }
+                  }}
+                  disabled={!canEditAccessConstraints}
                 >
-                  {table.condition ? "RLS Active" : "Add RLS"}
+                  {constraintLabel}
                 </Button>
+                {!isContextEnabled && (
+                  <Text size="xs" c="dimmed">
+                    Enable user context to apply or edit constraints.
+                  </Text>
+                  )}
+                </Stack>
               </Group>
             </Group>
           </Paper>
@@ -485,7 +508,7 @@ export function TableDetail({
           <ContextFilterForm
             table={table}
             userContextFields={userContextFields}
-            readOnly={readOnly}
+            readOnly={readOnly || !isContextEnabled}
             onClose={closeModal}
             onSave={async (payload) => {
               await onUpsertContextFilter?.(payload);

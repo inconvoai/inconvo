@@ -23,7 +23,7 @@ export interface AddConditionModalProps {
   fields: ContextField[];
   /** Whether the submit button should show loading state */
   loading?: boolean;
-  /** Drawer title (defaults to "Add Table Condition") */
+  /** Drawer title (defaults to "Add Access Constraint") */
   title?: string;
   /** Callback when a connection is selected (for loading tables) */
   onConnectionSelect?: (connectionId: string) => void;
@@ -43,7 +43,7 @@ export function AddConditionModal({
   tables,
   fields,
   loading = false,
-  title = "Add Table Condition",
+  title = "Add Access Constraint",
   onConnectionSelect,
   tablesLoading = false,
   onTableSelect,
@@ -117,7 +117,7 @@ export function AddConditionModal({
         />
         <Select
           label="Table"
-          description="Select the table to apply row-level security"
+          description="Select the table to apply an access constraint"
           placeholder={tablesLoading ? "Loading tables..." : "Select a table"}
           data={tables.map((t) => ({ value: t.id, label: t.name }))}
           value={tableId}
@@ -155,7 +155,7 @@ export function AddConditionModal({
             disabled={!tableId || !columnId || !fieldId}
             loading={loading}
           >
-            Add Condition
+            Add Constraint
           </Button>
         </Group>
       </Stack>

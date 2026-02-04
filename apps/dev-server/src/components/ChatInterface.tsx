@@ -69,6 +69,9 @@ export function ChatInterface() {
   const [contextValues, setContextValues] = useState<Record<string, string>>(
     {},
   );
+  const [contextStatus, setContextStatus] = useState<
+    "UNSET" | "ENABLED" | "DISABLED"
+  >("UNSET");
   const [userContext, setUserContext] = useState<
     Record<string, string | number> | undefined
   >();
@@ -88,8 +91,12 @@ export function ChatInterface() {
   const fetchContextFields = async () => {
     try {
       const res = await fetch("/api/schema/user-context");
-      const data = (await res.json()) as { fields?: UserContextField[] };
+      const data = (await res.json()) as {
+        fields?: UserContextField[];
+        status?: "UNSET" | "ENABLED" | "DISABLED";
+      };
       setContextFields(data.fields ?? []);
+      setContextStatus(data.status ?? "UNSET");
     } catch (err) {
       console.error("Failed to fetch context fields:", err);
     }
@@ -196,11 +203,11 @@ export function ChatInterface() {
   }, [contextFields, contextValues]);
 
   // Create a new conversation with context
-  const handleCreateConversation = useCallback(async () => {
+  const handleCreateConversation = useCallback(async (options?: { skipContext?: boolean }) => {
     setIsCreatingConversation(true);
     setError(undefined);
     try {
-      const userContext = buildUserContext();
+      const userContext = options?.skipContext ? null : buildUserContext();
       // Generate a unique user identifier (in production, this would come from auth)
       const userIdentifier = "dev-user";
 
@@ -330,6 +337,7 @@ export function ChatInterface() {
   const activeContextCount = Object.values(contextValues).filter(
     (v) => v !== undefined && v !== "",
   ).length;
+  const hasContextFields = contextFields.length > 0;
 
   return (
     <Flex h="100%" gap={0}>
@@ -363,9 +371,7 @@ export function ChatInterface() {
         )}
 
         {/* User Context Setup - shown before first message */}
-        {contextFields.length > 0 &&
-        messages.length === 0 &&
-        !contextConfirmed ? (
+        {messages.length === 0 && !contextConfirmed ? (
           <Box
             style={{
               flex: 1,
@@ -381,48 +387,114 @@ export function ChatInterface() {
                     <IconBraces size={24} />
                   </ThemeIcon>
                 </Center>
-                <Title order={4} ta="center">
-                  Set User Context
-                </Title>
-                <Text size="sm" c="dimmed" ta="center">
-                  Configure context values to filter queries by user identity,
-                  tenant, or other criteria. These values will be used for
-                  row-level security filtering.
-                </Text>
+                {contextStatus === "ENABLED" ? (
+                  <>
+                    {hasContextFields ? (
+                      <>
+                        <Title order={4} ta="center">
+                          Set User Context
+                        </Title>
+                        <Text size="sm" c="dimmed" ta="center">
+                          Configure context values to apply access constraints
+                          or user-specific behavior.
+                        </Text>
 
-                <Stack gap="sm">
-                  {contextFields.map((field) => (
-                    <TextInput
-                      key={field.id}
-                      label={field.key}
-                      description={`Type: ${field.type}`}
-                      placeholder={
-                        field.type === "NUMBER"
-                          ? "Enter a number"
-                          : "Enter a value"
+                        <Stack gap="sm">
+                          {contextFields.map((field) => (
+                            <TextInput
+                              key={field.id}
+                              label={field.key}
+                              description={`Type: ${field.type}`}
+                              placeholder={
+                                field.type === "NUMBER"
+                                  ? "Enter a number"
+                                  : "Enter a value"
+                              }
+                              value={contextValues[field.key] ?? ""}
+                              onChange={(e) => {
+                                const value = e.currentTarget?.value ?? "";
+                                setContextValues((prev) => ({
+                                  ...prev,
+                                  [field.key]: value,
+                                }));
+                              }}
+                            />
+                          ))}
+                        </Stack>
+
+                        <Button
+                          fullWidth
+                          leftSection={<IconCheck size={16} />}
+                          onClick={() => handleCreateConversation()}
+                          disabled={activeContextCount === 0}
+                          loading={isCreatingConversation}
+                          mt="sm"
+                        >
+                          Continue
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Title order={4} ta="center">
+                          User Context Needs Fields
+                        </Title>
+                        <Text size="sm" c="dimmed" ta="center">
+                          User Context is enabled, but no fields are configured.
+                          Add at least one field or disable User Context to
+                          start a conversation.
+                        </Text>
+                        <Button
+                          component="a"
+                          href="/context"
+                          fullWidth
+                          variant="outline"
+                          mt="sm"
+                        >
+                          Open User Context settings
+                        </Button>
+                      </>
+                    )}
+                  </>
+                ) : contextStatus === "DISABLED" ? (
+                  <>
+                    <Title order={4} ta="center">
+                      User Context Disabled
+                    </Title>
+                    <Text size="sm" c="dimmed" ta="center">
+                      This agent is configured to run without user context.
+                    </Text>
+                    <Button
+                      fullWidth
+                      leftSection={<IconCheck size={16} />}
+                      onClick={() =>
+                        handleCreateConversation({ skipContext: true })
                       }
-                      value={contextValues[field.key] ?? ""}
-                      onChange={(e) => {
-                        const value = e.currentTarget?.value ?? "";
-                        setContextValues((prev) => ({
-                          ...prev,
-                          [field.key]: value,
-                        }));
-                      }}
-                    />
-                  ))}
-                </Stack>
-
-                <Button
-                  fullWidth
-                  leftSection={<IconCheck size={16} />}
-                  onClick={handleCreateConversation}
-                  disabled={activeContextCount === 0}
-                  loading={isCreatingConversation}
-                  mt="sm"
-                >
-                  Continue
-                </Button>
+                      loading={isCreatingConversation}
+                      mt="sm"
+                    >
+                      Continue
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Title order={4} ta="center">
+                      User Context Not Configured
+                    </Title>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Please enable or disable user context before starting a
+                      conversation.
+                    </Text>
+                    <Button
+                      component="a"
+                      href="/context"
+                      fullWidth
+                      variant="outline"
+                      mt="sm"
+                    >
+                      Go to User Context settings
+                    </Button>
+                  </>
+                )}
               </Stack>
             </Paper>
           </Box>

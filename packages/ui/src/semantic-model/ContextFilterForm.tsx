@@ -79,13 +79,14 @@ export function ContextFilterForm({
       <Stack style={{ flex: 1, paddingBottom: "60px" }}>
         <Alert
           icon={<IconInfoCircle size={16} />}
-          title="Row-level Security"
+          title="Row-level access constraint"
           color="blue"
           variant="light"
         >
           <Text size="sm">
             Where conditions filter table data based on the current user&apos;s
-            context. Only rows matching the condition will be accessible.
+            context. Only rows matching the condition will be accessible when
+            user context is enabled.
           </Text>
         </Alert>
 

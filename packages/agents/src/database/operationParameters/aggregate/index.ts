@@ -31,6 +31,7 @@ export interface DefineAggregateOperationParametersParams {
   operation: "aggregate";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -89,7 +90,7 @@ export async function defineAggregateOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      userContext: params.userContext,
+      userIdentifier: params.userIdentifier,
     }),
     provider: params.provider,
     tool: applyAggregateOperationParametersTool,

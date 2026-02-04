@@ -82,7 +82,7 @@ Useful links:
 Run Inconvo on your own machine, perfect for evaluation.
 
 ```bash
-npx inconvo dev
+npx inconvo@latest dev
 ```
 
 Open the dashboard at http://localhost:26686

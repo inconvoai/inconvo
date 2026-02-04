@@ -175,7 +175,12 @@ jobs:
           # Strip 'v' prefix for npm version
           VERSION="${{ needs.prepare.outputs.version }}"
           VERSION="${VERSION#v}"
-          npm version "$VERSION" --no-git-tag-version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "CLI version already $VERSION; skipping npm version."
+          else
+            npm version "$VERSION" --no-git-tag-version
+          fi
 
       - name: Publish CLI to npmjs
         working-directory: packages/cli

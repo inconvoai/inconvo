@@ -26,7 +26,7 @@
     "./dialects": "./src/dialects/index.ts"
   },
   "author": "",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
     "@repo/types": "workspace:*",

@@ -184,7 +184,10 @@ jobs:
 
       - name: Publish CLI to npmjs
         working-directory: packages/cli
-        run: npm publish --access public --provenance
+        run: |
+          # Remove token placeholder so OIDC can work
+          sed -i '/_authToken/d' ~/.npmrc || true
+          npm publish --access public --provenance
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]

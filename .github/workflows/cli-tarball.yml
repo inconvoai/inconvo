@@ -39,7 +39,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Build CLI
-        run: pnpm --filter @inconvoai/inconvo build
+        run: pnpm --filter inconvo build
 
       - name: Resolve CLI catalog versions
         working-directory: packages/cli

@@ -1,6 +1,6 @@
 {
-  "name": "@inconvoai/inconvo",
-  "version": "0.1.0",
+  "name": "inconvo",
+  "version": "2.0.0",
   "description": "CLI for Inconvo development environment",
   "repository": {
     "type": "git",
@@ -52,6 +52,6 @@
     "node": ">=18"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org"
   }
 }

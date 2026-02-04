@@ -184,7 +184,7 @@ jobs:
 
       - name: Publish CLI to npmjs
         working-directory: packages/cli
-        run: npm publish --access public --provenance
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

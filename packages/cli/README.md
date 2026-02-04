@@ -1,7 +1,5 @@
 # Inconvo CLI
 
-Try out Inconvo without cloning the repository.
-
 ## Quick Start
 
 ```bash

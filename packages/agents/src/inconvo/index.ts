@@ -81,8 +81,6 @@ interface QuestionAgentParams {
   userIdentifier: string;
   /** Available dataset files with metadata for agent context */
   availableDatasets?: AvailableDataset[];
-  /** User context for context-scoped dataset mounting in sandbox. */
-  userContext?: Record<string, string | number>;
   /** Optional callback to trigger conversation titling (e.g., via Inngest in platform) */
   onTitleConversation?: (
     conversationId: string,
@@ -232,6 +230,8 @@ function hasDatabaseRetrieverCall(messages: BaseMessage[]): boolean {
 }
 
 export async function inconvoAgent(params: QuestionAgentParams) {
+  const conversationUserContext = params.conversation.userContext ?? undefined;
+
   const AgentState = Annotation.Root({
     userQuestion: Annotation<string>({
       reducer: (x, y) => y,
@@ -377,7 +377,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     userContext: Annotation<Record<string, string | number>>({
       reducer: (x, y) => y,
       default: () =>
-        params.conversation.userContext as Record<string, string | number>,
+        (params.conversation.userContext ??
+          {}) as Record<string, string | number>,
     }),
     error: Annotation<Record<string, unknown> | undefined>({
       reducer: (x, y) => y,
@@ -404,10 +405,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
   const promptCacheKey = buildPromptCacheKey({
     agentId: params.agentId,
-    userContext: params.conversation.userContext as Record<
-      string,
-      string | number
-    >,
+    userIdentifier: params.userIdentifier,
   });
 
   const model = getAIModel(params.provider, "gpt-5.2", {
@@ -491,6 +489,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               schema: dbConfig.schema,
               userContext: state.userContext,
               agentId: params.agentId,
+              userIdentifier: params.userIdentifier,
               connector: dbConfig.connector,
               provider: params.provider,
             })
@@ -634,7 +633,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
             userIdentifier: params.userIdentifier,
-            userContext: params.userContext,
+            userContext: conversationUserContext,
           });
           const executionResult = await sandboxSession.executeCode(input.code);
           const toolCallId = config.toolCall?.id;
@@ -706,7 +705,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             conversationId: params.conversation.id,
             runId: currentState?.runId ?? "",
             userIdentifier: params.userIdentifier,
-            userContext: params.userContext,
+            userContext: conversationUserContext,
           });
 
           const executionResult = await sandboxSession.executeCode(input.code);
@@ -983,7 +982,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       conversationId: params.conversation.id,
       runId: state.runId,
       userIdentifier: params.userIdentifier,
-      userContext: params.userContext,
+      userContext: conversationUserContext,
     });
     void sandboxSession.start();
 
@@ -1094,7 +1093,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           conversationId: params.conversation.id,
           runId: state.runId,
           userIdentifier: params.userIdentifier,
-          userContext: params.userContext,
+          userContext: conversationUserContext,
         });
         await sandboxSession.destroy();
       } catch {

@@ -3,9 +3,11 @@ import {
   createConversation,
   listConversationsFiltered,
 } from "~/lib/conversations";
+import { prisma } from "~/lib/prisma";
 import { corsHeaders, handleOptions } from "~/lib/cors";
 import { parseListParams, decodeCursor } from "~/lib/apiParams";
 import { DEV_AGENT_ID } from "~/lib/constants";
+import { validateUserContextAgainstSchema } from "~/lib/validateUserContext";
 
 // Handle OPTIONS preflight
 export async function OPTIONS() {
@@ -29,9 +31,9 @@ export async function POST(
     }
 
     // Parse request body
-    const body = await request.json() as {
+    const body = (await request.json()) as {
       userIdentifier?: string;
-      userContext?: Record<string, string | number>;
+      userContext?: Record<string, string | number> | null;
     };
 
     const { userIdentifier, userContext } = body;
@@ -43,8 +45,77 @@ export async function POST(
       );
     }
 
+    const config = await prisma.userContextConfig.findFirst({
+      select: { status: true },
+    });
+    const status = config?.status ?? "UNSET";
+
+    if (status === "UNSET") {
+      return NextResponse.json(
+        {
+          error:
+            "User context is not configured. Please enable or disable user context before starting a conversation.",
+        },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    let userContextToStore: Record<string, string | number> | null = null;
+    if (status === "DISABLED") {
+      if (userContext !== undefined && userContext !== null) {
+        return NextResponse.json(
+          {
+            error:
+              "User context is disabled for this agent. Omit userContext when starting a conversation.",
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+      userContextToStore = null;
+    } else {
+      const fields = await prisma.userContextField.findMany({
+        select: { key: true, type: true },
+      });
+      if (fields.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "User context is enabled but has no fields configured. Add fields or disable user context.",
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      if (!userContext || Object.keys(userContext).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "User context is required to start a conversation for this agent.",
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      try {
+        userContextToStore = validateUserContextAgainstSchema(
+          userContext,
+          fields as Array<{ key: string; type: "STRING" | "NUMBER" }>,
+        );
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error: error instanceof Error ? error.message : "Invalid userContext",
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+    }
+
     // Create conversation
-    const conversation = await createConversation(userIdentifier, userContext);
+    const conversation = await createConversation(
+      userIdentifier,
+      userContextToStore,
+    );
 
     return NextResponse.json(conversation, {
       status: 201,

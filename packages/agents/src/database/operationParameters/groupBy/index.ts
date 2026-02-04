@@ -30,6 +30,7 @@ export interface DefineGroupByOperationParametersParams {
   operation: "groupBy";
   userContext: Record<string, string | number>;
   agentId: string | number;
+  userIdentifier: string;
   provider: AIProvider;
 }
 
@@ -281,7 +282,7 @@ export async function defineGroupByOperationParameters(
   >({
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
-      userContext: params.userContext,
+      userIdentifier: params.userIdentifier,
     }),
     provider: params.provider,
     tool: applyGroupByOperationParametersTool,

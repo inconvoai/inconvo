@@ -19,6 +19,7 @@ import { DEV_AGENT_ID, DEV_ORGANISATION_ID } from "~/lib/constants";
 import { corsHeaders, handleOptions } from "~/lib/cors";
 import { getPostHogClient } from "~/lib/posthog-server";
 import { trackResponsePerformance } from "~/lib/telemetry";
+import { prisma } from "~/lib/prisma";
 
 interface SDKResponse {
   id: string;
@@ -98,7 +99,12 @@ export async function POST(
     };
     await appendMessages(conversationId, [userMessage]);
 
-    const schema = await getSchema();
+    const config = await prisma.userContextConfig.findFirst({
+      select: { status: true },
+    });
+    const userContextEnabled = config?.status === "ENABLED";
+
+    const schema = await getSchema({ includeConditions: userContextEnabled });
     const connector = getConnector();
     const checkpointer = getCheckpointer();
 
@@ -120,6 +126,11 @@ export async function POST(
       userIdentifier: conversation.userIdentifier,
       provider: "openai",
     });
+
+    const userContextForAgent =
+      userContextEnabled && conversation.userContext
+        ? conversation.userContext
+        : {};
 
     // Track start time for performance metrics
     const startTime = Date.now();
@@ -151,7 +162,7 @@ export async function POST(
         const eventStream = graph.streamEvents(
           {
             userQuestion: message,
-            userContext: conversation.userContext ?? {},
+            userContext: userContextForAgent,
             runId,
           },
           {
@@ -263,7 +274,7 @@ export async function POST(
           const eventStream = graph.streamEvents(
             {
               userQuestion: message,
-              userContext: conversation.userContext ?? {},
+              userContext: userContextForAgent,
               runId,
             },
             {

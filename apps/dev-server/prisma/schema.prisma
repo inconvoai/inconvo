@@ -123,6 +123,17 @@ model UserContextField {
   tableConditions TableCondition[]
 }
 
+model UserContextConfig {
+  id     String            @id @default(uuid())
+  status UserContextStatus @default(UNSET)
+}
+
+enum UserContextStatus {
+  UNSET
+  ENABLED
+  DISABLED
+}
+
 model Conversation {
   id             String   @id
   userIdentifier String

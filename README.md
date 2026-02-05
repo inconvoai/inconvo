@@ -7,9 +7,13 @@
 <div align="center">
 
 [Website](https://inconvo.com) | [Docs](https://inconvo.com/docs) | [Issues](https://github.com/inconvoai/inconvo/issues)
-  
+
+[![Discord](https://img.shields.io/badge/Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/aFsbY9Uf9C)
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red.svg)](https://github.com/inconvoai/inconvo)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/inconvoai/inconvo/blob/main/LICENSE)
+[![Cloud](https://img.shields.io/badge/Cloud-☁️-blue)](https://app.inconvo.ai)
+[![Y Combinator](https://img.shields.io/badge/Y%20Combinator-S23-orange)](https://www.ycombinator.com/companies/inconvo)
+[![Documentation](https://img.shields.io/badge/Documentation-📕-blue)](https://inconvo.com/docs)
 
 </div>
 

@@ -3,12 +3,22 @@ name: notify-cloud
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      after:
+        description: OSS commit SHA to notify cloud about (optional, defaults to current HEAD)
+        required: false
+        type: string
 
 jobs:
   notify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Generate app token
         id: app-token
@@ -19,13 +29,45 @@ jobs:
           owner: inconvoai
           repositories: inconvo-cloud
 
-      - name: Get commit info
+      - name: Build dispatch payload
         id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
-          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
-          echo "email=$(git log -1 --pretty=%ae)" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            AFTER_SHA="${{ github.sha }}"
+            BEFORE_SHA="${{ github.event.before }}"
+          else
+            AFTER_SHA="${{ inputs.after }}"
+            BEFORE_SHA=""
+            if [ -z "$AFTER_SHA" ]; then
+              AFTER_SHA=$(git rev-parse HEAD)
+            fi
+          fi
+
+          COMMIT_JSON=$(gh api "repos/inconvoai/inconvo/commits/${AFTER_SHA}")
+          MESSAGE=$(echo "$COMMIT_JSON" | jq -r '.commit.message | split("\n")[0]')
+          AUTHOR=$(echo "$COMMIT_JSON" | jq -r '.commit.author.name')
+          EMAIL=$(echo "$COMMIT_JSON" | jq -r '.commit.author.email')
+
+          COMPARE_URL=""
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            COMPARE_URL="https://github.com/inconvoai/inconvo/compare/${BEFORE_SHA}...${AFTER_SHA}"
+          fi
+
+          PAYLOAD=$(jq -nc \
+            --arg before "$BEFORE_SHA" \
+            --arg after "$AFTER_SHA" \
+            --arg sha "$AFTER_SHA" \
+            --arg message "$MESSAGE" \
+            --arg author "$AUTHOR" \
+            --arg email "$EMAIL" \
+            --arg compare "$COMPARE_URL" \
+            '{before:$before,after:$after,sha:$sha,message:$message,author:$author,email:$email,compare:$compare}')
+
+          echo "payload=$PAYLOAD" >> "$GITHUB_OUTPUT"
 
       - name: Trigger cloud repo sync
         uses: peter-evans/repository-dispatch@v3
@@ -33,4 +75,4 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           repository: inconvoai/inconvo-cloud
           event-type: oss-updated
-          client-payload: '{"sha": "${{ steps.commit.outputs.sha }}", "message": "${{ steps.commit.outputs.message }}", "author": "${{ steps.commit.outputs.author }}", "email": "${{ steps.commit.outputs.email }}"}'
+          client-payload: ${{ steps.commit.outputs.payload }}

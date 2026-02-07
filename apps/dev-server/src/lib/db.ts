@@ -6,6 +6,10 @@ import {
   type LogEvent,
   type LogConfig,
 } from "kysely";
+import {
+  BigQueryDialect,
+  type BigQueryDialectConfig,
+} from "@repo/connect/dialects";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";
 import { env } from "~/env";
@@ -28,6 +32,30 @@ function requireDatabaseUrl(): string {
     throw new Error("INCONVO_DATABASE_URL is required for SQL dialects");
   }
   return env.INCONVO_DATABASE_URL;
+}
+
+function parseBigQueryCredentials():
+  | Record<string, unknown>
+  | undefined {
+  const credentialsJson = env.INCONVO_BIGQUERY_CREDENTIALS_JSON?.trim();
+  const credentialsBase64 = env.INCONVO_BIGQUERY_CREDENTIALS_BASE64?.trim();
+  const serializedCredentials =
+    credentialsJson ??
+    (credentialsBase64
+      ? Buffer.from(credentialsBase64, "base64").toString("utf-8")
+      : undefined);
+
+  if (!serializedCredentials) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(serializedCredentials) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      "Invalid BigQuery credentials. Provide valid INCONVO_BIGQUERY_CREDENTIALS_JSON or INCONVO_BIGQUERY_CREDENTIALS_BASE64."
+    );
+  }
 }
 
 export async function getDb(): Promise<Kysely<unknown>> {
@@ -122,6 +150,29 @@ export async function getDb(): Promise<Kysely<unknown>> {
         },
       }),
       /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+      log: isDevelopment ? createLogger() : undefined,
+    });
+  } else if (env.DATABASE_DIALECT === "bigquery") {
+    if (!env.INCONVO_BIGQUERY_PROJECT_ID) {
+      throw new Error("INCONVO_BIGQUERY_PROJECT_ID is required for BigQuery");
+    }
+    if (!env.INCONVO_BIGQUERY_DATASET) {
+      throw new Error("INCONVO_BIGQUERY_DATASET is required for BigQuery");
+    }
+    if (!env.INCONVO_BIGQUERY_LOCATION) {
+      throw new Error("INCONVO_BIGQUERY_LOCATION is required for BigQuery");
+    }
+
+    const dialectConfig: BigQueryDialectConfig = {
+      projectId: env.INCONVO_BIGQUERY_PROJECT_ID,
+      dataset: env.INCONVO_BIGQUERY_DATASET,
+      location: env.INCONVO_BIGQUERY_LOCATION,
+      credentials: parseBigQueryCredentials(),
+      maximumBytesBilled: env.INCONVO_BIGQUERY_MAX_BYTES_BILLED,
+    };
+
+    db = new Kysely({
+      dialect: new BigQueryDialect(dialectConfig),
       log: isDevelopment ? createLogger() : undefined,
     });
   } else {

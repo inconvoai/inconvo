@@ -26,6 +26,7 @@ export const env = createEnv({
     INCONVO_BIGQUERY_DATASET: z.string().optional(),
     INCONVO_BIGQUERY_LOCATION: z.string().optional(),
     INCONVO_BIGQUERY_CREDENTIALS_JSON: z.string().optional(),
+    INCONVO_BIGQUERY_CREDENTIALS_BASE64: z.string().optional(),
     INCONVO_BIGQUERY_KEYFILE: z.string().optional(),
     INCONVO_BIGQUERY_MAX_BYTES_BILLED: z.coerce.number().optional(),
   },
@@ -45,18 +46,20 @@ export const env = createEnv({
         INCONVO_BIGQUERY_LOCATION: z.string(),
         INCONVO_BIGQUERY_MAX_BYTES_BILLED: z.coerce.number().optional(),
         INCONVO_BIGQUERY_CREDENTIALS_JSON: z.string().optional(),
+        INCONVO_BIGQUERY_CREDENTIALS_BASE64: z.string().optional(),
         INCONVO_BIGQUERY_KEYFILE: z.string().optional(),
       })
       .refine(
         (value) =>
           Boolean(
             value.INCONVO_BIGQUERY_CREDENTIALS_JSON ||
-            value.INCONVO_BIGQUERY_KEYFILE,
+              value.INCONVO_BIGQUERY_CREDENTIALS_BASE64 ||
+              value.INCONVO_BIGQUERY_KEYFILE,
           ),
         {
           path: ["INCONVO_BIGQUERY_CREDENTIALS_JSON"],
           message:
-            "Provide INCONVO_BIGQUERY_CREDENTIALS_JSON or INCONVO_BIGQUERY_KEYFILE",
+            "Provide INCONVO_BIGQUERY_CREDENTIALS_JSON, INCONVO_BIGQUERY_CREDENTIALS_BASE64, or INCONVO_BIGQUERY_KEYFILE",
         },
       );
 

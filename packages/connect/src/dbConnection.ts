@@ -140,13 +140,21 @@ export async function getDb(): Promise<Kysely<any>> {
     });
   } else if (env.DATABASE_DIALECT === "bigquery") {
     const credentialsJson = env.INCONVO_BIGQUERY_CREDENTIALS_JSON?.trim();
+    const credentialsBase64 = env.INCONVO_BIGQUERY_CREDENTIALS_BASE64?.trim();
+    const serializedCredentials =
+      credentialsJson ??
+      (credentialsBase64
+        ? Buffer.from(credentialsBase64, "base64").toString("utf-8")
+        : undefined);
     let parsedCredentials: Record<string, unknown> | undefined;
 
-    if (credentialsJson) {
+    if (serializedCredentials) {
       try {
-        parsedCredentials = JSON.parse(credentialsJson);
+        parsedCredentials = JSON.parse(serializedCredentials);
       } catch {
-        throw new Error("Invalid INCONVO_BIGQUERY_CREDENTIALS_JSON value");
+        throw new Error(
+          "Invalid BigQuery credentials. Provide valid INCONVO_BIGQUERY_CREDENTIALS_JSON or INCONVO_BIGQUERY_CREDENTIALS_BASE64."
+        );
       }
     }
 

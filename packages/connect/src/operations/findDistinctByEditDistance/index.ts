@@ -25,6 +25,85 @@ function filterStringByEditDistance(
     .map((item) => item.str);
 }
 
+function getDeclaredColumnTypeForEditDistance(
+  ctx: OperationContext,
+  tableName: string,
+  columnName: string,
+) {
+  const table = ctx.schema.tables.find(
+    (candidate) => candidate.name === tableName,
+  );
+  if (!table) {
+    return undefined;
+  }
+
+  const computedColumn = table.computedColumns?.find(
+    (candidate) => candidate.name === columnName,
+  );
+  if (computedColumn) {
+    return computedColumn.type ?? undefined;
+  }
+
+  const columnConversion = table.columnConversions?.find(
+    (candidate) => candidate.column === columnName,
+  );
+  if (columnConversion) {
+    return columnConversion.type ?? undefined;
+  }
+
+  return table.columns.find((candidate) => candidate.name === columnName)?.type;
+}
+
+function assertColumnSupportsEditDistance(
+  ctx: OperationContext,
+  tableName: string,
+  columnName: string,
+) {
+  const declaredType = getDeclaredColumnTypeForEditDistance(
+    ctx,
+    tableName,
+    columnName,
+  );
+  if (!declaredType) {
+    return;
+  }
+
+  if (declaredType.toLowerCase() !== "string") {
+    throw new Error(
+      `findDistinctByEditDistance requires a string column, but '${tableName}.${columnName}' is type '${declaredType}'.`,
+    );
+  }
+}
+
+function extractStringValuesForEditDistance(
+  values: Array<Record<string, unknown>>,
+  responseColumn: string,
+) {
+  const nonNullValues = values
+    .map((value) => value[responseColumn])
+    .filter(
+      (value): value is NonNullable<unknown> =>
+        value !== null && value !== undefined,
+    );
+
+  const stringValues = nonNullValues.filter(
+    (value): value is string => typeof value === "string",
+  );
+  if (stringValues.length !== nonNullValues.length) {
+    const firstNonString = nonNullValues.find(
+      (value) => typeof value !== "string",
+    );
+    const nonStringType = Array.isArray(firstNonString)
+      ? "array"
+      : typeof firstNonString;
+    throw new Error(
+      `findDistinctByEditDistance requires string values, but '${responseColumn}' returned ${nonStringType}.`,
+    );
+  }
+
+  return stringValues;
+}
+
 export async function findDistinctByEditDistance(
   db: Kysely<any>,
   query: Query,
@@ -40,6 +119,8 @@ export async function findDistinctByEditDistance(
   const columnParts = operationParameters.column.split(".");
   const columnName =
     columnParts.length === 2 ? columnParts[1]! : operationParameters.column;
+
+  assertColumnSupportsEditDistance(ctx, table, columnName);
 
   const distinctColumn = getColumnFromTable({
     columnName,
@@ -63,7 +144,13 @@ export async function findDistinctByEditDistance(
   dbQuery = applyLimit(dbQuery, 5000, dialect);
 
   // Add where conditions
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    dialect,
+    query.tableConditions,
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }
@@ -77,14 +164,7 @@ export async function findDistinctByEditDistance(
 
   const maxResults = 490;
   const reduced = filterStringByEditDistance(
-    response
-      .map(
-        (value: Record<string, unknown>) => value[operationParameters.column],
-      )
-      .filter(
-        (value: unknown): value is string =>
-          value !== null && value !== undefined,
-      ),
+    extractStringValuesForEditDistance(response, operationParameters.column),
     operationParameters.compareString,
     maxResults,
   );

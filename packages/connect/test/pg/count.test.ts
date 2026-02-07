@@ -246,4 +246,47 @@ describe("PostgreSQL count Operation", () => {
       Number(expected.count_product_id),
     );
   });
+
+  test("treats count keys as literals instead of executable SQL", async () => {
+    const maliciousAlias = "evil' || (SELECT 1/0) || 'alias";
+    const injectedKey = `${maliciousAlias}.id`;
+
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "count" as const,
+      operationParameters: {
+        joins: [
+          {
+            table: "products",
+            name: maliciousAlias,
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+            joinType: "inner",
+          },
+        ],
+        count: [injectedKey],
+        countDistinct: null,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await count(db, parsed, ctx);
+
+    const expectedRows = await db
+      .selectFrom("orders as o")
+      .innerJoin("products as p", "p.id", "o.product_id")
+      .select(sql<number>`COUNT(p.id)::int`.as("count_product_id"))
+      .execute();
+
+    const expected = expectedRows[0] ?? { count_product_id: 0 };
+    const result = response.data ?? response;
+
+    expect(result._count[injectedKey]).toBe(Number(expected.count_product_id));
+  });
 });

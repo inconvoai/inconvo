@@ -169,11 +169,16 @@ async function writeEnvFile(
   ];
 
   if (config.databaseDialect === "bigquery") {
+    const credentialsBase64 = Buffer.from(
+      config.bigQueryCredentialsJson,
+      "utf-8"
+    ).toString("base64");
+
     lines.push(`INCONVO_BIGQUERY_PROJECT_ID=${config.bigQueryProjectId}`);
     lines.push(`INCONVO_BIGQUERY_DATASET=${config.bigQueryDataset}`);
     lines.push(`INCONVO_BIGQUERY_LOCATION=${config.bigQueryLocation}`);
     lines.push(
-      `INCONVO_BIGQUERY_CREDENTIALS_JSON=${config.bigQueryCredentialsJson}`
+      `INCONVO_BIGQUERY_CREDENTIALS_BASE64=${credentialsBase64}`
     );
     if (config.bigQueryMaxBytesBilled !== undefined) {
       lines.push(
@@ -374,22 +379,32 @@ export async function runSetupWizard(): Promise<boolean> {
       let credentialsJson: string;
 
       if (credentialsSource === "file") {
-        const credentialsPath = await p.text({
-          message: "Path to service account JSON key file:",
-          placeholder: "/Users/you/keys/bigquery-service-account.json",
-          validate: (value) => (value ? undefined : "Path is required"),
-        });
-        if (p.isCancel(credentialsPath)) {
-          p.cancel("Setup cancelled.");
-          return false;
-        }
+        while (true) {
+          const credentialsPath = await p.text({
+            message: "Path to service account JSON key file:",
+            placeholder: "/Users/you/keys/bigquery-service-account.json",
+            validate: (value) => (value ? undefined : "Path is required"),
+          });
+          if (p.isCancel(credentialsPath)) {
+            p.cancel("Setup cancelled.");
+            return false;
+          }
 
-        try {
-          const raw = await fs.readFile(credentialsPath, "utf-8");
-          credentialsJson = JSON.stringify(JSON.parse(raw));
-        } catch {
-          p.log.error("Could not read or parse the service account JSON file.");
-          return runSetupWizard();
+          try {
+            const raw = await fs.readFile(credentialsPath.trim(), "utf-8");
+            credentialsJson = JSON.stringify(JSON.parse(raw));
+            break;
+          } catch {
+            p.log.error("Could not read or parse the service account JSON file.");
+            const retryFile = await p.confirm({
+              message: "Try a different file path?",
+              initialValue: true,
+            });
+            if (p.isCancel(retryFile) || !retryFile) {
+              p.cancel("Setup cancelled.");
+              return false;
+            }
+          }
         }
       } else {
         const credentialsInput = await p.text({

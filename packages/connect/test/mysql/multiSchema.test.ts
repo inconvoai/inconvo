@@ -17,6 +17,7 @@ describe("MySQL Multi-Schema Operations", () => {
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let count: (typeof import("~/operations/count"))["count"];
+  let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
   let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
   let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
@@ -48,6 +49,7 @@ describe("MySQL Multi-Schema Operations", () => {
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     count = (await import("~/operations/count")).count;
+    countRelations = (await import("~/operations/countRelations")).countRelations;
     groupBy = (await import("~/operations/groupBy")).groupBy;
     aggregate = (await import("~/operations/aggregate")).aggregate;
     const { getDb } = await import("~/dbConnection");
@@ -285,6 +287,56 @@ describe("MySQL Multi-Schema Operations", () => {
       expect(response.data._count["departments.id"]).toBe(
         Number(expected.department_count),
       );
+    });
+  });
+
+  describe("countRelations with tableSchema (database)", () => {
+    it("counts hr.employees per hr.department", async () => {
+      const iql = {
+        operation: "countRelations" as const,
+        table: "departments",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [],
+        operationParameters: {
+          columns: ["id", "name"],
+          joins: [
+            {
+              table: "employees",
+              name: "employees",
+              path: [
+                {
+                  source: ["departments.id"],
+                  target: ["employees.department_id"],
+                },
+              ],
+            },
+          ],
+          relationsToCount: [
+            {
+              name: "employees",
+              distinct: null,
+            },
+          ],
+          orderBy: {
+            name: "employees",
+            direction: "desc" as const,
+          },
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await countRelations(db, parsed, hrCtx);
+      const rows = Array.isArray(response) ? response : response.data;
+
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "hr", "employees")).toBe(true);
+      expect(Array.isArray(rows)).toBe(true);
+      expect(rows.length).toBeGreaterThan(0);
+      rows.forEach((row: any) => {
+        expect(Number.isFinite(Number(row.employees_count))).toBe(true);
+      });
     });
   });
 

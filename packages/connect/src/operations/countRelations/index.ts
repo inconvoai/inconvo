@@ -22,6 +22,55 @@ type RelationCountPlan = {
   cteQuery: any;
 };
 
+function resolveRelationTargetTableId({
+  targetTableName,
+  relationAlias,
+  joinAlias,
+  baseTableName,
+  tableSchema,
+  ctx,
+}: {
+  targetTableName: string;
+  relationAlias: string;
+  joinAlias: string;
+  baseTableName: string;
+  tableSchema: string | null | undefined;
+  ctx: OperationContext;
+}): string {
+  const { schema, dialect } = ctx;
+
+  // BigQuery relation joins are sensitive to dataset-qualified refs. Preserve
+  // existing behavior and keep relation table ids unqualified there.
+  if (dialect === "bigquery") {
+    return targetTableName;
+  }
+
+  const baseTableFromSchema =
+    schema.tables.find(
+      (table) => table.name === baseTableName && table.schema === tableSchema,
+    ) ?? schema.tables.find((table) => table.name === baseTableName);
+
+  const relationFromSchema =
+    baseTableFromSchema?.relations?.find(
+      (relation) => relation.name === relationAlias,
+    ) ??
+    baseTableFromSchema?.relations?.find((relation) => relation.name === joinAlias) ??
+    baseTableFromSchema?.relations?.find(
+      (relation) => relation.targetTable === targetTableName,
+    );
+
+  const targetSchema =
+    relationFromSchema?.targetSchema ??
+    schema.tables.find(
+      (table) => table.name === targetTableName && table.schema === tableSchema,
+    )?.schema ??
+    schema.tables.find((table) => table.name === targetTableName)?.schema ??
+    tableSchema ??
+    null;
+
+  return getTableIdentifier(targetTableName, targetSchema, dialect);
+}
+
 export async function countRelations(
   db: Kysely<any>,
   query: Query,
@@ -74,6 +123,14 @@ export async function countRelations(
         `Unable to determine target table for relation ${relation.name}.`,
       );
     }
+    const targetTableId = resolveRelationTargetTableId({
+      targetTableName,
+      relationAlias: relation.name,
+      joinAlias: joinDescriptor.name ?? joinDescriptor.table,
+      baseTableName: table,
+      tableSchema: query.tableSchema,
+      ctx,
+    });
 
     const cteName = `${relation.name.replace(/\W+/g, "_")}_count`;
     const countColumnAlias = relation.distinct
@@ -97,7 +154,7 @@ export async function countRelations(
       );
     }
 
-    let cte = db.selectFrom(targetTableName);
+    let cte = db.selectFrom(targetTableId);
 
     for (const column of targetColumns) {
       cte = cte.select(

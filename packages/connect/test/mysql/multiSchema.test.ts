@@ -275,9 +275,16 @@ describe("MySQL Multi-Schema Operations", () => {
 
       const parsed = QuerySchema.parse(iql);
       const response = await count(db, parsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT COUNT(*) AS department_count
+        FROM \`hr\`.\`departments\`
+      `.execute(db);
+      const expected = expectedRows[0] ?? { department_count: 0 };
 
       expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
-      expect(response.data._count["departments.id"]).toBe(5);
+      expect(response.data._count["departments.id"]).toBe(
+        Number(expected.department_count),
+      );
     });
   });
 
@@ -370,6 +377,11 @@ describe("MySQL Multi-Schema Operations", () => {
 
       const hostedResponse = await count(db, hostedParsed, publicCtx);
       const hrResponse = await count(db, hrParsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT COUNT(*) AS employee_count
+        FROM \`hr\`.\`employees\`
+      `.execute(db);
+      const expected = expectedRows[0] ?? { employee_count: 0 };
 
       // Hosted should NOT contain hr database qualification
       expect(containsSchemaTable(hostedResponse.query.sql, "hr", "users")).toBe(false);
@@ -378,7 +390,9 @@ describe("MySQL Multi-Schema Operations", () => {
 
       // Both should have data
       expect(hostedResponse.data._count["users.id"]).toBeGreaterThan(0);
-      expect(hrResponse.data._count["employees.id"]).toBe(12);
+      expect(hrResponse.data._count["employees.id"]).toBe(
+        Number(expected.employee_count),
+      );
     });
   });
 });

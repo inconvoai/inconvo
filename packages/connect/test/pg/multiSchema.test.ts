@@ -333,9 +333,16 @@ describe("PostgreSQL Multi-Schema Operations", () => {
 
       const parsed = QuerySchema.parse(iql);
       const response = await count(db, parsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT COUNT(*)::int AS department_count
+        FROM "hr"."departments"
+      `.execute(db);
+      const expected = expectedRows[0] ?? { department_count: 0 };
 
       expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
-      expect(response.data._count["departments.id"]).toBe(5); // 5 departments in HR schema
+      expect(response.data._count["departments.id"]).toBe(
+        Number(expected.department_count),
+      );
     });
 
     it("counts hr.projects by status", async () => {
@@ -672,6 +679,11 @@ describe("PostgreSQL Multi-Schema Operations", () => {
 
       const publicResponse = await count(db, publicParsed, publicCtx);
       const hrResponse = await count(db, hrParsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT COUNT(*)::int AS employee_count
+        FROM "hr"."employees"
+      `.execute(db);
+      const expected = expectedRows[0] ?? { employee_count: 0 };
 
       // Public should NOT contain hr schema qualification
       expect(containsSchemaTable(publicResponse.query.sql, "hr", "users")).toBe(false);
@@ -680,7 +692,9 @@ describe("PostgreSQL Multi-Schema Operations", () => {
 
       // Both should have data
       expect(publicResponse.data._count["users.id"]).toBeGreaterThan(0);
-      expect(hrResponse.data._count["employees.id"]).toBe(12); // 12 employees in HR
+      expect(hrResponse.data._count["employees.id"]).toBe(
+        Number(expected.employee_count),
+      );
     });
   });
 });

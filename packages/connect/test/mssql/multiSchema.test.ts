@@ -302,9 +302,16 @@ describe("MSSQL Multi-Schema Operations", () => {
 
       const parsed = QuerySchema.parse(iql);
       const response = await count(db, parsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT CAST(COUNT(*) AS INT) AS department_count
+        FROM [hr].[departments]
+      `.execute(db);
+      const expected = expectedRows[0] ?? { department_count: 0 };
 
       expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
-      expect(response.data._count["departments.id"]).toBe(5);
+      expect(response.data._count["departments.id"]).toBe(
+        Number(expected.department_count),
+      );
     });
   });
 
@@ -524,6 +531,11 @@ describe("MSSQL Multi-Schema Operations", () => {
 
       const dboResponse = await count(db, dboParsed, dboCtx);
       const hrResponse = await count(db, hrParsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT CAST(COUNT(*) AS INT) AS employee_count
+        FROM [hr].[employees]
+      `.execute(db);
+      const expected = expectedRows[0] ?? { employee_count: 0 };
 
       // DBO should NOT contain hr schema qualification
       expect(containsSchemaTable(dboResponse.query.sql, "hr", "users")).toBe(false);
@@ -532,7 +544,9 @@ describe("MSSQL Multi-Schema Operations", () => {
 
       // Both should have data
       expect(dboResponse.data._count["users.id"]).toBeGreaterThan(0);
-      expect(hrResponse.data._count["employees.id"]).toBe(12);
+      expect(hrResponse.data._count["employees.id"]).toBe(
+        Number(expected.employee_count),
+      );
     });
   });
 });

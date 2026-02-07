@@ -34,6 +34,7 @@ catalog:
   "@langchain/langgraph": 1.1.5
   "@langchain/langgraph-checkpoint-postgres": 1.0.0
   "@langchain/openai": 1.2.8
+  "@google-cloud/bigquery": 8.1.1
   langchain: 1.2.25
   kysely: 0.28.11
   pg: 8.18.0

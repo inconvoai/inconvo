@@ -162,11 +162,21 @@ export async function getDb(): Promise<Kysely<unknown>> {
     if (!env.INCONVO_BIGQUERY_LOCATION) {
       throw new Error("INCONVO_BIGQUERY_LOCATION is required for BigQuery");
     }
+    if (
+      !env.INCONVO_BIGQUERY_KEYFILE &&
+      !env.INCONVO_BIGQUERY_CREDENTIALS_JSON &&
+      !env.INCONVO_BIGQUERY_CREDENTIALS_BASE64
+    ) {
+      throw new Error(
+        "Provide INCONVO_BIGQUERY_KEYFILE, INCONVO_BIGQUERY_CREDENTIALS_JSON, or INCONVO_BIGQUERY_CREDENTIALS_BASE64 for BigQuery"
+      );
+    }
 
     const dialectConfig: BigQueryDialectConfig = {
       projectId: env.INCONVO_BIGQUERY_PROJECT_ID,
       dataset: env.INCONVO_BIGQUERY_DATASET,
       location: env.INCONVO_BIGQUERY_LOCATION,
+      keyFilename: env.INCONVO_BIGQUERY_KEYFILE,
       credentials: parseBigQueryCredentials(),
       maximumBytesBilled: env.INCONVO_BIGQUERY_MAX_BYTES_BILLED,
     };

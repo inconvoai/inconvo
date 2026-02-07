@@ -50,7 +50,7 @@ For BigQuery connections, the setup wizard also asks for:
 - Project ID
 - Dataset
 - Location (for example `US` or `EU`)
-- Service account credentials JSON (via file path or pasted JSON)
+- Service account credentials JSON file path (copied to `~/.inconvo/credentials/` and mounted into Docker)
 
 Configuration is stored in `~/.inconvo/config.env`.
 The CLI stores the dev-server SQLite database at `~/.inconvo/data/inconvo.db`.

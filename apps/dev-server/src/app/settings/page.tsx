@@ -52,6 +52,7 @@ export default function SettingsPage() {
               <Code>INCONVO_BIGQUERY_PROJECT_ID</Code>
               <Code>INCONVO_BIGQUERY_DATASET</Code>
               <Code>INCONVO_BIGQUERY_LOCATION</Code>
+              <Code>INCONVO_BIGQUERY_KEYFILE</Code>
               <Code>INCONVO_BIGQUERY_CREDENTIALS_JSON</Code>
               <Code>INCONVO_BIGQUERY_CREDENTIALS_BASE64</Code>
               <Code>INCONVO_BIGQUERY_MAX_BYTES_BILLED</Code>

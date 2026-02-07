@@ -121,11 +121,11 @@ export async function count(
     const countPairs: any[] = [];
     for (const columnName of normalizedCountColumns) {
       if (columnName === "_all") {
-        countPairs.push(sql`'${sql.raw(columnName)}'`);
+        countPairs.push(sql.lit(columnName));
         countPairs.push(sql`COUNT(*)`);
       } else {
         const columnRef = resolveColumnRef(columnName);
-        countPairs.push(sql`'${sql.raw(columnName)}'`);
+        countPairs.push(sql.lit(columnName));
         countPairs.push(sql`COUNT(${columnRef})`);
       }
     }
@@ -133,7 +133,7 @@ export async function count(
     const distinctPairs: any[] = [];
     for (const columnName of normalizedDistinctColumns) {
       const columnRef = resolveColumnRef(columnName);
-      distinctPairs.push(sql`'${sql.raw(columnName)}'`);
+      distinctPairs.push(sql.lit(columnName));
       distinctPairs.push(sql`COUNT(DISTINCT ${columnRef})`);
     }
 

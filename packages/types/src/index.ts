@@ -528,7 +528,7 @@ export const findManySchema = z
           })
           .strict()
           .nullable(),
-        limit: z.number(),
+        limit: z.number().int().positive(),
       })
       .strict(),
   })
@@ -627,7 +627,7 @@ const countRelationsSchema = z
           })
           .strict()
           .nullable(),
-        limit: z.number(),
+        limit: z.number().int().positive(),
       })
       .strict(),
   })
@@ -844,7 +844,7 @@ const groupBySchema = z
         avg: z.array(z.string()).nullable(),
         orderBy: groupByOrderBySchema,
         having: groupByHavingSchema,
-        limit: z.number(),
+        limit: z.number().int().positive(),
       })
       .strict(),
   })

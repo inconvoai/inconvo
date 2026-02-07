@@ -6,7 +6,7 @@ export function applyLimit<DB, TB extends keyof DB, O>(
   limit: number | null | undefined,
   dialect: DatabaseDialect,
 ): SelectQueryBuilder<DB, TB, O> {
-  if (!limit) {
+  if (limit == null) {
     return query;
   }
 

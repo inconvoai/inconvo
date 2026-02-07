@@ -12,6 +12,7 @@ import {
   type QualifiedColumn,
 } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import { buildJsonObject } from "../utils/jsonBuilderHelpers";
 
 export async function count(
   db: Kysely<any>,
@@ -118,51 +119,30 @@ export async function count(
       dbQuery = dbQuery.select(selections);
     }
   } else {
-    const countPairs: any[] = [];
+    const countFields: [string, any][] = [];
     for (const columnName of normalizedCountColumns) {
       if (columnName === "_all") {
-        countPairs.push(sql`'${sql.raw(columnName)}'`);
-        countPairs.push(sql`COUNT(*)`);
+        countFields.push([columnName, sql`COUNT(*)`]);
       } else {
         const columnRef = resolveColumnRef(columnName);
-        countPairs.push(sql`'${sql.raw(columnName)}'`);
-        countPairs.push(sql`COUNT(${columnRef})`);
+        countFields.push([columnName, sql`COUNT(${columnRef})`]);
       }
     }
 
-    const distinctPairs: any[] = [];
+    const distinctFields: [string, any][] = [];
     for (const columnName of normalizedDistinctColumns) {
       const columnRef = resolveColumnRef(columnName);
-      distinctPairs.push(sql`'${sql.raw(columnName)}'`);
-      distinctPairs.push(sql`COUNT(DISTINCT ${columnRef})`);
+      distinctFields.push([columnName, sql`COUNT(DISTINCT ${columnRef})`]);
     }
 
     const selectExpressions: any[] = [];
-    if (countPairs.length > 0) {
-      if (dialect === "postgresql" || dialect === "redshift") {
-        selectExpressions.push(
-          sql`json_build_object(${sql.join(countPairs, sql`, `)})`.as("_count"),
-        );
-      } else {
-        selectExpressions.push(
-          sql`JSON_OBJECT(${sql.join(countPairs, sql`, `)})`.as("_count"),
-        );
-      }
+    if (countFields.length > 0) {
+      selectExpressions.push(buildJsonObject(countFields, dialect).as("_count"));
     }
-    if (distinctPairs.length > 0) {
-      if (dialect === "postgresql" || dialect === "redshift") {
-        selectExpressions.push(
-          sql`json_build_object(${sql.join(distinctPairs, sql`, `)})`.as(
-            "_countDistinct",
-          ),
-        );
-      } else {
-        selectExpressions.push(
-          sql`JSON_OBJECT(${sql.join(distinctPairs, sql`, `)})`.as(
-            "_countDistinct",
-          ),
-        );
-      }
+    if (distinctFields.length > 0) {
+      selectExpressions.push(
+        buildJsonObject(distinctFields, dialect).as("_countDistinct"),
+      );
     }
     if (selectExpressions.length > 0) {
       dbQuery = dbQuery.select(selectExpressions);

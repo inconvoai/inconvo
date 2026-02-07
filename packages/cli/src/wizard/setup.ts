@@ -314,9 +314,9 @@ export async function runSetupWizard(): Promise<boolean> {
       message: "Select your database type:",
       options: [
         { value: "postgresql", label: "PostgreSQL", hint: "recommended" },
-        { value: "redshift", label: "Amazon Redshift" },
-        { value: "mysql", label: "MySQL" },
         { value: "mssql", label: "Microsoft SQL Server" },
+        { value: "mysql", label: "MySQL" },
+        { value: "redshift", label: "Amazon Redshift" },
         { value: "bigquery", label: "Google BigQuery" },
       ],
     });

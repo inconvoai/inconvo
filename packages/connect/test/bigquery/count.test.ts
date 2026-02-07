@@ -259,4 +259,39 @@ describe("BigQuery count Operation", () => {
       Number(expected.count_product_id),
     );
   });
+
+  test("prevents executable SQL fragments in count keys", async () => {
+    const maliciousAlias =
+      "evil', (SELECT definitely_not_a_real_function()), 'alias";
+    const injectedKey = `${maliciousAlias}.id`;
+
+    const iql = {
+      table: "orders",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "count" as const,
+      operationParameters: {
+        joins: [
+          {
+            table: "products",
+            name: maliciousAlias,
+            path: [
+              {
+                source: ["orders.product_id"],
+                target: ["products.id"],
+              },
+            ],
+            joinType: "inner",
+          },
+        ],
+        count: [injectedKey],
+        countDistinct: null,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    await expect(count(db, parsed, ctx)).rejects.toThrow(
+      /concatenated string literals/i,
+    );
+  });
 });

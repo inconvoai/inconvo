@@ -20,7 +20,7 @@ interface BigQueryDatabaseConfig {
   bigQueryProjectId: string;
   bigQueryDataset: string;
   bigQueryLocation: string;
-  bigQueryCredentialsJson: string;
+  bigQueryKeyfile: string;
   bigQueryMaxBytesBilled?: number;
 }
 
@@ -30,6 +30,18 @@ type SetupConfig = DatabaseConfig & {
   openaiApiKey: string;
   useDemo: boolean;
 };
+
+const BIGQUERY_CREDENTIALS_FILENAME = "bigquery-service-account.json";
+const BIGQUERY_CREDENTIALS_CONTAINER_PATH =
+  `/inconvo/credentials/${BIGQUERY_CREDENTIALS_FILENAME}`;
+
+function getBigQueryCredentialsDir(): string {
+  return path.join(getInconvoDir(), "credentials");
+}
+
+function getBigQueryCredentialsHostPath(): string {
+  return path.join(getBigQueryCredentialsDir(), BIGQUERY_CREDENTIALS_FILENAME);
+}
 
 async function testSqlDatabaseConnection(
   dialect: SqlDialect,
@@ -122,18 +134,10 @@ async function testSqlDatabaseConnection(
 async function testBigQueryConnection(
   config: BigQueryDatabaseConfig
 ): Promise<void> {
-  let parsedCredentials: Record<string, unknown>;
-
-  try {
-    parsedCredentials = JSON.parse(config.bigQueryCredentialsJson);
-  } catch {
-    throw new Error("BigQuery credentials must be valid JSON");
-  }
-
   const { BigQuery } = await import("@google-cloud/bigquery");
   const client = new BigQuery({
     projectId: config.bigQueryProjectId,
-    credentials: parsedCredentials,
+    keyFilename: getBigQueryCredentialsHostPath(),
   });
 
   const datasetPath = `\`${config.bigQueryProjectId}.${config.bigQueryDataset}\``;
@@ -154,6 +158,36 @@ async function testDatabaseConnection(config: DatabaseConfig): Promise<void> {
   await testSqlDatabaseConnection(config.databaseDialect, config.databaseUrl);
 }
 
+async function persistBigQueryCredentialsFile(sourcePath: string): Promise<void> {
+  let raw: string;
+
+  try {
+    raw = await fs.readFile(sourcePath, "utf-8");
+  } catch {
+    throw new Error("Could not read the service account JSON file");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Service account file is not valid JSON");
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Service account file must be a JSON object");
+  }
+
+  await fs.mkdir(getBigQueryCredentialsDir(), { recursive: true });
+  const destinationPath = getBigQueryCredentialsHostPath();
+  await fs.writeFile(destinationPath, JSON.stringify(parsed), { mode: 0o600 });
+  try {
+    await fs.chmod(destinationPath, 0o600);
+  } catch {
+    // chmod may fail on some filesystems/platforms; ignore.
+  }
+}
+
 async function writeEnvFile(
   config: SetupConfig,
   envPath: string
@@ -169,17 +203,10 @@ async function writeEnvFile(
   ];
 
   if (config.databaseDialect === "bigquery") {
-    const credentialsBase64 = Buffer.from(
-      config.bigQueryCredentialsJson,
-      "utf-8"
-    ).toString("base64");
-
     lines.push(`INCONVO_BIGQUERY_PROJECT_ID=${config.bigQueryProjectId}`);
     lines.push(`INCONVO_BIGQUERY_DATASET=${config.bigQueryDataset}`);
     lines.push(`INCONVO_BIGQUERY_LOCATION=${config.bigQueryLocation}`);
-    lines.push(
-      `INCONVO_BIGQUERY_CREDENTIALS_BASE64=${credentialsBase64}`
-    );
+    lines.push(`INCONVO_BIGQUERY_KEYFILE=${config.bigQueryKeyfile}`);
     if (config.bigQueryMaxBytesBilled !== undefined) {
       lines.push(
         `INCONVO_BIGQUERY_MAX_BYTES_BILLED=${config.bigQueryMaxBytesBilled}`
@@ -364,67 +391,36 @@ export async function runSetupWizard(): Promise<boolean> {
         return false;
       }
 
-      const credentialsSource = await p.select({
-        message: "How do you want to provide BigQuery credentials?",
-        options: [
-          { value: "file", label: "Service account JSON file", hint: "recommended" },
-          { value: "json", label: "Paste credentials JSON" },
-        ],
-      });
-      if (p.isCancel(credentialsSource)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      let credentialsJson: string;
-
-      if (credentialsSource === "file") {
-        while (true) {
-          const credentialsPath = await p.text({
-            message: "Path to service account JSON key file:",
-            placeholder: "/Users/you/keys/bigquery-service-account.json",
-            validate: (value) => (value ? undefined : "Path is required"),
-          });
-          if (p.isCancel(credentialsPath)) {
-            p.cancel("Setup cancelled.");
-            return false;
-          }
-
-          try {
-            const raw = await fs.readFile(credentialsPath.trim(), "utf-8");
-            credentialsJson = JSON.stringify(JSON.parse(raw));
-            break;
-          } catch {
-            p.log.error("Could not read or parse the service account JSON file.");
-            const retryFile = await p.confirm({
-              message: "Try a different file path?",
-              initialValue: true,
-            });
-            if (p.isCancel(retryFile) || !retryFile) {
-              p.cancel("Setup cancelled.");
-              return false;
-            }
-          }
-        }
-      } else {
-        const credentialsInput = await p.text({
-          message: "Paste service account credentials JSON (single line):",
-          validate: (value) => {
-            if (!value) return "Credentials JSON is required";
-            try {
-              JSON.parse(value);
-              return undefined;
-            } catch {
-              return "Credentials JSON must be valid JSON";
-            }
-          },
+      while (true) {
+        const credentialsPath = await p.text({
+          message: "Path to service account JSON key file:",
+          placeholder: "/Users/you/keys/bigquery-service-account.json",
+          validate: (value) => (value ? undefined : "Path is required"),
         });
-        if (p.isCancel(credentialsInput)) {
+        if (p.isCancel(credentialsPath)) {
           p.cancel("Setup cancelled.");
           return false;
         }
 
-        credentialsJson = JSON.stringify(JSON.parse(credentialsInput));
+        try {
+          await persistBigQueryCredentialsFile(credentialsPath.trim());
+          p.log.info(
+            `Credentials copied to ${getBigQueryCredentialsHostPath()}`
+          );
+          break;
+        } catch (error) {
+          p.log.error(
+            error instanceof Error ? error.message : "Invalid credentials file"
+          );
+          const retryFile = await p.confirm({
+            message: "Try a different file path?",
+            initialValue: true,
+          });
+          if (p.isCancel(retryFile) || !retryFile) {
+            p.cancel("Setup cancelled.");
+            return false;
+          }
+        }
       }
 
       const maxBytesInput = await p.text({
@@ -447,7 +443,7 @@ export async function runSetupWizard(): Promise<boolean> {
         bigQueryProjectId: projectIdInput.trim(),
         bigQueryDataset: datasetInput.trim(),
         bigQueryLocation: locationInput.trim(),
-        bigQueryCredentialsJson: credentialsJson,
+        bigQueryKeyfile: BIGQUERY_CREDENTIALS_CONTAINER_PATH,
         bigQueryMaxBytesBilled: maxBytesInput
           ? Number.parseInt(maxBytesInput, 10)
           : undefined,

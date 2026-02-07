@@ -28,6 +28,7 @@ const loadedEnv = createEnv({
     INCONVO_BIGQUERY_PROJECT_ID: z.string().optional(),
     INCONVO_BIGQUERY_DATASET: z.string().optional(),
     INCONVO_BIGQUERY_LOCATION: z.string().optional(),
+    INCONVO_BIGQUERY_KEYFILE: z.string().optional(),
     INCONVO_BIGQUERY_CREDENTIALS_JSON: z.string().optional(),
     INCONVO_BIGQUERY_CREDENTIALS_BASE64: z.string().optional(),
     INCONVO_BIGQUERY_MAX_BYTES_BILLED: z.coerce.number().optional(),
@@ -60,11 +61,12 @@ if (!shouldSkipValidation) {
       );
     }
     if (
+      !loadedEnv.INCONVO_BIGQUERY_KEYFILE &&
       !loadedEnv.INCONVO_BIGQUERY_CREDENTIALS_JSON &&
       !loadedEnv.INCONVO_BIGQUERY_CREDENTIALS_BASE64
     ) {
       throw new Error(
-        "Provide INCONVO_BIGQUERY_CREDENTIALS_JSON or INCONVO_BIGQUERY_CREDENTIALS_BASE64 when DATABASE_DIALECT=bigquery"
+        "Provide INCONVO_BIGQUERY_KEYFILE, INCONVO_BIGQUERY_CREDENTIALS_JSON, or INCONVO_BIGQUERY_CREDENTIALS_BASE64 when DATABASE_DIALECT=bigquery"
       );
     }
   } else if (!loadedEnv.INCONVO_DATABASE_URL) {

@@ -531,11 +531,16 @@ describe("MSSQL Multi-Schema Operations", () => {
 
       const dboResponse = await count(db, dboParsed, dboCtx);
       const hrResponse = await count(db, hrParsed, hrCtx);
-      const { rows: expectedRows } = await sql`
+      const { rows: expectedDboRows } = await sql`
+        SELECT CAST(COUNT(*) AS INT) AS user_count
+        FROM [dbo].[users]
+      `.execute(db);
+      const expectedDbo = expectedDboRows[0] ?? { user_count: 0 };
+      const { rows: expectedHrRows } = await sql`
         SELECT CAST(COUNT(*) AS INT) AS employee_count
         FROM [hr].[employees]
       `.execute(db);
-      const expected = expectedRows[0] ?? { employee_count: 0 };
+      const expectedHr = expectedHrRows[0] ?? { employee_count: 0 };
 
       // DBO should NOT contain hr schema qualification
       expect(containsSchemaTable(dboResponse.query.sql, "hr", "users")).toBe(false);
@@ -543,9 +548,9 @@ describe("MSSQL Multi-Schema Operations", () => {
       expect(containsSchemaTable(hrResponse.query.sql, "hr", "employees")).toBe(true);
 
       // Both should have data
-      expect(dboResponse.data._count["users.id"]).toBeGreaterThan(0);
+      expect(dboResponse.data._count["users.id"]).toBe(Number(expectedDbo.user_count));
       expect(hrResponse.data._count["employees.id"]).toBe(
-        Number(expected.employee_count),
+        Number(expectedHr.employee_count),
       );
     });
   });

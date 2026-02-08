@@ -363,9 +363,17 @@ describe("PostgreSQL Multi-Schema Operations", () => {
 
       const parsed = QuerySchema.parse(iql);
       const response = await count(db, parsed, hrCtx);
+      const { rows: expectedRows } = await sql`
+        SELECT COUNT(*)::int AS project_count
+        FROM "hr"."projects"
+        WHERE "status" = 'active'
+      `.execute(db);
+      const expected = expectedRows[0] ?? { project_count: 0 };
 
       expect(containsSchemaTable(response.query.sql, "hr", "projects")).toBe(true);
-      expect(response.data._count["projects.id"]).toBeGreaterThan(0);
+      expect(response.data._count["projects.id"]).toBe(
+        Number(expected.project_count),
+      );
     });
   });
 
@@ -679,11 +687,16 @@ describe("PostgreSQL Multi-Schema Operations", () => {
 
       const publicResponse = await count(db, publicParsed, publicCtx);
       const hrResponse = await count(db, hrParsed, hrCtx);
-      const { rows: expectedRows } = await sql`
+      const { rows: expectedPublicRows } = await sql`
+        SELECT COUNT(*)::int AS user_count
+        FROM "public"."users"
+      `.execute(db);
+      const expectedPublic = expectedPublicRows[0] ?? { user_count: 0 };
+      const { rows: expectedHrRows } = await sql`
         SELECT COUNT(*)::int AS employee_count
         FROM "hr"."employees"
       `.execute(db);
-      const expected = expectedRows[0] ?? { employee_count: 0 };
+      const expectedHr = expectedHrRows[0] ?? { employee_count: 0 };
 
       // Public should NOT contain hr schema qualification
       expect(containsSchemaTable(publicResponse.query.sql, "hr", "users")).toBe(false);
@@ -691,9 +704,11 @@ describe("PostgreSQL Multi-Schema Operations", () => {
       expect(containsSchemaTable(hrResponse.query.sql, "hr", "employees")).toBe(true);
 
       // Both should have data
-      expect(publicResponse.data._count["users.id"]).toBeGreaterThan(0);
+      expect(publicResponse.data._count["users.id"]).toBe(
+        Number(expectedPublic.user_count),
+      );
       expect(hrResponse.data._count["employees.id"]).toBe(
-        Number(expected.employee_count),
+        Number(expectedHr.employee_count),
       );
     });
   });

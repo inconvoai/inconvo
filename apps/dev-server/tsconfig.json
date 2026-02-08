@@ -20,5 +20,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", ".next", "prisma/generated", "dist"]
+  "exclude": ["node_modules", ".next", "prisma/generated"]
 }

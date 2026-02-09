@@ -187,7 +187,7 @@ export async function getDb(): Promise<Kysely<unknown>> {
     });
   } else {
     throw new Error(
-      "Unsupported database dialect for dev-server local DB helper",
+      `Unsupported database dialect "${env.DATABASE_DIALECT}" for dev-server local DB helper. Supported dialects are: postgresql, redshift, mysql, mssql, bigquery.`,
     );
   }
 

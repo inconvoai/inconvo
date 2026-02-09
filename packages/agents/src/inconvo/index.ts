@@ -1070,7 +1070,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       chatHistory: state.chatHistory,
       date: new Date().toISOString().split("T")[0],
       userContext: JSON.stringify(state.userContext),
-      userQuestion: new HumanMessage(state.userQuestion),
+      userQuestion: state.userQuestion,
       messages: state.messages,
       availableDatasets,
     });

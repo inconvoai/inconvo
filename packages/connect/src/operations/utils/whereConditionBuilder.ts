@@ -324,7 +324,11 @@ function buildRelationFilter(
 
   // Extract relation details
   const targetTable = relation.targetTable;
-  const targetSchema = relation.targetSchema;
+  // Fall back to looking up the target table's schema from the schema response
+  // when relation.targetSchema is not set (e.g. same-schema or manual relations)
+  const targetSchema =
+    relation.targetSchema ??
+    schema.tables.find((t) => t.name === targetTable)?.schema;
   const sourceColumns = relation.sourceColumns || [];
   const targetColumns = relation.targetColumns || [];
 
@@ -346,7 +350,10 @@ function buildRelationFilter(
     dialect === "bigquery"
       ? targetTable
       : getTableIdentifier(targetTable, targetSchema, dialect);
-  const targetTableFromId = getTableIdentifier(targetTable, targetSchema, dialect);
+  const targetTableFromId =
+    dialect === "bigquery"
+      ? targetTable
+      : getTableIdentifier(targetTable, targetSchema, dialect);
   const targetTableRef = sql.table(targetTableFromId);
 
   // Build table condition expression for the target table (row-level security)

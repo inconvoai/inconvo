@@ -347,6 +347,132 @@ describe("MySQL Multi-Schema Operations", () => {
     });
   });
 
+  describe("manual relation filters with tableSchema", () => {
+    // Simulates manual relations where targetSchema is NOT explicitly set.
+    // The query builder should fall back to the target table's schema property.
+    let manualCtx: OperationContext;
+
+    beforeAll(() => {
+      const manualSchema: SchemaResponse = {
+        tables: [
+          {
+            name: "departments",
+            schema: "hr",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "name", type: "string" },
+              { name: "budget", type: "number" },
+              { name: "location", type: "string" },
+            ],
+            relations: [
+              {
+                name: "employees",
+                isList: true,
+                targetTable: "employees",
+                // targetSchema intentionally omitted — tests the fallback
+                sourceColumns: ["id"],
+                targetColumns: ["department_id"],
+                source: "MANUAL",
+              },
+            ],
+          },
+          {
+            name: "employees",
+            schema: "hr",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "department_id", type: "number" },
+              { name: "first_name", type: "string" },
+              { name: "last_name", type: "string" },
+              { name: "salary", type: "number" },
+            ],
+            relations: [
+              {
+                name: "department",
+                isList: false,
+                targetTable: "departments",
+                // targetSchema intentionally omitted — tests the fallback
+                sourceColumns: ["department_id"],
+                targetColumns: ["id"],
+                source: "MANUAL",
+              },
+            ],
+          },
+        ],
+        databaseSchemas: ["hr"],
+      };
+      manualCtx = { schema: manualSchema, dialect: "mysql" };
+    });
+
+    it("schema-qualifies target table in EXISTS for manual 'is' relation filter", async () => {
+      const iql = {
+        operation: "findMany" as const,
+        table: "employees",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [
+          {
+            AND: [
+              {
+                department: {
+                  is: {
+                    name: { equals: "Engineering" },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        operationParameters: {
+          select: { employees: ["id", "first_name", "last_name"] },
+          orderBy: { column: "id", direction: "asc" as const },
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await findMany(db, parsed, manualCtx);
+
+      expect(containsSchemaTable(response.query.sql, "hr", "employees")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(response.data).toBeDefined();
+    });
+
+    it("schema-qualifies target table in EXISTS for manual 'some' relation filter", async () => {
+      const iql = {
+        operation: "findMany" as const,
+        table: "departments",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [
+          {
+            AND: [
+              {
+                employees: {
+                  some: {
+                    salary: { gte: 100000 },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        operationParameters: {
+          select: { departments: ["id", "name"] },
+          orderBy: { column: "id", direction: "asc" as const },
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await findMany(db, parsed, manualCtx);
+
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "hr", "employees")).toBe(true);
+      expect(response.data).toBeDefined();
+    });
+  });
+
   describe("verify database isolation", () => {
     it("hosted.users and hr.employees are separate tables", async () => {
       // Query hosted database users

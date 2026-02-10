@@ -9,10 +9,6 @@ export function computedColumnToString(ast: SQLComputedColumnAst): string {
       return ast.name;
     case "value":
       return ast.value.toString();
-    case "function": {
-      const [arg] = ast.arguments;
-      return `${ast.name}(${computedColumnToString(arg)})`;
-    }
     case "operation": {
       const [left, right] = ast.operands;
       if (!left || !right) {

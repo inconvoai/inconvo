@@ -87,7 +87,6 @@ export const InconvoOptionsSchema = z
 export type InconvoOptions = z.infer<typeof InconvoOptionsSchema>;
 
 export type SQLOperator = "+" | "-" | "*" | "/" | "%";
-export type SQLFunctionName = "ABS";
 
 export type SQLColumnReference = {
   type: "column";
@@ -105,12 +104,6 @@ export type SQLOperation = {
   operands: SQLComputedColumnAst[];
 };
 
-export type SQLFunction = {
-  type: "function";
-  name: SQLFunctionName;
-  arguments: [SQLComputedColumnAst];
-};
-
 export type SQLBrackets = {
   type: "brackets";
   expression: SQLComputedColumnAst;
@@ -119,7 +112,6 @@ export type SQLBrackets = {
 export type SQLComputedColumnAst =
   | SQLColumnReference
   | SQLValue
-  | SQLFunction
   | SQLOperation
   | SQLBrackets;
 
@@ -169,7 +161,6 @@ export const SQLComputedColumnAstSchema: z.ZodType<SQLComputedColumnAst> =
     z.union([
       SQLColumnReferenceSchema,
       SQLValueSchema,
-      SQLFunctionSchema,
       SQLOperationSchema,
       SQLBracketsSchema,
     ]),
@@ -194,18 +185,6 @@ const SQLValueSchema: z.ZodType<SQLValue> = z
   .object({
     type: z.literal("value"),
     value: z.number(),
-  })
-  .strict();
-
-const SQLFunctionNameSchema: z.ZodType<SQLFunctionName> = z.union([
-  z.literal("ABS"),
-]);
-
-const SQLFunctionSchema: z.ZodType<SQLFunction> = z
-  .object({
-    type: z.literal("function"),
-    name: SQLFunctionNameSchema,
-    arguments: z.tuple([SQLComputedColumnAstSchema]),
   })
   .strict();
 

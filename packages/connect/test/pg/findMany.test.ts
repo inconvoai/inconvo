@@ -174,50 +174,6 @@ describe("PostgreSQL findMany Operation", () => {
     expect(normalizeRows(response.data)).toEqual(normalizeRows(expected));
   }, 15000);
 
-  test("supports ABS function in stored computed columns", async () => {
-    const iql = {
-      operation: "findMany" as const,
-      table: "orders",
-      tableConditions: null,
-      whereAndArray: [],
-      operationParameters: {
-        select: {
-          orders: ["id", "absolute_discount_gap"],
-        },
-        orderBy: {
-          column: "id",
-          direction: "asc" as const,
-        },
-        limit: 5,
-      },
-    };
-
-    const parsed = QuerySchema.parse(iql);
-    const response = await findMany(db, parsed, ctx);
-
-    const expectedRows = await db
-      .selectFrom("orders as o")
-      .select([
-        sql<number>`o.id`.as("id"),
-        sql<number>`ABS(o.discount - o.subtotal)`.as("absolute_discount_gap"),
-      ])
-      .orderBy("o.id", "asc")
-      .limit(5)
-      .execute();
-
-    const expected = expectedRows.map((row: any) => ({
-      orders_id: Number(row.id),
-      orders_absolute_discount_gap: Number(row.absolute_discount_gap),
-    }));
-
-    const actual = response.data.map((row: any) => ({
-      orders_id: Number(row.orders_id),
-      orders_absolute_discount_gap: Number(row.orders_absolute_discount_gap),
-    }));
-
-    expect(actual).toEqual(expected);
-  }, 15000);
-
   test("deduplicates overlapping join hops", async () => {
     // This test verifies that when multiple joins share the same hop,
     // the query doesn't fail with duplicate join errors

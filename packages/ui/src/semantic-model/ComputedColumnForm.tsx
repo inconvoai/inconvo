@@ -15,8 +15,6 @@ import Editor, { loader } from "@monaco-editor/react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import {
   type SQLComputedColumnAst,
-  type SQLFunction,
-  type SQLFunctionName,
   type SQLOperator,
   type SQLColumnReference,
   type SQLValue,
@@ -61,15 +59,6 @@ type Token = {
   value: string;
   position: number;
 };
-
-const SUPPORTED_FUNCTIONS: SQLFunctionName[] = ["ABS"];
-
-function normalizeFunctionName(value: string): SQLFunctionName | null {
-  const normalized = value.toUpperCase();
-  return SUPPORTED_FUNCTIONS.includes(normalized as SQLFunctionName)
-    ? (normalized as SQLFunctionName)
-    : null;
-}
 
 function setEditorMarkers(
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -233,29 +222,6 @@ function parseFactor(
   }
 
   if (token.type === "identifier") {
-    const nextToken = tokens[1];
-    if (nextToken?.type === "leftParen") {
-      const functionName = normalizeFunctionName(token.value);
-      if (!functionName) {
-        throw new Error(`Unknown function: ${token.value}`);
-      }
-
-      const [arg, afterArg] = parseExpression(tokens.slice(2), validColumnNames);
-      if (
-        afterArg.length === 0 ||
-        (afterArg[0] && afterArg[0].type !== "rightParen")
-      ) {
-        throw new Error("Missing closing parenthesis");
-      }
-
-      const functionNode: SQLFunction = {
-        type: "function",
-        name: functionName,
-        arguments: [arg],
-      };
-      return [functionNode, afterArg.slice(1)];
-    }
-
     if (!validColumnNames.includes(token.value)) {
       throw new Error(`Unknown column: ${token.value}`);
     }
@@ -418,7 +384,6 @@ export function ComputedColumnForm({
               new RegExp(columns.map((col) => `\\b${col}\\b`).join("|")),
               "column",
             ],
-            [/\bABS\b/i, "keyword"],
             [/[+\-*/%]+/, "operator"],
             [/\d+(\.\d+)?/, "number"],
             [/[(){}]/, "delimiter"],
@@ -467,22 +432,6 @@ export function ComputedColumnForm({
             range: range,
           }));
 
-          const functionItems = [
-            {
-              label: "ABS",
-              detail: "Absolute value",
-              insertText: "ABS(${1:column})",
-            },
-          ].map((fn) => ({
-            label: fn.label,
-            kind: monacoParam.languages.CompletionItemKind.Function,
-            detail: fn.detail,
-            insertText: fn.insertText,
-            insertTextRules:
-              monacoParam.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            range: range,
-          }));
-
           const numberSuggestion = {
             label: "123",
             kind: monacoParam.languages.CompletionItemKind.Value,
@@ -492,12 +441,7 @@ export function ComputedColumnForm({
           };
 
           return {
-            suggestions: [
-              ...functionItems,
-              ...operationItems,
-              numberSuggestion,
-              ...columnItems,
-            ],
+            suggestions: [...operationItems, numberSuggestion, ...columnItems],
           };
         },
       });
@@ -582,8 +526,8 @@ export function ComputedColumnForm({
       >
         <Text size="sm">
           Create derived columns using mathematical expressions with existing
-          numeric columns. Supports ABS(...), operators: +, -, *, /, % and
-          parentheses for grouping.
+          numeric columns. Supports operators: +, -, *, /, % and parentheses for
+          grouping.
         </Text>
       </Alert>
 

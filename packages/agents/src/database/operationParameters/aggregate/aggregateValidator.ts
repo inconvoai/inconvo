@@ -48,10 +48,15 @@ export type AggregateValidationResult =
   | AggregateInvalidResult;
 
 export function buildAggregateToolZodSchema(ctx: AggregateValidatorContext) {
+  const aliasReferenceDescription = buildAliasReferenceDescription(ctx);
   const joinDescription =
     ctx.joinOptions.length > 0
       ? [
           "Array of join descriptors required when referencing related-table columns.",
+          "Join descriptor rules:",
+          "- `path` must match one of the available join paths exactly.",
+          "- `table` must be the terminal table shown in parentheses for that path.",
+          "- `name` should use the join alias shown before parentheses.",
           "Available joins:",
           ...ctx.joinOptions.map(
             (option) =>
@@ -65,25 +70,25 @@ export function buildAggregateToolZodSchema(ctx: AggregateValidatorContext) {
   return z.object({
     joins: z.array(aggregateJoinSchema).nullable().describe(joinDescription),
     avg: buildAggregateArraySchema(
-      "Columns to average. Use fully-qualified names (alias.column) and ensure the alias is present in the joins array when referencing related tables. Set to null when unused.",
+      `Columns to average. Use fully-qualified names (alias.column) and ensure the alias is present in the joins array when referencing related tables. ${aliasReferenceDescription} Set to null when unused.`,
     ),
     sum: buildAggregateArraySchema(
-      "Columns to sum. Use fully-qualified names (alias.column); numeric columns only. Set to null when unused.",
+      `Columns to sum. Use fully-qualified names (alias.column); numeric columns only. ${aliasReferenceDescription} Set to null when unused.`,
     ),
     min: buildAggregateArraySchema(
-      "Columns to take MIN over. Numeric and temporal columns are supported. Use fully-qualified names; include joins when referencing related tables.",
+      `Columns to take MIN over. Numeric and temporal columns are supported. Use fully-qualified names; include joins when referencing related tables. ${aliasReferenceDescription}`,
     ),
     max: buildAggregateArraySchema(
-      "Columns to take MAX over. Numeric and temporal columns are supported. Use fully-qualified names; include joins when referencing related tables.",
+      `Columns to take MAX over. Numeric and temporal columns are supported. Use fully-qualified names; include joins when referencing related tables. ${aliasReferenceDescription}`,
     ),
     count: buildAggregateArraySchema(
-      "Columns to count non-null rows for. Use fully-qualified names. Set to null when unused.",
+      `Columns to count non-null rows for. Use fully-qualified names. ${aliasReferenceDescription} Set to null when unused.`,
     ),
     countDistinct: buildAggregateArraySchema(
-      "Columns to count distinct values for. Use fully-qualified names. Set to null when unused.",
+      `Columns to count distinct values for. Use fully-qualified names. ${aliasReferenceDescription} Set to null when unused.`,
     ),
     median: buildAggregateArraySchema(
-      "Columns to compute median for (numeric only). Use fully-qualified names. Set to null when unused.",
+      `Columns to compute median for (numeric only). Use fully-qualified names. ${aliasReferenceDescription} Set to null when unused.`,
     ),
   });
 }
@@ -247,6 +252,14 @@ function normalizeList(list: string[] | null | undefined) {
 
 function buildAggregateArraySchema(description: string) {
   return z.array(z.string().min(1)).min(1).nullable().describe(description);
+}
+
+function buildAliasReferenceDescription(ctx: AggregateValidatorContext): string {
+  if (ctx.joinOptions.length === 0) {
+    return `Base alias is ${ctx.baseTable}. No joined aliases are available.`;
+  }
+  const joinedAliases = ctx.joinOptions.map((option) => option.name).join(", ");
+  return `Base alias is ${ctx.baseTable}. Joined aliases are: ${joinedAliases}. For joined columns, use one of those aliases exactly.`;
 }
 
 interface ResolvedColumnReference {

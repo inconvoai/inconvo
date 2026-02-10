@@ -230,7 +230,7 @@ export const operationDocs = {
   },
   aggregate: {
     description:
-      "Returns aggregated values (min, max, average, sum, count, countDistinct, median) for specified columns in a table. Provide fully-qualified column names (`alias.column`). When aggregating across relations, include hop-based join descriptors in `joins`. Numeric aggregates require numeric columns (computed columns count as numeric). MIN/MAX also support temporal columns. countDistinct counts unique values. Set unused aggregate arrays to null.",
+      "Returns aggregated values (min, max, average, sum, count, countDistinct, median) for specified columns in a table. Provide fully-qualified column names (`alias.column`). When aggregating across relations, include hop-based join descriptors in `joins`, ensure each join `table` matches the terminal table for the selected path, and reference joined columns using the aliases listed in Available joins. Numeric aggregates require numeric columns (computed columns count as numeric). MIN/MAX also support temporal columns. countDistinct counts unique values. Set unused aggregate arrays to null.",
     examples: [
       {
         question:

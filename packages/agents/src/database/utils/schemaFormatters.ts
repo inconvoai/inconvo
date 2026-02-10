@@ -11,6 +11,10 @@ export function stringifyComputedColumnAst(
       return columnAst.name;
     case "value":
       return String(columnAst.value);
+    case "function": {
+      const [arg] = columnAst.arguments;
+      return `${columnAst.name}(${stringifyComputedColumnAst(arg)})`;
+    }
     case "operation": {
       if (columnAst.operands.length === 0) {
         return "";

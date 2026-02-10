@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@google-cloud/bigquery':
+      specifier: 8.1.1
+      version: 8.1.1
     '@langchain/core':
       specifier: 1.1.17
       version: 1.1.17
@@ -398,6 +401,9 @@ importers:
       '@faker-js/faker':
         specifier: ^9.0.0
         version: 9.9.0
+      '@google-cloud/bigquery':
+        specifier: 'catalog:'
+        version: 8.1.1
       commander:
         specifier: ^14.0.2
         version: 14.0.2

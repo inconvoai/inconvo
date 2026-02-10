@@ -29,15 +29,15 @@ applyFilterTool.
       - Absence: \`{{ relationName: {{ is: {{}} }} }}\`
     - To-many: \`{{ relationName: {{ some: <leaf> }} }}\`, \`{{ relationName: {{ every: <leaf> }} }}\`, \`{{ relationName: {{ none: <leaf> }} }}\`
       - Absence: \`{{ relationName: {{ none: {{}} }} }}\`
-  - A <leaf> within a relation contains exactly one scalar column condition on the target table (no nested logical groups).
+  - A <leaf> within a relation contains exactly one scalar column with one or more operators on the target table (no nested logical groups).
 - **Logical Group:** \`{{ AND: [ <node>, ... ] }}\` or \`{{ OR: [ <node>, ... ] }}\` (only one key at top level)
 - **Root:** Must be either \`null\` or \`{{ AND: [ ... ] }}\` (non-empty array).
 
 ## Supported Operators and Values
 - **Strings:** equals | not | in | contains | contains_insensitive
-- **Numbers:** equals | not | lt | lte | gt | gte | in
+- **Numbers:** equals | not | lt | lte | gt | gte | in — multiple operators can be combined in one object for range queries (e.g. \`{{ gte: 10, lte: 100 }}\`)
 - **Booleans:** equals | not
-- **DateTime:** equals | not | lt | lte | gt | gte
+- **DateTime:** equals | not | lt | lte | gt | gte — multiple operators can be combined in one object for range queries (e.g. \`{{ gte: "...", lte: "..." }}\`)
 - \`equals\`/\`not\` accept \`null\` for null checks.
 - \`in\` requires a non-empty array of correct-typed values.
 - \`contains\`/\`contains_insensitive\`: single string value.
@@ -104,7 +104,8 @@ applyFilterTool.
 - Numeric threshold: \`{{ AND: [ {{ "parentTable.numberColumn": {{ gt: 500 }} }} ] }}\`
 - Combine scalars: \`{{ AND: [ {{ "parentTable.numberColumn": {{ gt: 500 }} }}, {{ "parentTable.otherNumberColumn": {{ gt: 0 }} }} ] }}\`
 - Text contains: \`{{ AND: [ {{ "parentTable.stringColumn": {{ contains: "needle" }} }} ] }}\`
-- Date range: \`{{ AND: [ {{ "parentTable.dateTimeColumn": {{ gte: "2025-09-01T00:00:00.000Z" }} }}, {{ "parentTable.dateTimeColumn": {{ lte: "2025-09-01T23:59:59.999Z" }} }} ] }}\`
+- Date range (compact): \`{{ AND: [ {{ "parentTable.dateTimeColumn": {{ gte: "2025-09-01T00:00:00.000Z", lte: "2025-09-01T23:59:59.999Z" }} }} ] }}\`
+- Date range (expanded): \`{{ AND: [ {{ "parentTable.dateTimeColumn": {{ gte: "2025-09-01T00:00:00.000Z" }} }}, {{ "parentTable.dateTimeColumn": {{ lte: "2025-09-01T23:59:59.999Z" }} }} ] }}\`
 - To-one absence: \`{{ AND: [ {{ childRelationToOne: {{ is: {{}} }} }} ] }}\`
 - To-many some: \`{{ AND: [ {{ childRelationMany: {{ some: {{ childNumberColumn: {{ gt: 100 }} }} }} }} ] }}\`
 - To-many every: \`{{ AND: [ {{ childRelationMany: {{ every: {{ childDateTimeColumn: {{ gt: "2024-01-01T00:00:00.000Z" }} }} }} }} ] }}\`

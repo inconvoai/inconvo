@@ -58,7 +58,10 @@ When to use each approach:
 
 COMBINATION NOTES
 • Combine conditions with AND / OR (no logical NOT group; use scalar not operator instead)
-• Each relation condition targets exactly one scalar column on the related table
+• Each relation condition targets exactly one scalar column on the related table, but that column can have multiple operators combined (e.g. { gte: X, lte: Y })
+• DateTime and Number columns support multi-operator conditions for range queries:
+  - Date range: { "orders.createdAt": { gte: "2025-01-01T00:00:00.000Z", lte: "2025-12-31T23:59:59.999Z" } }
+  - Number range: { "orders.amount": { gte: 100, lte: 500 } }
 
 NOT SUPPORTED 
 • Regex or arbitrary functions

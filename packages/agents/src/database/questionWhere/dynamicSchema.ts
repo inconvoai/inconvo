@@ -38,7 +38,7 @@ import type { QuestionConditions } from "@repo/types";
  *
  * This dynamic validator enforces:
  *  - Only known columns / relations are allowed.
- *  - Only one operator per column condition object.
+ *  - DateTime and Number columns allow multiple operators in one condition (e.g. { gte: X, lte: Y }).
  *  - Operator/value type compatibility (including null handling rules).
  *  - Relation filterOptions limited to allowed sets (is|isNot / some|every|none).
  *  - Inner relation filter uses target table's columns & rules.
@@ -100,19 +100,25 @@ export function createQuestionConditionsDynamicSchema(
       .strict();
   }
 
-  /** Number column */
+  /** Number column — allows combining multiple operators (e.g. { gte: 10, lte: 100 }) */
   function buildNumberColumnCondition(col: string) {
     return z
       .object({
-        [col]: z.union([
-          z.object({ equals: z.number().or(z.null()) }).strict(),
-          z.object({ not: z.number().or(z.null()) }).strict(),
-          z.object({ lt: z.number() }).strict(),
-          z.object({ lte: z.number() }).strict(),
-          z.object({ gt: z.number() }).strict(),
-          z.object({ gte: z.number() }).strict(),
-          z.object({ in: z.array(z.number()).min(1) }).strict(),
-        ]),
+        [col]: z
+          .object({
+            equals: z.number().or(z.null()).optional(),
+            not: z.number().or(z.null()).optional(),
+            lt: z.number().optional(),
+            lte: z.number().optional(),
+            gt: z.number().optional(),
+            gte: z.number().optional(),
+            in: z.array(z.number()).min(1).optional(),
+          })
+          .strict()
+          .refine(
+            (obj) => Object.keys(obj).length > 0,
+            "At least one operator required",
+          ),
       })
       .strict();
   }
@@ -129,18 +135,24 @@ export function createQuestionConditionsDynamicSchema(
       .strict();
   }
 
-  /** DateTime column */
+  /** DateTime column — allows combining multiple operators (e.g. { gte: X, lte: Y }) */
   function buildDateColumnCondition(col: string) {
     return z
       .object({
-        [col]: z.union([
-          z.object({ equals: isoDate.or(z.null()) }).strict(),
-          z.object({ not: isoDate.or(z.null()) }).strict(),
-          z.object({ lt: isoDate }).strict(),
-          z.object({ lte: isoDate }).strict(),
-          z.object({ gt: isoDate }).strict(),
-          z.object({ gte: isoDate }).strict(),
-        ]),
+        [col]: z
+          .object({
+            equals: isoDate.or(z.null()).optional(),
+            not: isoDate.or(z.null()).optional(),
+            lt: isoDate.optional(),
+            lte: isoDate.optional(),
+            gt: isoDate.optional(),
+            gte: isoDate.optional(),
+          })
+          .strict()
+          .refine(
+            (obj) => Object.keys(obj).length > 0,
+            "At least one operator required",
+          ),
       })
       .strict();
   }

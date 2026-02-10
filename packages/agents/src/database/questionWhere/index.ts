@@ -89,7 +89,7 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const applyFilterTool = tool(
     async (input: {
       candidate: unknown;
-    }): Promise<WhereConditionArtifact[]> => {
+    }): Promise<[WhereConditionArtifact, WhereConditionArtifact]> => {
       const raw = input.candidate;
       const parsed = filterValidator.safeParse(raw);
       if (!parsed.success) {
@@ -157,6 +157,16 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     };
   };
 
+  const missingToolCallFeedback = async (_state: MsgState) => {
+    return {
+      messages: new HumanMessage(
+        "You did not call applyFilterTool. \n" +
+          "You MUST now call applyFilterTool exactly once with { candidate: <object-or-null> }. \n" +
+          "Do not provide a plain-text answer without the tool call.",
+      ),
+    };
+  };
+
   const shouldContinue = (state: MsgState) => {
     const last = state.messages.at(-1) as AIMessage;
     // If model requested tool calls -> go to tools node
@@ -166,16 +176,34 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     if (aiMessageContainsJsonLikeText(last)) {
       return "json_detected_feedback";
     }
+    const hasValidFilter = state.messages.some((m) => {
+      if (!ToolMessage.isInstance(m) || m.name !== "applyFilterTool") {
+        return false;
+      }
+      const artifact = (m as ToolMessage & { artifact?: WhereConditionArtifact })
+        .artifact as WhereConditionArtifact | undefined;
+      return artifact?.status === "valid";
+    });
+    if (!hasValidFilter) {
+      return "missing_tool_call_feedback";
+    }
     return END;
   };
 
   const hasValidWhereCondition = (state: MsgState) => {
-    const last = state.messages.at(-1) as ToolMessage;
-    if (last.name === "applyFilterTool") {
-      const whereConditionArtifact = last.artifact as WhereConditionArtifact;
-      if (whereConditionArtifact.status === "valid") {
-        return END;
-      }
+    const last = state.messages.at(-1);
+    if (
+      !last ||
+      !ToolMessage.isInstance(last) ||
+      last.name !== "applyFilterTool"
+    ) {
+      return "message_filter_agent";
+    }
+    const whereConditionArtifact = (last as ToolMessage & {
+      artifact?: WhereConditionArtifact;
+    }).artifact as WhereConditionArtifact | undefined;
+    if (whereConditionArtifact?.status === "valid") {
+      return END;
     }
     return "message_filter_agent";
   };
@@ -183,14 +211,17 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const workflow = new StateGraph(MessagesAnnotation)
     .addNode("message_filter_agent", callModel)
     .addNode("json_detected_feedback", jsonDetectedFeedback)
+    .addNode("missing_tool_call_feedback", missingToolCallFeedback)
     .addNode("message_filter_agent_tools", new ToolNode([applyFilterTool]))
     .addEdge(START, "message_filter_agent")
     .addConditionalEdges("message_filter_agent", shouldContinue, {
       message_filter_agent_tools: "message_filter_agent_tools",
       json_detected_feedback: "json_detected_feedback",
+      missing_tool_call_feedback: "missing_tool_call_feedback",
       [END]: END,
     })
     .addEdge("json_detected_feedback", "message_filter_agent")
+    .addEdge("missing_tool_call_feedback", "message_filter_agent")
     .addConditionalEdges("message_filter_agent_tools", hasValidWhereCondition, {
       [END]: END,
       message_filter_agent: "message_filter_agent",
@@ -215,8 +246,12 @@ export async function questionWhereConditionAgent(params: RequestParams) {
   const artifact = validToolMessage?.artifact as
     | WhereConditionArtifact
     | undefined;
+  assert(
+    artifact?.status === "valid" && artifact.filter !== undefined,
+    "Failed to produce valid question conditions via applyFilterTool",
+  );
   const parsedQuestionConditions = questionConditionsSchema.parse(
-    artifact?.status === "valid" ? artifact.filter : null,
+    artifact.filter,
   );
   return parsedQuestionConditions;
 }

@@ -118,14 +118,14 @@ applyFilterTool.
 ## Important: Context Conditions & Tenant Isolation
 The \`Context Conditions\` below handle tenant/organisation isolation. These filters are automatically applied to every query. Each condition specifies which table it applies to via the "table" field.
 
-- Today's Date: {{date}}
-- Table: {{tableName}}
-- Operation: {{operation}}
-- Params: {{operationParams}}
-- Context Conditions: {{contextConditions}}
-- Joined Tables: {{joinedTableNames}}
-- Table Schema: {{tableSchema}}
-- Related Schemas: {{relatedTablesSchemas}}
+- Today's Date: {date}
+- Table: {tableName}
+- Operation: {operation}
+- Params: {operationParams}
+- Context Conditions: {contextConditions}
+- Joined Tables: {joinedTableNames}
+- Table Schema: {tableSchema}
+- Related Schemas: {relatedTablesSchemas}
 
 
 # Stop Conditions

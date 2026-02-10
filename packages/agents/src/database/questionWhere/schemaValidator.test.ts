@@ -131,6 +131,108 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
     }
   }
 
+  // ── Multi-operator condition tests ──────────────────────────────
+
+  if (dateCol) {
+    test("date column with combined gte + lte (range) is valid", () => {
+      const candidate = {
+        AND: [
+          {
+            [qualify(dateCol.name)]: {
+              gte: "2025-01-01T00:00:00.000Z",
+              lte: "2025-12-31T23:59:59.999Z",
+            },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+      expect(result.success).toBe(true);
+    });
+  }
+
+  if (numberCol) {
+    test("number column with combined gte + lte (range) is valid", () => {
+      const candidate = {
+        AND: [
+          {
+            [qualify(numberCol.name)]: { gte: 10, lte: 100 },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+      expect(result.success).toBe(true);
+    });
+
+    test("number column with combined gt + lt (exclusive range) is valid", () => {
+      const candidate = {
+        AND: [
+          {
+            [qualify(numberCol.name)]: { gt: 0, lt: 1000 },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+      expect(result.success).toBe(true);
+    });
+  }
+
+  if (toManyRel) {
+    const targetTable = fullSchema.find(
+      (t) => t.name === toManyRel.targetTable?.name,
+    );
+    const targetDate = targetTable?.columns.find((c) => c.type === "DateTime");
+    if (targetDate) {
+      test("to-many relation 'some' with multi-operator date range is valid", () => {
+        const candidate = {
+          AND: [
+            {
+              [toManyRel.name]: {
+                some: {
+                  [targetDate.name]: {
+                    gte: "2025-01-01T00:00:00.000Z",
+                    lte: "2025-12-31T23:59:59.999Z",
+                  },
+                },
+              },
+            },
+          ],
+        };
+        const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+        expect(result.success).toBe(true);
+      });
+    }
+  }
+
+  if (stringCol) {
+    test("string column with multiple operators is invalid", () => {
+      const candidate = {
+        AND: [
+          {
+            [qualify(stringCol.name)]: { equals: "x", contains: "y" },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+      expect(result.success).toBe(false);
+    });
+  }
+
+  if (booleanCol) {
+    test("boolean column with multiple operators is invalid", () => {
+      const candidate = {
+        AND: [
+          {
+            [qualify(booleanCol.name)]: { equals: true, not: false },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
+      expect(result.success).toBe(false);
+    });
+  }
+
+  // ── End multi-operator tests ──────────────────────────────────
+
   test("unknown column invalid", () => {
     const candidate = {
       AND: [

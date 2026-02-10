@@ -147,6 +147,18 @@ function generateComputedColumnAsSQL(
     case "value":
       return sql`${ast.value}`;
 
+    case "function": {
+      const [arg] = ast.arguments;
+      const compiledArg = generateComputedColumnAsSQL(
+        arg,
+        tableName,
+        schema,
+        dialect,
+        true,
+      );
+      return sql`${sql.raw(ast.name)}(${compiledArg})`;
+    }
+
     case "operation": {
       const operands = ast.operands.map((operand) =>
         generateComputedColumnAsSQL(operand, tableName, schema, dialect, true),

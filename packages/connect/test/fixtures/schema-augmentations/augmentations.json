@@ -78,6 +78,34 @@
       "unit": "USD",
       "notes": null,
       "selected": true
+    },
+    {
+      "name": "absolute_discount_gap",
+      "table": "orders",
+      "ast": {
+        "type": "function",
+        "name": "ABS",
+        "arguments": [
+          {
+            "type": "operation",
+            "operands": [
+              {
+                "name": "discount",
+                "type": "column"
+              },
+              {
+                "name": "subtotal",
+                "type": "column"
+              }
+            ],
+            "operator": "-"
+          }
+        ]
+      },
+      "type": "number",
+      "unit": null,
+      "notes": null,
+      "selected": true
     }
   ]
 }

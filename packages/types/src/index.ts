@@ -53,6 +53,7 @@ const relationSchema = z
     targetTable: z.string(),
     sourceColumns: z.array(z.string()).optional(),
     targetColumns: z.array(z.string()).optional(),
+    targetSchema: z.string().nullable().optional(),
   })
   .strict();
 

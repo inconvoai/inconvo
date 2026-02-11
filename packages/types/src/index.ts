@@ -60,7 +60,7 @@ const relationSchema = z
 const tableSchema = z
   .object({
     name: z.string(),
-    schema: z.string().optional(),  // Database schema name (e.g., 'public', 'sales')
+    schema: z.string().optional(), // Database schema name (e.g., 'public', 'sales')
     columns: z.array(columnSchema),
     relations: z.array(relationSchema).optional(),
   })
@@ -69,7 +69,7 @@ const tableSchema = z
 export const SchemaResponseSchema = z
   .object({
     tables: z.array(tableSchema),
-    databaseSchemas: z.array(z.string()).nullable().optional(),  // Schema(s) to include for the connection
+    databaseSchemas: z.array(z.string()).nullable().optional(), // Schema(s) to include for the connection
   })
   .strict();
 
@@ -80,8 +80,8 @@ export const InconvoOptionsSchema = z
     baseURL: z.string().url(),
     signingSecret: z.string(),
     augmentationsHash: z.string().optional(),
-    /** Connection ID for Lambda-based connectors. Required for shared Lambda, not needed for AppRunner. */
-    connectionId: z.string().optional(),
+    connectionId: z.string(),
+    connectionVersion: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -492,7 +492,7 @@ export type TableConditionsMap = z.infer<typeof tableConditionsMapSchema>;
 
 const baseSchema = {
   table: z.string(),
-  tableSchema: z.string().nullable().optional(),  // Database schema name (e.g., 'public', 'sales')
+  tableSchema: z.string().nullable().optional(), // Database schema name (e.g., 'public', 'sales')
   whereAndArray: whereAndArraySchema,
   tableConditions: tableConditionsMapSchema,
 };
@@ -1131,7 +1131,7 @@ export type SchemaRelation = {
   name: string;
   relationId: string | null;
   targetTable: { name: string };
-  targetSchema: string | null;  // For cross-schema relations
+  targetSchema: string | null; // For cross-schema relations
   isList: boolean;
   selected: boolean;
   source: RelationSource;
@@ -1143,7 +1143,7 @@ export type SchemaRelation = {
 
 export type SchemaTable = {
   name: string;
-  schema: string | null;  // Database schema name (e.g., 'public', 'sales')
+  schema: string | null; // Database schema name (e.g., 'public', 'sales')
   access: TableAccess;
   context: string | null;
   columns: SchemaColumn[];

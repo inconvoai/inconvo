@@ -31,7 +31,8 @@ export class UserDatabaseConnector {
   private client: AxiosInstance;
   private signingSecret: string;
   private augmentationsHash?: string;
-  private connectionId?: string;
+  private connectionId: string;
+  private connectionVersion?: number;
 
   constructor(options: InconvoOptions) {
     const parsedOptions = InconvoOptionsSchema.parse(options);
@@ -44,6 +45,7 @@ export class UserDatabaseConnector {
     this.signingSecret = parsedOptions.signingSecret;
     this.augmentationsHash = parsedOptions.augmentationsHash;
     this.connectionId = parsedOptions.connectionId;
+    this.connectionVersion = parsedOptions.connectionVersion;
   }
 
   private generateHeaders(
@@ -65,14 +67,14 @@ export class UserDatabaseConnector {
       "inconvo-signature": signature,
       "inconvo-timestamp": timestamp,
       "inconvo-random": random,
+      "inconvo-connection-id": this.connectionId,
     };
-    // Include connection ID for Lambda-based connectors
-    if (this.connectionId) {
-      headers["inconvo-connection-id"] = this.connectionId;
-    }
     // Include augmentations hash on POST requests (queries)
     if (method === "POST" && this.augmentationsHash) {
       headers["inconvo-augmentations-hash"] = this.augmentationsHash;
+    }
+    if (this.connectionVersion !== undefined) {
+      headers["inconvo-connection-version"] = String(this.connectionVersion);
     }
     return headers;
   }
@@ -122,6 +124,13 @@ export class UserDatabaseConnector {
   ): Promise<void> {
     const body = unifiedAugmentationsSyncSchema.parse(payload);
     const requestUrl = "/sync/augmentations";
+    const headers = this.generateHeaders("POST", requestUrl, body);
+    await this.client.post(requestUrl, body, { headers });
+  }
+
+  public async clearCache(): Promise<void> {
+    const body = {};
+    const requestUrl = "/cache/clear";
     const headers = this.generateHeaders("POST", requestUrl, body);
     await this.client.post(requestUrl, body, { headers });
   }

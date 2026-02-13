@@ -8,10 +8,7 @@ import {
   Paper,
   Text,
   Group,
-  Badge,
   TextInput,
-  ActionIcon,
-  Collapse,
   Stack,
   Button,
   Center,
@@ -21,8 +18,6 @@ import {
 import {
   IconAlertCircle,
   IconBraces,
-  IconChevronDown,
-  IconChevronUp,
   IconCheck,
 } from "@tabler/icons-react";
 import {
@@ -76,7 +71,6 @@ export function ChatInterface() {
     Record<string, string | number> | undefined
   >();
   const [userIdentifier, setUserIdentifier] = useState<string>("dev-user");
-  const [contextExpanded, setContextExpanded] = useState(false);
   const [contextConfirmed, setContextConfirmed] = useState(false);
 
   // Alias for setMessagesState (messages are now persisted server-side)
@@ -203,7 +197,7 @@ export function ChatInterface() {
   }, [contextFields, contextValues]);
 
   // Create a new conversation with context
-  const handleCreateConversation = useCallback(async (options?: { skipContext?: boolean }) => {
+  const handleCreateConversation = useCallback(async (options?: { skipContext?: boolean }): Promise<string | null> => {
     setIsCreatingConversation(true);
     setError(undefined);
     try {
@@ -225,13 +219,21 @@ export function ChatInterface() {
       setActiveConversationId(data.id);
       setContextConfirmed(true);
 
+      // Update local state with the context that was just created
+      if (userContext && typeof userContext === 'object') {
+        setUserContext(userContext);
+      }
+
       // Track conversation creation
       trackFeatureUsageClient(posthog, "conversations", { action: "created" });
+
+      return data.id;
     } catch (err) {
       console.error("Failed to create conversation:", err);
       setError(
         err instanceof Error ? err.message : "Failed to create conversation",
       );
+      return null;
     } finally {
       setIsCreatingConversation(false);
     }
@@ -239,7 +241,19 @@ export function ChatInterface() {
 
   const handleSendMessage = useCallback(
     async (message: string) => {
-      if (!activeConversationId) {
+      let conversationId = activeConversationId;
+
+      // Auto-create conversation if needed (when context is disabled)
+      if (!conversationId && contextStatus === "DISABLED") {
+        const newConversationId = await handleCreateConversation({ skipContext: true });
+        if (!newConversationId) {
+          setError("Failed to create conversation");
+          return;
+        }
+        conversationId = newConversationId;
+      }
+
+      if (!conversationId) {
         setError("No active conversation");
         return;
       }
@@ -262,7 +276,7 @@ export function ChatInterface() {
 
       try {
         const response = await fetch(
-          `/api/v1/agents/dev-agent/conversations/${activeConversationId}/response`,
+          `/api/v1/agents/dev-agent/conversations/${conversationId}/response`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -330,7 +344,7 @@ export function ChatInterface() {
         setProgressMessage(undefined);
       }
     },
-    [activeConversationId, setMessages],
+    [activeConversationId, contextStatus, handleCreateConversation, setMessages],
   );
 
   // Count active context values
@@ -370,8 +384,8 @@ export function ChatInterface() {
           </Alert>
         )}
 
-        {/* User Context Setup - shown before first message */}
-        {messages.length === 0 && !contextConfirmed ? (
+        {/* User Context Setup - shown before first message (but not when context is disabled) */}
+        {messages.length === 0 && !contextConfirmed && contextStatus !== "DISABLED" ? (
           <Box
             style={{
               flex: 1,
@@ -455,26 +469,6 @@ export function ChatInterface() {
                       </>
                     )}
                   </>
-                ) : contextStatus === "DISABLED" ? (
-                  <>
-                    <Title order={4} ta="center">
-                      User Context Disabled
-                    </Title>
-                    <Text size="sm" c="dimmed" ta="center">
-                      This agent is configured to run without user context.
-                    </Text>
-                    <Button
-                      fullWidth
-                      leftSection={<IconCheck size={16} />}
-                      onClick={() =>
-                        handleCreateConversation({ skipContext: true })
-                      }
-                      loading={isCreatingConversation}
-                      mt="sm"
-                    >
-                      Continue
-                    </Button>
-                  </>
                 ) : (
                   <>
                     <Title order={4} ta="center">
@@ -500,6 +494,23 @@ export function ChatInterface() {
           </Box>
         ) : (
           <>
+            {/* Info banner for disabled context before first message */}
+            {messages.length === 0 && !contextConfirmed && contextStatus === "DISABLED" && (
+              <Paper withBorder m="md" mb={0} py="md" px="md" bg="gray.0">
+                <Stack gap="xs" align="center">
+                  <Group gap="xs">
+                    <IconBraces size={16} />
+                    <Text size="sm" fw={500}>
+                      User Context Disabled
+                    </Text>
+                  </Group>
+                  <Text size="sm" c="dimmed" ta="center">
+                    This agent is configured to run without user context. Start typing below to begin a conversation.
+                  </Text>
+                </Stack>
+              </Paper>
+            )}
+
             {/* User Context Display - show values once conversation has messages */}
             {messages.length > 0 && (
               <Paper withBorder m="md" mb={0} py="xs" px="md">
@@ -551,68 +562,6 @@ export function ChatInterface() {
                 </Group>
               </Paper>
             )}
-
-            {/* Collapsible User Context Panel - only shown before conversation is created */}
-            {contextFields.length > 0 &&
-              messages.length === 0 &&
-              !contextConfirmed && (
-                <Paper withBorder m="md" mb={0} p="xs">
-                  <Group
-                    justify="space-between"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setContextExpanded(!contextExpanded)}
-                  >
-                    <Group gap="xs">
-                      <IconBraces size={16} />
-                      <Text size="sm" fw={500}>
-                        User Context
-                      </Text>
-                      {activeContextCount > 0 && (
-                        <Badge size="xs" variant="filled" color="blue">
-                          {activeContextCount} set
-                        </Badge>
-                      )}
-                    </Group>
-                    <ActionIcon variant="subtle" size="sm">
-                      {contextExpanded ? (
-                        <IconChevronUp size={14} />
-                      ) : (
-                        <IconChevronDown size={14} />
-                      )}
-                    </ActionIcon>
-                  </Group>
-
-                  <Collapse in={contextExpanded}>
-                    <Stack gap="xs" mt="sm">
-                      <Text size="xs" c="dimmed">
-                        Set context values to filter queries by user identity,
-                        tenant, etc.
-                      </Text>
-                      {contextFields.map((field) => (
-                        <TextInput
-                          key={field.id}
-                          label={field.key}
-                          description={`Type: ${field.type}`}
-                          placeholder={
-                            field.type === "NUMBER"
-                              ? "Enter a number"
-                              : "Enter a value"
-                          }
-                          value={contextValues[field.key] ?? ""}
-                          onChange={(e) => {
-                            const value = e.currentTarget?.value ?? "";
-                            setContextValues((prev) => ({
-                              ...prev,
-                              [field.key]: value,
-                            }));
-                          }}
-                          size="xs"
-                        />
-                      ))}
-                    </Stack>
-                  </Collapse>
-                </Paper>
-              )}
 
             <MessageList
               messages={messages}

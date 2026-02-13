@@ -224,6 +224,6 @@ export async function countRelations(
 
   return {
     query: { sql: compiled.sql, params: compiled.parameters },
-    data: normalized.length > 0 ? normalized : 0,
+    data: normalized,
   };
 }

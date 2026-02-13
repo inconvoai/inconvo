@@ -57,6 +57,24 @@ INCONVO_BIGQUERY_KEYFILE=/path/to/key.json
 
 This package is wired into the agent runtime and server. Public usage docs are intentionally minimal; refer to tests for examples and use the agent-facing interfaces in `@repo/agents`.
 
+## Testing
+
+PostgreSQL tests run against a seeded local database. The seed file lives at:
+`packages/connect/test/fixtures/pg-test-seed.sql`.
+
+Run PostgreSQL tests locally (matches CI defaults):
+
+```bash
+export DATABASE_DIALECT=postgresql
+export INCONVO_DATABASE_URL=postgresql://root:notroot@localhost:9999/hosted
+export INCONVO_SECRET_KEY=test-secret-key
+export NODE_ENV=test
+
+pnpm --filter @repo/connect run test:pg
+```
+
+Other dialect tests (MySQL/MSSQL/BigQuery) require their own database setup and env vars.
+
 ## Database Connection Strings
 
 ### PostgreSQL

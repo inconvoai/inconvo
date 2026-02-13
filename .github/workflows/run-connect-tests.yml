@@ -1,0 +1,65 @@
+name: connect-tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  connect-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: notroot
+          POSTGRES_DB: hosted
+        ports:
+          - 9999:5432
+        options: >-
+          --health-cmd="pg_isready -U root -d hosted"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Seed the test database with deterministic data for all test/pg cases.
+      - name: Seed PostgreSQL test data
+        env:
+          INCONVO_DATABASE_URL: postgresql://root:notroot@localhost:9999/hosted
+        run: |
+          psql "$INCONVO_DATABASE_URL" -f packages/connect/test/fixtures/pg-test-seed.sql
+
+      # Run only PostgreSQL tests. Other dialects can be added as separate jobs.
+      - name: Run connect postgres tests
+        env:
+          DATABASE_DIALECT: postgresql
+          INCONVO_DATABASE_URL: postgresql://root:notroot@localhost:9999/hosted
+          INCONVO_SECRET_KEY: test-secret-key
+          NODE_ENV: test
+        run: pnpm --filter @repo/connect run test:pg
+
+      # To add MySQL/MSSQL/BigQuery later:
+      # - provision the database service or use hosted credentials
+      # - add a dedicated job with the matching env vars
+      # - run pnpm --filter @repo/connect run test:mysql|test:mssql|test:bq

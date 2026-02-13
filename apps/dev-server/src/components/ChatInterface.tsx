@@ -55,7 +55,6 @@ export function ChatInterface() {
   >();
   const [messages, setMessagesState] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
@@ -198,7 +197,6 @@ export function ChatInterface() {
 
   // Create a new conversation with context
   const handleCreateConversation = useCallback(async (options?: { skipContext?: boolean }): Promise<string | null> => {
-    setIsCreatingConversation(true);
     setError(undefined);
     try {
       const userContext = options?.skipContext ? null : buildUserContext();
@@ -234,8 +232,6 @@ export function ChatInterface() {
         err instanceof Error ? err.message : "Failed to create conversation",
       );
       return null;
-    } finally {
-      setIsCreatingConversation(false);
     }
   }, [buildUserContext]);
 
@@ -243,9 +239,11 @@ export function ChatInterface() {
     async (message: string) => {
       let conversationId = activeConversationId;
 
-      // Auto-create conversation if needed (when context is disabled)
-      if (!conversationId && contextStatus === "DISABLED") {
-        const newConversationId = await handleCreateConversation({ skipContext: true });
+      // Auto-create conversation if needed (on first message)
+      if (!conversationId) {
+        const newConversationId = await handleCreateConversation({
+          skipContext: contextStatus === "DISABLED"
+        });
         if (!newConversationId) {
           setError("Failed to create conversation");
           return;
@@ -361,6 +359,7 @@ export function ChatInterface() {
         onSelect={handleSelectConversation}
         onNew={handleNewConversation}
         onDelete={handleDeleteConversation}
+        disabled={isLoading}
       />
 
       <Box
@@ -439,9 +438,14 @@ export function ChatInterface() {
                         <Button
                           fullWidth
                           leftSection={<IconCheck size={16} />}
-                          onClick={() => handleCreateConversation()}
+                          onClick={() => {
+                            const builtContext = buildUserContext();
+                            if (builtContext) {
+                              setUserContext(builtContext);
+                            }
+                            setContextConfirmed(true);
+                          }}
                           disabled={activeContextCount === 0}
-                          loading={isCreatingConversation}
                           mt="sm"
                         >
                           Continue

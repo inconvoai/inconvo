@@ -27,6 +27,7 @@ interface ConversationSidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  disabled?: boolean;
 }
 
 export function ConversationSidebar({
@@ -35,6 +36,7 @@ export function ConversationSidebar({
   onSelect,
   onNew,
   onDelete,
+  disabled = false,
 }: ConversationSidebarProps) {
   return (
     <Box
@@ -55,6 +57,7 @@ export function ConversationSidebar({
           variant="light"
           color="blue"
           onClick={onNew}
+          disabled={disabled}
           title="New conversation"
         >
           <IconPlus size={16} />
@@ -73,9 +76,10 @@ export function ConversationSidebar({
                 key={conv.id}
                 padding="xs"
                 radius="md"
-                onClick={() => onSelect(conv.id)}
+                onClick={() => !disabled && onSelect(conv.id)}
                 style={{
-                  cursor: "pointer",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  opacity: disabled ? 0.6 : 1,
                   backgroundColor:
                     activeId === conv.id
                       ? "var(--mantine-color-blue-0)"

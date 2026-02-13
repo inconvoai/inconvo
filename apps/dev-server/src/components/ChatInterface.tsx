@@ -218,7 +218,7 @@ export function ChatInterface() {
       setContextConfirmed(true);
 
       // Update local state with the context that was just created
-      if (userContext && typeof userContext === 'object') {
+      if (userContext != null) {
         setUserContext(userContext);
       }
 

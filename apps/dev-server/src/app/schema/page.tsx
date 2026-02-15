@@ -24,12 +24,16 @@ import type {
   TableSchema,
   TableAccess,
   Column,
+  ColumnValueEnumCreatePayload,
+  ColumnValueEnumEntryInput,
+  ColumnValueEnumUpdatePayload,
   ComputedColumn,
   Relation,
   UserContextField,
   TableWithColumns,
   FilterValue,
 } from "@repo/ui/semantic-model";
+import { normalizeColumnValueEnum } from "@repo/types";
 import posthog from "posthog-js";
 import { trackFeatureUsageClient } from "~/lib/telemetry";
 
@@ -70,6 +74,11 @@ interface ApiColumn {
     ast: unknown;
     type: string | null;
     selected: boolean;
+  } | null;
+  valueEnum: {
+    id: string;
+    selected: boolean;
+    entries: unknown;
   } | null;
 }
 
@@ -117,13 +126,14 @@ interface ApiTableDetail {
 
 // Transform API data to shared component types
 function transformColumn(api: ApiColumn): Column {
+  const valueEnum = normalizeColumnValueEnum(api.valueEnum);
   return {
     id: api.id,
     name: api.name,
     rename: api.rename,
     notes: api.notes,
     type: api.type,
-    effectiveType: api.conversion?.type ?? api.type,
+    effectiveType: api.conversion?.selected && api.conversion.type ? api.conversion.type : api.type,
     selected: api.selected,
     unit: api.unit,
     conversion: api.conversion
@@ -134,6 +144,7 @@ function transformColumn(api: ApiColumn): Column {
           selected: api.conversion.selected,
         }
       : null,
+    valueEnum,
     relation: [], // Not needed for display
   };
 }
@@ -824,10 +835,19 @@ function SchemaPageContent() {
       columnId: string,
       payload: { type: string; ast: unknown; selected: boolean },
     ) => {
-      const res = await fetch("/api/schema/conversions", {
+      const res = await fetch("/api/schema/augmentations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columnId, ...payload }),
+        body: JSON.stringify({
+          tableId,
+          columnId,
+          kind: "CONVERSION",
+          selected: payload.selected,
+          conversionConfig: {
+            type: payload.type,
+            ast: payload.ast,
+          },
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
@@ -847,20 +867,18 @@ function SchemaPageContent() {
       columnId: string,
       payload: { type: string; ast: unknown; selected: boolean },
     ) => {
-      // Find conversion ID from current state
-      const column = selectedTable?.columns.find((c) => c.id === columnId);
-      if (!column?.conversion?.id) {
-        throw new Error("Conversion not found");
-      }
-
-      const res = await fetch(
-        `/api/schema/conversions/${column.conversion.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "CONVERSION",
+          selected: payload.selected,
+          conversionConfig: {
+            type: payload.type,
+            ast: payload.ast,
+          },
+        }),
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
@@ -870,23 +888,14 @@ function SchemaPageContent() {
         await fetchTableDetail(table.name);
       }
     },
-    [selectedTable, tables, fetchTableDetail],
+    [tables, fetchTableDetail],
   );
 
   const onDeleteColumnConversion = useCallback(
     async (tableId: string, columnId: string) => {
-      // Find conversion ID from current state
-      const column = selectedTable?.columns.find((c) => c.id === columnId);
-      if (!column?.conversion?.id) {
-        throw new Error("Conversion not found");
-      }
-
-      const res = await fetch(
-        `/api/schema/conversions/${column.conversion.id}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "DELETE",
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
@@ -900,7 +909,101 @@ function SchemaPageContent() {
         });
       }
     },
-    [selectedTable],
+    [selectedTable, setSelectedTable],
+  );
+
+  // Column enum callbacks
+  const onCreateColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: ColumnValueEnumCreatePayload,
+    ) => {
+      const res = await fetch("/api/schema/augmentations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+          columnId,
+          kind: "STATIC_ENUM",
+          selected: payload.selected ?? true,
+          staticEnumConfig: {
+            entries: payload.entries,
+          },
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onUpdateColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: ColumnValueEnumUpdatePayload,
+    ) => {
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "STATIC_ENUM",
+          selected: payload.selected,
+          ...(payload.entries !== undefined
+            ? { staticEnumConfig: { entries: payload.entries } }
+            : {}),
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onDeleteColumnValueEnum = useCallback(
+    async (tableId: string, columnId: string) => {
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onAutoFillColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+    ): Promise<ColumnValueEnumEntryInput[]> => {
+      const params = new URLSearchParams({ tableId, columnId });
+      const res = await fetch(
+        `/api/schema/augmentations?${params.toString()}`,
+      );
+      const data = (await res.json()) as {
+        error?: string;
+        entries?: ColumnValueEnumEntryInput[];
+      };
+      if (data.error) throw new Error(data.error);
+      return data.entries ?? [];
+    },
+    [],
   );
 
   // Handle search change (TableList handles debouncing, we just update URL)
@@ -1078,6 +1181,10 @@ function SchemaPageContent() {
           onCreateColumnConversion={onCreateColumnConversion}
           onUpdateColumnConversion={onUpdateColumnConversion}
           onDeleteColumnConversion={onDeleteColumnConversion}
+          onCreateColumnValueEnum={onCreateColumnValueEnum}
+          onUpdateColumnValueEnum={onUpdateColumnValueEnum}
+          onDeleteColumnValueEnum={onDeleteColumnValueEnum}
+          onAutoFillColumnValueEnum={onAutoFillColumnValueEnum}
         />
       </Box>
     </Box>

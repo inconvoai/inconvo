@@ -38,6 +38,7 @@ applyFilterTool.
 - **Numbers:** equals | not | lt | lte | gt | gte | in — multiple operators can be combined in one object for range queries (e.g. \`{{ gte: 10, lte: 100 }}\`)
 - **Booleans:** equals | not
 - **DateTime:** equals | not | lt | lte | gt | gte — multiple operators can be combined in one object for range queries (e.g. \`{{ gte: "...", lte: "..." }}\`)
+- **Enum columns (semantic enum configured):** equals | not | in only
 - \`equals\`/\`not\` accept \`null\` for null checks.
 - \`in\` requires a non-empty array of correct-typed values.
 - \`contains\`/\`contains_insensitive\`: single string value.
@@ -59,6 +60,10 @@ applyFilterTool.
 
 ## Schema Rules
 - Do not invent columns or relations—use names as per the schemas.
+- When a column has semantic enum values, treat it as categorical:
+  - Use only \`equals\`, \`not\`, or \`in\`
+  - Do NOT use range operators (\`lt/lte/gt/gte\`) on enum columns
+  - Use the allowed values shown in the schema
 - Relation operators (\`is\`, \`isNot\`, \`some\`, \`every\`, \`none\`) must wrap one leaf or an empty object for absence (\`is:{{}}\` or \`none:{{}}\` only).
 - Do not nest logical groups within relation operators.
 - To AND multiple conditions on a relation, use multiple sibling filter objects.

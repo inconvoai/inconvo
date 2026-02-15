@@ -19,6 +19,9 @@ import type {
   ContextFilterPayload,
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
+  ColumnValueEnumCreatePayload,
+  ColumnValueEnumEntryInput,
+  ColumnValueEnumUpdatePayload,
   ColumnUnitPayload,
   ComputedColumnUnitPayload,
 } from "./types";
@@ -146,6 +149,28 @@ export interface SemanticModelEditorProps {
     tableId: string,
     columnId: string,
   ) => Promise<void>;
+  /** Callback when a column value enum is created */
+  onCreateColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnValueEnumCreatePayload,
+  ) => Promise<void>;
+  /** Callback when a column value enum is updated */
+  onUpdateColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnValueEnumUpdatePayload,
+  ) => Promise<void>;
+  /** Callback when a column value enum is deleted */
+  onDeleteColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+  ) => Promise<void>;
+  /** Callback to auto-generate enum entries from distinct values */
+  onAutoFillColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+  ) => Promise<ColumnValueEnumEntryInput[]>;
   /** Callback when a column unit is added */
   onAddColumnUnit?: (
     tableId: string,
@@ -196,6 +221,10 @@ export function SemanticModelEditor({
   onCreateColumnConversion,
   onUpdateColumnConversion,
   onDeleteColumnConversion,
+  onCreateColumnValueEnum,
+  onUpdateColumnValueEnum,
+  onDeleteColumnValueEnum,
+  onAutoFillColumnValueEnum,
   onAddColumnUnit,
   onUpdateComputedColumnUnit,
 }: SemanticModelEditorProps) {
@@ -344,6 +373,43 @@ export function SemanticModelEditor({
     [selectedTable, onDeleteColumnConversion],
   );
 
+  const handleCreateColumnValueEnum = useCallback(
+    async (columnId: string, payload: ColumnValueEnumCreatePayload) => {
+      if (selectedTable) {
+        await onCreateColumnValueEnum?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onCreateColumnValueEnum],
+  );
+
+  const handleUpdateColumnValueEnum = useCallback(
+    async (columnId: string, payload: ColumnValueEnumUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateColumnValueEnum?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onUpdateColumnValueEnum],
+  );
+
+  const handleDeleteColumnValueEnum = useCallback(
+    async (columnId: string) => {
+      if (selectedTable) {
+        await onDeleteColumnValueEnum?.(selectedTable.id, columnId);
+      }
+    },
+    [selectedTable, onDeleteColumnValueEnum],
+  );
+
+  const handleAutoFillColumnValueEnum = useCallback(
+    async (columnId: string) => {
+      if (!selectedTable || !onAutoFillColumnValueEnum) {
+        return [];
+      }
+      return await onAutoFillColumnValueEnum(selectedTable.id, columnId);
+    },
+    [selectedTable, onAutoFillColumnValueEnum],
+  );
+
   const handleAddColumnUnit = useCallback(
     async (payload: ColumnUnitPayload) => {
       if (selectedTable) {
@@ -431,6 +497,10 @@ export function SemanticModelEditor({
             onCreateColumnConversion={handleCreateColumnConversion}
             onUpdateColumnConversion={handleUpdateColumnConversion}
             onDeleteColumnConversion={handleDeleteColumnConversion}
+            onCreateColumnValueEnum={handleCreateColumnValueEnum}
+            onUpdateColumnValueEnum={handleUpdateColumnValueEnum}
+            onDeleteColumnValueEnum={handleDeleteColumnValueEnum}
+            onAutoFillColumnValueEnum={handleAutoFillColumnValueEnum}
             onAddColumnUnit={handleAddColumnUnit}
             onUpdateComputedColumnUnit={handleUpdateComputedColumnUnit}
           />

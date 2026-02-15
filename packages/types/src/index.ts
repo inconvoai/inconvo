@@ -563,6 +563,7 @@ const findDistinctSchema = z
     operationParameters: z
       .object({
         column: z.string(),
+        limit: z.number().int().positive().max(500).optional(),
       })
       .strict(),
   })
@@ -1106,6 +1107,19 @@ export type SchemaColumnConversion = {
   selected: boolean;
 };
 
+export type SchemaColumnValueEnumEntry = {
+  value: string | number;
+  label: string;
+  selected: boolean;
+  position: number;
+};
+
+export type SchemaColumnValueEnum = {
+  id: string;
+  selected: boolean;
+  entries: SchemaColumnValueEnumEntry[];
+};
+
 export type SchemaColumn = {
   dbName: string;
   name: string;
@@ -1114,6 +1128,7 @@ export type SchemaColumn = {
   type: string;
   effectiveType: string;
   conversion: SchemaColumnConversion | null;
+  valueEnum?: SchemaColumnValueEnum | null;
   unit: string | null;
   relation: ColumnRelationEntry[];
 };
@@ -1169,4 +1184,89 @@ export type Conversation = {
 // and dev-server's direct connector
 export interface DatabaseConnector {
   query(query: Query): Promise<QueryResponse>;
+}
+
+// ============================================================================
+// Shared enum / column-type utilities
+// ============================================================================
+
+export const NUMERIC_LOGICAL_TYPES = new Set([
+  "number",
+  "integer",
+  "bigint",
+  "decimal",
+  "float",
+]);
+
+export function resolveEffectiveColumnType(
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): string {
+  if (conversion?.selected && conversion.type) {
+    return conversion.type;
+  }
+  return columnType;
+}
+
+export function isEffectivelyNumeric(
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): boolean {
+  const effectiveType = resolveEffectiveColumnType(columnType, conversion);
+  return NUMERIC_LOGICAL_TYPES.has(effectiveType);
+}
+
+export function isActiveEnumColumn(
+  valueEnum: SchemaColumnValueEnum | null | undefined,
+): valueEnum is SchemaColumnValueEnum {
+  if (!valueEnum || valueEnum.selected === false) {
+    return false;
+  }
+  return valueEnum.entries.some((entry) => entry.selected !== false);
+}
+
+export function normalizeColumnValueEnum(
+  valueEnum:
+    | { id: string; selected: boolean; entries: unknown }
+    | null
+    | undefined,
+): SchemaColumnValueEnum | null {
+  if (!valueEnum) {
+    return null;
+  }
+
+  // Handle SQLite (string) vs PostgreSQL (already-parsed JSON)
+  let raw: unknown = valueEnum.entries;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw) as unknown;
+    } catch {
+      console.warn(`[normalizeColumnValueEnum] Failed to parse entries JSON for enum ${valueEnum.id}`);
+      raw = [];
+    }
+  }
+
+  const entries: SchemaColumnValueEnumEntry[] = [];
+  if (!Array.isArray(raw)) {
+    console.warn(`[normalizeColumnValueEnum] Expected entries array for enum ${valueEnum.id}, got ${typeof raw}`);
+  } else {
+    raw.forEach((entry, index) => {
+      if (!entry || typeof entry !== "object") return;
+      const e = entry as Record<string, unknown>;
+      const value = e.value;
+      if (typeof value !== "string" && typeof value !== "number") return;
+      entries.push({
+        value,
+        label: typeof e.label === "string" ? e.label : String(value),
+        selected: e.selected !== false,
+        position: typeof e.position === "number" ? e.position : index,
+      });
+    });
+  }
+
+  return {
+    id: valueEnum.id,
+    selected: valueEnum.selected,
+    entries,
+  };
 }

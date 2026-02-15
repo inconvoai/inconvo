@@ -23,6 +23,9 @@ export type { ManualRelationFormProps } from "./ManualRelationForm";
 export { ColumnConversionForm } from "./ColumnConversionForm";
 export type { ColumnConversionFormProps } from "./ColumnConversionForm";
 
+export { ColumnValueEnumForm } from "./ColumnValueEnumForm";
+export type { ColumnValueEnumFormProps } from "./ColumnValueEnumForm";
+
 export { ComputedColumnForm } from "./ComputedColumnForm";
 export type { ComputedColumnFormProps } from "./ComputedColumnForm";
 

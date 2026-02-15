@@ -1,47 +1,238 @@
 import { z } from "zod";
 import type { Schema } from "@repo/types";
+import {
+  NUMERIC_LOGICAL_TYPES,
+  isActiveEnumColumn,
+  type SchemaColumnValueEnum,
+} from "@repo/types";
 import type { QuestionConditions } from "@repo/types";
+
+type SchemaColumn = Schema[number]["columns"][number];
+
+type EnumResolution = {
+  map: Map<string, string | number>;
+  allowedTokens: string[];
+};
+
+function normalizeEnumToken(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return null;
+    return trimmed.toLowerCase();
+  }
+  return null;
+}
+
+function buildEnumResolution(valueEnum: SchemaColumnValueEnum): EnumResolution {
+  const map = new Map<string, string | number>();
+  const allowedLabels = new Set<string>();
+
+  valueEnum.entries
+    .filter((entry) => entry.selected !== false)
+    .forEach((entry) => {
+      // Map both value and label tokens to the canonical value for resolution,
+      // but only expose labels in error messages — values are hidden from the agent.
+      // Prefix keys to avoid collisions between a value matching another entry's label.
+      const valueToken = normalizeEnumToken(entry.value);
+      if (valueToken) {
+        map.set(`v:${valueToken}`, entry.value);
+      }
+
+      const labelToken = normalizeEnumToken(entry.label);
+      if (labelToken) {
+        map.set(`l:${labelToken}`, entry.value);
+        allowedLabels.add(entry.label);
+      }
+    });
+
+  return {
+    map,
+    allowedTokens: Array.from(allowedLabels),
+  };
+}
+
+function buildEnumValueSchema(valueEnum: SchemaColumnValueEnum) {
+  const resolution = buildEnumResolution(valueEnum);
+
+  return z.any().transform((input, ctx): string | number => {
+    const token = normalizeEnumToken(input);
+    if (!token) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Expected one of: ${resolution.allowedTokens.join(", ")}`,
+      });
+      return z.NEVER;
+    }
+
+    // Try label first (agent typically sends labels), then fall back to raw value
+    const resolved = resolution.map.get(`l:${token}`) ?? resolution.map.get(`v:${token}`);
+    if (resolved === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Value \"${String(input)}\" is not in allowed values`,
+      });
+      return z.NEVER;
+    }
+
+    return resolved;
+  });
+}
+
+function buildStringColumnCondition(col: string) {
+  return z
+    .object({
+      [col]: z.union([
+        z.object({ equals: z.string().or(z.null()) }).strict(),
+        z.object({ not: z.string().or(z.null()) }).strict(),
+        z.object({ in: z.array(z.string()).min(1) }).strict(),
+        z.object({ contains: z.string() }).strict(),
+        z.object({ contains_insensitive: z.string() }).strict(),
+      ]),
+    })
+    .strict();
+}
+
+function buildNumberColumnCondition(col: string) {
+  return z
+    .object({
+      [col]: z
+        .object({
+          equals: z.number().or(z.null()).optional(),
+          not: z.number().or(z.null()).optional(),
+          lt: z.number().optional(),
+          lte: z.number().optional(),
+          gt: z.number().optional(),
+          gte: z.number().optional(),
+          in: z.array(z.number()).min(1).optional(),
+        })
+        .strict()
+        .refine(
+          (obj) => Object.keys(obj).length > 0,
+          "At least one operator required",
+        ),
+    })
+    .strict();
+}
+
+function buildBooleanColumnCondition(col: string) {
+  return z
+    .object({
+      [col]: z.union([
+        z.object({ equals: z.boolean().or(z.null()) }).strict(),
+        z.object({ not: z.boolean().or(z.null()) }).strict(),
+      ]),
+    })
+    .strict();
+}
+
+function buildDateColumnCondition(col: string) {
+  const isoDate = z
+    .string()
+    .refine(
+      (v) => !Number.isNaN(Date.parse(v)),
+      "Expected valid ISO 8601 date string",
+    );
+
+  return z
+    .object({
+      [col]: z
+        .object({
+          equals: isoDate.or(z.null()).optional(),
+          not: isoDate.or(z.null()).optional(),
+          lt: isoDate.optional(),
+          lte: isoDate.optional(),
+          gt: isoDate.optional(),
+          gte: isoDate.optional(),
+        })
+        .strict()
+        .refine(
+          (obj) => Object.keys(obj).length > 0,
+          "At least one operator required",
+        ),
+    })
+    .strict();
+}
+
+function buildEnumColumnCondition(col: string, valueEnum: SchemaColumnValueEnum) {
+  const enumValueSchema = buildEnumValueSchema(valueEnum);
+  return z
+    .object({
+      [col]: z.union([
+        z.object({ equals: z.union([enumValueSchema, z.null()]) }).strict(),
+        z.object({ not: z.union([enumValueSchema, z.null()]) }).strict(),
+        z.object({ in: z.array(enumValueSchema).min(1) }).strict(),
+      ]),
+    })
+    .strict();
+}
+
+function buildColumnConditionSchema(
+  columnKey: string,
+  columnType: string,
+  valueEnum: SchemaColumn["valueEnum"],
+) {
+  if (isActiveEnumColumn(valueEnum)) {
+    return buildEnumColumnCondition(columnKey, valueEnum);
+  }
+  if (columnType === "string") {
+    return buildStringColumnCondition(columnKey);
+  }
+  if (NUMERIC_LOGICAL_TYPES.has(columnType)) {
+    return buildNumberColumnCondition(columnKey);
+  }
+  if (columnType === "boolean") {
+    return buildBooleanColumnCondition(columnKey);
+  }
+  if (columnType === "DateTime") {
+    return buildDateColumnCondition(columnKey);
+  }
+  return null;
+}
+
+function buildScalarSchemasForTable(params: {
+  table: Schema[number];
+  keyBuilder: (columnName: string) => string;
+  includeComputedColumns?: boolean;
+}): z.ZodTypeAny[] {
+  const schemas: z.ZodTypeAny[] = [];
+
+  (params.table.columns ?? []).forEach((column) => {
+    const key = params.keyBuilder(column.name);
+    const effectiveType = column.effectiveType ?? column.type;
+    const schema = buildColumnConditionSchema(key, effectiveType, column.valueEnum ?? null);
+    if (schema) {
+      schemas.push(schema);
+    }
+  });
+
+  if (params.includeComputedColumns !== false) {
+    (params.table.computedColumns ?? []).forEach((computedColumn) => {
+      const key = params.keyBuilder(computedColumn.name);
+      // Computed columns are currently treated as numeric for filtering.
+      const schema = buildNumberColumnCondition(key);
+      schemas.push(schema);
+    });
+  }
+
+  return schemas;
+}
+
+function unionSchemas(schemas: z.ZodTypeAny[]): z.ZodTypeAny {
+  if (schemas.length === 0) {
+    return z.never();
+  }
+  if (schemas.length === 1) {
+    return schemas[0]!;
+  }
+  return z.union(schemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+}
 
 /**
  * Builds a Zod schema for validating the final question WHERE conditions object
  * produced directly by the model (without per-condition tool calls).
- *
- * The historical tool-driven architecture generated ONE filter object at a time
- * and then aggregated them into: { AND: [ filterObj, ... ] } | null.
- * Each filter object had exactly one top-level key (a scalar column OR a relation name).
- *
- * Supported filter object shapes (single-key objects):
- *  1. Scalar column condition:
- *       { columnName: { <operator>: <value> } }
- *     where operators depend on the column type:
- *       - string:  equals | not | in | contains | contains_insensitive
- *       - number:  equals | not | lt | lte | gt | gte | in
- *       - boolean: equals | not
- *       - DateTime: equals | lt | lte | gt | gte  (ISO 8601 string)
- *     Additionally, ANY column may use null with operators equals | not
- *       (historic null tool allowed null for any column) — e.g. { col: { equals: null } }.
- *
- *  2. To-one relation condition:
- *       { relationName: { is:   { columnName: { <operator>: <value> } } } }
- *       { relationName: { isNot:{ columnName: { <operator>: <value> } } } }
- *       { relationName: { is: {} } }   // absence of related record
- *
- *  3. To-many relation condition:
- *       { relationName: { some: { columnName: { <operator>: <value> } } } }
- *       { relationName: { every:{ columnName: { <operator>: <value> } } } }
- *       { relationName: { none: { columnName: { <operator>: <value> } } } }
- *       { relationName: { none: {} } }  // absence (zero related records)
- *
- *  Final shape returned / expected from the model:
- *     null  (if no filters)  OR
- *     { AND: [ <filterObject>, ... ] }
- *
- * This dynamic validator enforces:
- *  - Only known columns / relations are allowed.
- *  - DateTime and Number columns allow multiple operators in one condition (e.g. { gte: X, lte: Y }).
- *  - Operator/value type compatibility (including null handling rules).
- *  - Relation filterOptions limited to allowed sets (is|isNot / some|every|none).
- *  - Inner relation filter uses target table's columns & rules.
  */
 export function createQuestionConditionsDynamicSchema(
   tableSchema: Schema[number],
@@ -49,206 +240,60 @@ export function createQuestionConditionsDynamicSchema(
   tableName: string,
   joinedTableNames?: string[],
 ): z.ZodType<QuestionConditions> {
-  const columns = tableSchema.columns ?? [];
-  const computedColumns = tableSchema.computedColumns ?? [];
   const outwardRelations = tableSchema.outwardRelations ?? [];
 
-  const numericTypes = new Set([
-    "number",
-    "integer",
-    "bigint",
-    "decimal",
-    "float",
-  ]);
+  const scalarConditionSchemas = buildScalarSchemasForTable({
+    table: tableSchema,
+    keyBuilder: (columnName) => `${tableName}.${columnName}`,
+  });
 
-  // Collect scalar columns by type - all qualified with table name
-  const stringColumns = columns
-    .filter((c) => (c.effectiveType ?? c.type) === "string")
-    .map((c) => `${tableName}.${c.name}`);
-  const numberColumns = columns
-    .filter((c) => numericTypes.has(c.effectiveType ?? c.type))
-    .map((c) => `${tableName}.${c.name}`)
-    // historical logic: numeric operators also allowed on computed columns
-    .concat(computedColumns.map((c) => `${tableName}.${c.name}`));
-  const booleanColumns = columns
-    .filter((c) => (c.effectiveType ?? c.type) === "boolean")
-    .map((c) => `${tableName}.${c.name}`);
-  const dateColumns = columns
-    .filter((c) => (c.effectiveType ?? c.type) === "DateTime")
-    .map((c) => `${tableName}.${c.name}`);
-
-  /** Utility: ensure ISO date */
-  const isoDate = z
-    .string()
-    .refine(
-      (v) => !isNaN(Date.parse(v)),
-      "Expected valid ISO 8601 date string",
-    );
-
-  /** Build operator union for a single string column */
-  function buildStringColumnCondition(col: string) {
-    return z
-      .object({
-        [col]: z.union([
-          z.object({ equals: z.string().or(z.null()) }).strict(),
-          z.object({ not: z.string().or(z.null()) }).strict(),
-          z.object({ in: z.array(z.string()).min(1) }).strict(),
-          z.object({ contains: z.string() }).strict(),
-          z.object({ contains_insensitive: z.string() }).strict(),
-        ]),
-      })
-      .strict();
-  }
-
-  /** Number column — allows combining multiple operators (e.g. { gte: 10, lte: 100 }) */
-  function buildNumberColumnCondition(col: string) {
-    return z
-      .object({
-        [col]: z
-          .object({
-            equals: z.number().or(z.null()).optional(),
-            not: z.number().or(z.null()).optional(),
-            lt: z.number().optional(),
-            lte: z.number().optional(),
-            gt: z.number().optional(),
-            gte: z.number().optional(),
-            in: z.array(z.number()).min(1).optional(),
-          })
-          .strict()
-          .refine(
-            (obj) => Object.keys(obj).length > 0,
-            "At least one operator required",
-          ),
-      })
-      .strict();
-  }
-
-  /** Boolean column */
-  function buildBooleanColumnCondition(col: string) {
-    return z
-      .object({
-        [col]: z.union([
-          z.object({ equals: z.boolean().or(z.null()) }).strict(),
-          z.object({ not: z.boolean().or(z.null()) }).strict(),
-        ]),
-      })
-      .strict();
-  }
-
-  /** DateTime column — allows combining multiple operators (e.g. { gte: X, lte: Y }) */
-  function buildDateColumnCondition(col: string) {
-    return z
-      .object({
-        [col]: z
-          .object({
-            equals: isoDate.or(z.null()).optional(),
-            not: isoDate.or(z.null()).optional(),
-            lt: isoDate.optional(),
-            lte: isoDate.optional(),
-            gt: isoDate.optional(),
-            gte: isoDate.optional(),
-          })
-          .strict()
-          .refine(
-            (obj) => Object.keys(obj).length > 0,
-            "At least one operator required",
-          ),
-      })
-      .strict();
-  }
-
-  /** Combine all scalar column schemas as a union (each filter object targets exactly one column). */
-  const scalarConditionSchemas: z.ZodTypeAny[] = [];
-  stringColumns.forEach((c) =>
-    scalarConditionSchemas.push(buildStringColumnCondition(c)),
-  );
-  numberColumns.forEach((c) =>
-    scalarConditionSchemas.push(buildNumberColumnCondition(c)),
-  );
-  booleanColumns.forEach((c) =>
-    scalarConditionSchemas.push(buildBooleanColumnCondition(c)),
-  );
-  dateColumns.forEach((c) =>
-    scalarConditionSchemas.push(buildDateColumnCondition(c)),
-  );
-
-  const scalarConditionUnion = scalarConditionSchemas.length
-    ? z.union(
-        scalarConditionSchemas as [
-          z.ZodTypeAny,
-          z.ZodTypeAny,
-          ...z.ZodTypeAny[],
-        ],
-      )
-    : z.never();
-
-  /** Build inner (single-column) condition union for a relation's target table */
   function buildInnerRelationFilterSchema(targetTableName: string) {
-    const target = fullSchema.find((t) => t.name === targetTableName);
+    const target = fullSchema.find((table) => table.name === targetTableName);
     if (!target) {
-      // Fallback – no columns => impossible to match; disallow.
       return z.never();
     }
-    const tCols = target.columns ?? [];
-    const tComputed = target.computedColumns ?? [];
-    const tString = tCols
-      .filter((c) => (c.effectiveType ?? c.type) === "string")
-      .map((c) => c.name);
-    const tNumber = tCols
-      .filter((c) => numericTypes.has(c.effectiveType ?? c.type))
-      .map((c) => c.name)
-      .concat(tComputed.map((c) => c.name));
-    const tBoolean = tCols
-      .filter((c) => (c.effectiveType ?? c.type) === "boolean")
-      .map((c) => c.name);
-    const tDate = tCols
-      .filter((c) => (c.effectiveType ?? c.type) === "DateTime")
-      .map((c) => c.name);
 
-    const innerSchemas: z.ZodTypeAny[] = [];
-    tString.forEach((c) => innerSchemas.push(buildStringColumnCondition(c)));
-    tNumber.forEach((c) => innerSchemas.push(buildNumberColumnCondition(c)));
-    tBoolean.forEach((c) => innerSchemas.push(buildBooleanColumnCondition(c)));
-    tDate.forEach((c) => innerSchemas.push(buildDateColumnCondition(c)));
+    const innerSchemas = buildScalarSchemasForTable({
+      table: target,
+      keyBuilder: (columnName) => columnName,
+    });
 
-    if (!innerSchemas.length) return z.never();
-    return z.union(
-      innerSchemas as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]],
-    );
+    return unionSchemas(innerSchemas);
   }
 
-  /** Relation condition schemas (to-one + to-many) */
   const relationConditionSchemas: z.ZodTypeAny[] = [];
 
-  outwardRelations.forEach((rel) => {
-    const relationName = rel.name;
-    const targetTableName = rel.targetTable?.name;
+  outwardRelations.forEach((relation) => {
+    const relationName = relation.name;
+    const targetTableName = relation.targetTable?.name;
     if (!targetTableName) return;
     const inner = buildInnerRelationFilterSchema(targetTableName);
 
-    if (rel.isList === false) {
-      // to-one
-      const toOneUnion = z.union([
-        z
-          .object({
-            [relationName]: z.object({ is: inner }).strict(),
-          })
-          .strict(),
-        z
-          .object({
-            [relationName]: z.object({ isNot: inner }).strict(),
-          })
-          .strict(),
-        z
-          .object({
-            [relationName]: z.object({ is: z.object({}).strict() }).strict(), // absence
-          })
-          .strict(),
-      ]);
-      relationConditionSchemas.push(toOneUnion);
-    } else {
-      // to-many
-      const toManyUnion = z.union([
+    if (!relation.isList) {
+      relationConditionSchemas.push(
+        z.union([
+          z
+            .object({
+              [relationName]: z.object({ is: inner }).strict(),
+            })
+            .strict(),
+          z
+            .object({
+              [relationName]: z.object({ isNot: inner }).strict(),
+            })
+            .strict(),
+          z
+            .object({
+              [relationName]: z.object({ is: z.object({}).strict() }).strict(),
+            })
+            .strict(),
+        ]),
+      );
+      return;
+    }
+
+    relationConditionSchemas.push(
+      z.union([
         z
           .object({
             [relationName]: z.object({ some: inner }).strict(),
@@ -266,87 +311,42 @@ export function createQuestionConditionsDynamicSchema(
           .strict(),
         z
           .object({
-            [relationName]: z.object({ none: z.object({}).strict() }).strict(), // absence
+            [relationName]: z.object({ none: z.object({}).strict() }).strict(),
           })
           .strict(),
-      ]);
-      relationConditionSchemas.push(toManyUnion);
-    }
+      ]),
+    );
   });
 
-  // Build qualified column schemas for joined tables (table.column format)
   const qualifiedColumnSchemas: z.ZodTypeAny[] = [];
   if (joinedTableNames?.length) {
-    for (const joinedTableName of joinedTableNames) {
-      const jt = fullSchema.find((t) => t.name === joinedTableName);
-      if (!jt) continue;
-
-      for (const col of jt.columns ?? []) {
-        const qualifiedKey = `${joinedTableName}.${col.name}`;
-        const effectiveType = col.effectiveType ?? col.type;
-
-        if (effectiveType === "string") {
-          qualifiedColumnSchemas.push(buildStringColumnCondition(qualifiedKey));
-        } else if (numericTypes.has(effectiveType)) {
-          qualifiedColumnSchemas.push(buildNumberColumnCondition(qualifiedKey));
-        } else if (effectiveType === "boolean") {
-          qualifiedColumnSchemas.push(buildBooleanColumnCondition(qualifiedKey));
-        } else if (effectiveType === "DateTime") {
-          qualifiedColumnSchemas.push(buildDateColumnCondition(qualifiedKey));
-        }
+    joinedTableNames.forEach((joinedTableName) => {
+      const joinedTable = fullSchema.find((table) => table.name === joinedTableName);
+      if (!joinedTable) {
+        return;
       }
-
-      // Also include computed columns from the joined table
-      for (const computed of jt.computedColumns ?? []) {
-        const qualifiedKey = `${joinedTableName}.${computed.name}`;
-        // Computed columns are typically numeric
-        qualifiedColumnSchemas.push(buildNumberColumnCondition(qualifiedKey));
-      }
-    }
+      qualifiedColumnSchemas.push(
+        ...buildScalarSchemasForTable({
+          table: joinedTable,
+          keyBuilder: (columnName) => `${joinedTableName}.${columnName}`,
+        }),
+      );
+    });
   }
 
   const filterObjectUnionParts: z.ZodTypeAny[] = [];
-  if (scalarConditionSchemas.length)
-    filterObjectUnionParts.push(scalarConditionUnion);
-  if (relationConditionSchemas.length)
-    filterObjectUnionParts.push(
-      relationConditionSchemas.length === 1
-        ? relationConditionSchemas[0]!
-        : (z.union(
-            relationConditionSchemas as [
-              z.ZodTypeAny,
-              z.ZodTypeAny,
-              ...z.ZodTypeAny[],
-            ],
-          ) as z.ZodTypeAny),
-    );
-  if (qualifiedColumnSchemas.length)
-    filterObjectUnionParts.push(
-      qualifiedColumnSchemas.length === 1
-        ? qualifiedColumnSchemas[0]!
-        : (z.union(
-            qualifiedColumnSchemas as [
-              z.ZodTypeAny,
-              z.ZodTypeAny,
-              ...z.ZodTypeAny[],
-            ],
-          ) as z.ZodTypeAny),
-    );
+  if (scalarConditionSchemas.length) {
+    filterObjectUnionParts.push(unionSchemas(scalarConditionSchemas));
+  }
+  if (relationConditionSchemas.length) {
+    filterObjectUnionParts.push(unionSchemas(relationConditionSchemas));
+  }
+  if (qualifiedColumnSchemas.length) {
+    filterObjectUnionParts.push(unionSchemas(qualifiedColumnSchemas));
+  }
 
-  const filterUnion: z.ZodTypeAny = filterObjectUnionParts.length
-    ? filterObjectUnionParts.length === 1
-      ? filterObjectUnionParts[0]!
-      : (z.union(
-          filterObjectUnionParts as [
-            z.ZodTypeAny,
-            z.ZodTypeAny,
-            ...z.ZodTypeAny[],
-          ],
-        ) as z.ZodTypeAny)
-    : (z.never() as z.ZodTypeAny);
+  const filterUnion = unionSchemas(filterObjectUnionParts);
 
-  // Recursive logical grouping: allow nested { AND: [...] } or { OR: [...] } within the main AND array.
-  // We'll keep the root contract: null OR { AND: [...] } for compatibility, but each element inside can itself be a group.
   const node: z.ZodTypeAny = z.lazy(() => {
     const logicalGroup = z.union([
       z.object({ AND: z.array(node).min(1) }).strict(),
@@ -355,12 +355,10 @@ export function createQuestionConditionsDynamicSchema(
     return z.union([filterUnion, logicalGroup]);
   });
 
-  const root = z.union([
+  return z.union([
     z.null(),
     z.object({ AND: z.array(node).min(1) }).strict(),
-  ]);
-
-  return root as unknown as z.ZodType<QuestionConditions>;
+  ]) as unknown as z.ZodType<QuestionConditions>;
 }
 
 /**

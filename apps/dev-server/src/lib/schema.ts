@@ -6,6 +6,10 @@ import type {
   SQLCastExpressionAst,
   SQLComputedColumnAst,
 } from "@repo/types";
+import {
+  resolveEffectiveColumnType,
+  normalizeColumnValueEnum,
+} from "@repo/types";
 
 // Matches the internal ColumnRelationEntry type in @repo/types
 type ColumnRelationEntry = {
@@ -20,20 +24,6 @@ import {
   computeAugmentationsHash,
 } from "@repo/connect";
 import { prisma } from "./prisma";
-
-/**
- * Resolve effective column type considering conversion.
- * Matches platform's resolveEffectiveColumnType.
- */
-function resolveEffectiveColumnType(
-  columnType: string,
-  conversion?: { selected?: boolean | null; type?: string | null } | null,
-): string {
-  if (conversion?.selected && conversion.type) {
-    return conversion.type;
-  }
-  return columnType;
-}
 
 /**
  * Get the database schema for the agent.
@@ -69,12 +59,22 @@ export async function getSchema(params?: {
           notes: true,
           type: true,
           unit: true,
-          conversion: {
+          augmentation: {
             select: {
               id: true,
-              ast: true,
-              type: true,
+              kind: true,
               selected: true,
+              conversionConfig: {
+                select: {
+                  ast: true,
+                  type: true,
+                },
+              },
+              staticEnumConfig: {
+                select: {
+                  entries: true,
+                },
+              },
             },
           },
           // Get FK mappings where this column is the source
@@ -168,8 +168,35 @@ export async function getSchema(params?: {
         },
       }));
 
-      const conversion = column.conversion;
+      const conversion =
+        column.augmentation?.kind === "CONVERSION" &&
+        column.augmentation.conversionConfig
+          ? {
+              id: column.augmentation.id,
+              ast: (() => {
+                try {
+                  return JSON.parse(
+                    column.augmentation.conversionConfig.ast,
+                  ) as SQLCastExpressionAst;
+                } catch {
+                  return column.augmentation.conversionConfig.ast;
+                }
+              })(),
+              type: column.augmentation.conversionConfig.type ?? null,
+              selected: column.augmentation.selected,
+            }
+          : null;
+      const valueEnumInput =
+        column.augmentation?.kind === "STATIC_ENUM" &&
+        column.augmentation.staticEnumConfig
+          ? {
+              id: column.augmentation.id,
+              selected: column.augmentation.selected,
+              entries: column.augmentation.staticEnumConfig.entries,
+            }
+          : null;
       const effectiveType = resolveEffectiveColumnType(column.type, conversion);
+      const valueEnum = normalizeColumnValueEnum(valueEnumInput);
 
       return {
         name: column.rename ?? column.name,
@@ -178,14 +205,8 @@ export async function getSchema(params?: {
         notes: column.notes ?? null,
         type: column.type,
         effectiveType,
-        conversion: conversion
-          ? {
-              id: conversion.id,
-              ast: JSON.parse(conversion.ast) as SQLCastExpressionAst,
-              type: conversion.type ?? null,
-              selected: conversion.selected,
-            }
-          : null,
+        conversion,
+        valueEnum,
         unit: column.unit ?? null,
         relation,
       };
@@ -677,9 +698,17 @@ export async function syncAugmentationsToFile(): Promise<void> {
     },
   });
 
-  // Fetch column conversions
-  const columnConversions = await prisma.columnConversion.findMany({
-    include: {
+  // Fetch column conversions from augmentations
+  const columnConversions = await prisma.columnAugmentation.findMany({
+    where: { kind: "CONVERSION" },
+    select: {
+      selected: true,
+      conversionConfig: {
+        select: {
+          ast: true,
+          type: true,
+        },
+      },
       column: { select: { name: true } },
       table: { select: { name: true } },
     },
@@ -708,13 +737,24 @@ export async function syncAugmentationsToFile(): Promise<void> {
     selected: cc.selected,
   }));
 
-  const columnConversionsPayload = columnConversions.map((conv) => ({
-    column: conv.column.name,
-    table: conv.table.name,
-    ast: JSON.parse(conv.ast) as SQLCastExpressionAst,
-    type: conv.type ?? undefined,
-    selected: conv.selected,
-  }));
+  const columnConversionsPayload = columnConversions
+    .map((conv) => {
+      if (!conv.conversionConfig) {
+        return null;
+      }
+      try {
+        return {
+          column: conv.column.name,
+          table: conv.table.name,
+          ast: JSON.parse(conv.conversionConfig.ast) as SQLCastExpressionAst,
+          type: conv.conversionConfig.type ?? undefined,
+          selected: conv.selected,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const payload = {
     relations,

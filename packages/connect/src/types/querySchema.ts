@@ -330,6 +330,7 @@ const findDistinctSchema = z
     operationParameters: z
       .object({
         column: z.string(),
+        limit: z.number().int().positive().max(500).optional(),
       })
       .strict(),
   })

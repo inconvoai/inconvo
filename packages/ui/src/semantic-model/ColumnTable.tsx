@@ -25,7 +25,9 @@ import {
   IconDotsVertical,
   IconSearch,
   IconTrash,
+  IconListDetails,
 } from "@tabler/icons-react";
+import { NUMERIC_LOGICAL_TYPES } from "@repo/types";
 import type { Column, ComputedColumn } from "./types";
 
 export interface ColumnTableProps {
@@ -43,6 +45,8 @@ export interface ColumnTableProps {
   onColumnNotesClick?: (column: Column) => void;
   /** Callback when column conversion action is clicked */
   onColumnConversionClick?: (column: Column) => void;
+  /** Callback when column enum action is clicked */
+  onColumnValueEnumClick?: (column: Column) => void;
   /** Callback when a computed column's selected state changes */
   onComputedColumnSelectedChange?: (
     columnId: string,
@@ -64,6 +68,7 @@ export function ColumnTable({
   onColumnRename,
   onColumnNotesClick,
   onColumnConversionClick,
+  onColumnValueEnumClick,
   onComputedColumnSelectedChange,
   onComputedColumnRename,
   onComputedColumnNotesClick,
@@ -142,7 +147,14 @@ export function ColumnTable({
     const isEditing = editingColumnId === column.id;
     const displayName = column.rename ?? column.name;
     const hasRename = column.rename && column.rename !== column.name;
+    const effectiveType = (column.effectiveType ?? column.type).toLowerCase();
     const isStringType = column.type.toLowerCase().includes("string");
+    const supportsEnums = effectiveType === "string" || NUMERIC_LOGICAL_TYPES.has(effectiveType);
+    const activeEnum =
+      column.valueEnum?.selected &&
+      (column.valueEnum.entries ?? []).some((entry) => entry.selected !== false)
+        ? column.valueEnum
+        : null;
 
     return (
       <Table.Tr key={column.id}>
@@ -217,6 +229,16 @@ export function ColumnTable({
                 → {column.effectiveType}
               </Badge>
             )}
+            {activeEnum && (
+              <Badge
+                size="xs"
+                color="cyan"
+                variant="light"
+                style={{ flexShrink: 0 }}
+              >
+                Enum
+              </Badge>
+            )}
           </Group>
         </Table.Td>
         <Table.Td>
@@ -262,6 +284,14 @@ export function ColumnTable({
                     onClick={() => onColumnConversionClick?.(column)}
                   >
                     Configure Conversion
+                  </Menu.Item>
+                )}
+                {supportsEnums && (
+                  <Menu.Item
+                    leftSection={<IconListDetails size={14} />}
+                    onClick={() => onColumnValueEnumClick?.(column)}
+                  >
+                    Configure Enum
                   </Menu.Item>
                 )}
               </Menu.Dropdown>

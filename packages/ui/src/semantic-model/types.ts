@@ -31,6 +31,26 @@ export interface ColumnConversion {
   selected: boolean;
 }
 
+export interface ColumnValueEnumEntry {
+  value: string | number;
+  label: string;
+  selected: boolean;
+  position: number;
+}
+
+export interface ColumnValueEnum {
+  id: string;
+  selected: boolean;
+  entries: ColumnValueEnumEntry[];
+}
+
+export interface ColumnValueEnumEntryInput {
+  value: string | number;
+  label: string;
+  selected?: boolean;
+  position?: number;
+}
+
 /**
  * Relation mapping info shown on a column (for display purposes)
  */
@@ -54,6 +74,7 @@ export interface Column {
   selected: boolean;
   unit: string | null;
   conversion: ColumnConversion | null;
+  valueEnum?: ColumnValueEnum | null;
   relation: ColumnRelationMapping[];
 }
 
@@ -281,6 +302,22 @@ export interface ColumnConversionUpdatePayload {
 }
 
 /**
+ * Column value enum create payload
+ */
+export interface ColumnValueEnumCreatePayload {
+  entries: ColumnValueEnumEntryInput[];
+  selected?: boolean;
+}
+
+/**
+ * Column value enum update payload
+ */
+export interface ColumnValueEnumUpdatePayload {
+  entries?: ColumnValueEnumEntryInput[];
+  selected?: boolean;
+}
+
+/**
  * Table update payload
  */
 export interface UpdateTablePayload {
@@ -298,6 +335,4 @@ export type UpdateComputedColumnPayload = ComputedColumnUpdatePayload;
 export type CreateManualRelationPayload = ManualRelationCreatePayload;
 export type UpdateManualRelationPayload = ManualRelationUpdatePayload;
 export type UpsertContextFilterPayload = ContextFilterPayload;
-export type CreateColumnConversionPayload = ColumnConversionCreatePayload;
-export type UpdateColumnConversionPayload = ColumnConversionUpdatePayload;
 export type UnitColumnPayload = ColumnUnitPayload;

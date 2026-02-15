@@ -51,8 +51,8 @@ export async function findDistinct(
     dbQuery = dbQuery.where(whereCondition);
   }
 
-  // Apply limit - hardcoded to 500
-  const limit = 500;
+  // Apply limit with a conservative default.
+  const limit = operationParameters.limit ?? 500;
   dbQuery = applyLimit(dbQuery, limit, dialect);
 
   const { rows: response, compiled } = await executeWithLogging(dbQuery, {

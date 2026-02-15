@@ -2,6 +2,7 @@ import assert from "assert";
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import type { Schema } from "@repo/types";
+import { NUMERIC_LOGICAL_TYPES, isActiveEnumColumn } from "@repo/types";
 import {
   generateJoinGraph,
   type GeneratedJoinOption,
@@ -134,20 +135,13 @@ function buildColumnCatalog(
     catalog[alias][columnName] = metadata;
   };
 
-  const numericTypes = new Set([
-    "number",
-    "integer",
-    "bigint",
-    "decimal",
-    "float",
-  ]);
   const temporalTypes = new Set(["DateTime", "Date"]);
 
   baseTableSchema.columns.forEach(
     (column: Schema[number]["columns"][number]) => {
       const columnType = column.effectiveType ?? column.type;
       register(baseTableName, column.name, {
-        isNumeric: numericTypes.has(columnType),
+        isNumeric: !isActiveEnumColumn(column.valueEnum) && NUMERIC_LOGICAL_TYPES.has(columnType),
         isTemporal: temporalTypes.has(columnType),
         isCountable: true,
       });
@@ -175,7 +169,7 @@ function buildColumnCatalog(
     tableSchema.columns.forEach((column: Schema[number]["columns"][number]) => {
       const columnType = column.effectiveType ?? column.type;
       register(option.name, column.name, {
-        isNumeric: numericTypes.has(columnType),
+        isNumeric: !isActiveEnumColumn(column.valueEnum) && NUMERIC_LOGICAL_TYPES.has(columnType),
         isTemporal: temporalTypes.has(columnType),
         isCountable: true,
       });

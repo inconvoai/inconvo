@@ -16,11 +16,11 @@ model Table {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   columns           Column[]
-  columnConversions ColumnConversion[]
   computedColumns   ComputedColumn[]
   inwardRelations   Relation[]         @relation("relation_target")
   outwardRelations  Relation[]         @relation("relation_source")
   condition         TableCondition?
+  columnAugmentations ColumnAugmentation[]
 }
 
 model Column {
@@ -35,10 +35,10 @@ model Column {
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   table                  Table                   @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  conversion             ColumnConversion?
   targetRelationMappings RelationColumnMapping[] @relation("mapping_target")
   sourceRelationMappings RelationColumnMapping[] @relation("mapping_source")
   conditions             TableCondition[]
+  augmentation           ColumnAugmentation?
 
   @@unique([tableId, name])
 }
@@ -93,17 +93,40 @@ model RelationColumnMapping {
   @@unique([relationId, position])
 }
 
-model ColumnConversion {
-  id       String  @id @default(uuid())
-  ast      String
-  type     String?
-  selected Boolean @default(true)
-  columnId String  @unique
-  tableId  String
-  table    Table   @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  column   Column  @relation(fields: [columnId], references: [id], onDelete: Cascade)
+model ColumnAugmentation {
+  id                String                           @id @default(uuid())
+  kind              ColumnAugmentationKind
+  selected          Boolean                          @default(true)
+  columnId          String                           @unique
+  tableId           String
+  table             Table                            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  column            Column                           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  conversionConfig  ColumnAugmentationConversion?
+  staticEnumConfig  ColumnAugmentationStaticEnum?
+  dynamicEnumConfig ColumnAugmentationDynamicEnum?
 
   @@index([tableId])
+}
+
+model ColumnAugmentationConversion {
+  id             String             @id @default(uuid())
+  ast            String
+  type           String?
+  augmentationId String             @unique
+  augmentation   ColumnAugmentation @relation(fields: [augmentationId], references: [id], onDelete: Cascade)
+}
+
+model ColumnAugmentationStaticEnum {
+  id             String             @id @default(uuid())
+  entries        String
+  augmentationId String             @unique
+  augmentation   ColumnAugmentation @relation(fields: [augmentationId], references: [id], onDelete: Cascade)
+}
+
+model ColumnAugmentationDynamicEnum {
+  id             String             @id @default(uuid())
+  augmentationId String             @unique
+  augmentation   ColumnAugmentation @relation(fields: [augmentationId], references: [id], onDelete: Cascade)
 }
 
 model TableCondition {
@@ -132,6 +155,12 @@ enum UserContextStatus {
   UNSET
   ENABLED
   DISABLED
+}
+
+enum ColumnAugmentationKind {
+  CONVERSION
+  STATIC_ENUM
+  DYNAMIC_ENUM
 }
 
 model Conversation {

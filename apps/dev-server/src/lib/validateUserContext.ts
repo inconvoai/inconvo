@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export interface UserContextField {
   key: string;
-  type: "STRING" | "NUMBER";
+  type: "STRING" | "NUMBER" | "BOOLEAN";
 }
 
 /**
@@ -27,7 +27,7 @@ function isValidContextValue(value: string): boolean {
 export function validateUserContextAgainstSchema(
   userContext: Record<string, unknown>,
   fields: UserContextField[],
-): Record<string, string | number> {
+): Record<string, string | number | boolean> {
   if (fields.length === 0) {
     for (const [key, value] of Object.entries(userContext)) {
       if (!isValidContextKey(key)) {
@@ -41,7 +41,7 @@ export function validateUserContextAgainstSchema(
         );
       }
     }
-    return userContext as Record<string, string | number>;
+    return userContext as Record<string, string | number | boolean>;
   }
 
   const schemaShape = fields.reduce(
@@ -51,10 +51,15 @@ export function validateUserContextAgainstSchema(
           `Invalid field key "${field.key}" in configuration.`,
         );
       }
-      acc[field.key] = field.type === "NUMBER" ? z.number() : z.string();
+      acc[field.key] =
+        field.type === "NUMBER"
+          ? z.number()
+          : field.type === "BOOLEAN"
+            ? z.boolean()
+            : z.string();
       return acc;
     },
-    {} as Record<string, z.ZodNumber | z.ZodString>,
+    {} as Record<string, z.ZodNumber | z.ZodString | z.ZodBoolean>,
   );
 
   const schema = z.object(schemaShape);

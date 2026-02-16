@@ -288,93 +288,101 @@ export function TableList({
           </Text>
         ) : (
           <Stack gap={2}>
-            {displayTables.map((table) => (
-              <Box
-                key={table.id}
-                onClick={() => onTableSelect(table.id)}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: "var(--mantine-radius-sm)",
-                  cursor: "pointer",
-                  backgroundColor:
-                    selectedTableId === table.id
-                      ? "var(--mantine-color-blue-light)"
-                      : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedTableId !== table.id) {
-                    e.currentTarget.style.backgroundColor =
-                      "var(--mantine-color-gray-1)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedTableId !== table.id) {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }
-                }}
-              >
-                <Group justify="space-between" wrap="nowrap">
-                  <Group gap="xs" wrap="nowrap" style={{ overflow: "hidden" }}>
-                    <Text
-                      fw={selectedTableId === table.id ? 600 : 400}
-                      size="sm"
-                      truncate
+            {displayTables.map((table) => {
+              const hasAnyAccessConstraint =
+                table.hasCondition || table.hasAccessPolicy;
+              return (
+                <Box
+                  key={table.id}
+                  onClick={() => onTableSelect(table.id)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "var(--mantine-radius-sm)",
+                    cursor: "pointer",
+                    backgroundColor:
+                      selectedTableId === table.id
+                        ? "var(--mantine-color-blue-light)"
+                        : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedTableId !== table.id) {
+                      e.currentTarget.style.backgroundColor =
+                        "var(--mantine-color-gray-1)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedTableId !== table.id) {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
+                >
+                  <Group justify="space-between" wrap="nowrap">
+                    <Group
+                      gap="xs"
+                      wrap="nowrap"
+                      style={{ overflow: "hidden" }}
                     >
-                      {table.name}
-                    </Text>
-                    {userContextStatus === "ENABLED" ? (
-                      <Box
-                        title={
-                          table.hasCondition
-                            ? "Access constraint active"
-                            : "No access constraint"
-                        }
+                      <Text
+                        fw={selectedTableId === table.id ? 600 : 400}
+                        size="sm"
+                        truncate
                       >
-                        {table.hasCondition ? (
-                          <IconLock
-                            size={12}
-                            color="var(--mantine-color-blue-6)"
-                          />
-                        ) : (
-                          <IconLockOpen
-                            size={12}
-                            color="var(--mantine-color-gray-6)"
-                          />
-                        )}
-                      </Box>
-                    ) : (
-                      table.hasCondition && (
-                        <Box title="Access constraint inactive">
-                          <IconLockOff
-                            size={12}
-                            color="var(--mantine-color-gray-6)"
-                          />
+                        {table.name}
+                      </Text>
+                      {userContextStatus === "ENABLED" ? (
+                        <Box
+                          title={
+                            hasAnyAccessConstraint
+                              ? "Access constraint active"
+                              : "No access constraint"
+                          }
+                        >
+                          {hasAnyAccessConstraint ? (
+                            <IconLock
+                              size={12}
+                              color="var(--mantine-color-blue-6)"
+                            />
+                          ) : (
+                            <IconLockOpen
+                              size={12}
+                              color="var(--mantine-color-gray-6)"
+                            />
+                          )}
                         </Box>
-                      )
+                      ) : (
+                        hasAnyAccessConstraint && (
+                          <Box title="Access constraint inactive">
+                            <IconLockOff
+                              size={12}
+                              color="var(--mantine-color-gray-6)"
+                            />
+                          </Box>
+                        )
+                      )}
+                    </Group>
+                    {onTableAccessChange ? (
+                      <AccessControl
+                        value={table.access}
+                        onChange={(access) =>
+                          onTableAccessChange(table.id, access)
+                        }
+                        size="xs"
+                        showLabels={false}
+                      />
+                    ) : (
+                      <Badge
+                        size="xs"
+                        color={getAccessColor(table.access)}
+                        variant="light"
+                        leftSection={getAccessIcon(table.access)}
+                      >
+                        {table.access.charAt(0)}
+                      </Badge>
                     )}
                   </Group>
-                  {onTableAccessChange ? (
-                    <AccessControl
-                      value={table.access}
-                      onChange={(access) =>
-                        onTableAccessChange(table.id, access)
-                      }
-                      size="xs"
-                      showLabels={false}
-                    />
-                  ) : (
-                    <Badge
-                      size="xs"
-                      color={getAccessColor(table.access)}
-                      variant="light"
-                      leftSection={getAccessIcon(table.access)}
-                    >
-                      {table.access.charAt(0)}
-                    </Badge>
-                  )}
-                </Group>
-              </Box>
-            ))}
+                </Box>
+              );
+            })}
           </Stack>
         )}
       </ScrollArea>

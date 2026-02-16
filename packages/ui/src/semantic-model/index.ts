@@ -17,6 +17,9 @@ export type { UnitsFormProps } from "./UnitsForm";
 export { ContextFilterForm } from "./ContextFilterForm";
 export type { ContextFilterFormProps } from "./ContextFilterForm";
 
+export { TableAccessPolicyForm } from "./TableAccessPolicyForm";
+export type { TableAccessPolicyFormProps } from "./TableAccessPolicyForm";
+
 export { ManualRelationForm } from "./ManualRelationForm";
 export type { ManualRelationFormProps } from "./ManualRelationForm";
 

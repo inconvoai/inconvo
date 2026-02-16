@@ -25,7 +25,7 @@ export interface DefineCountRelationsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "countRelations";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

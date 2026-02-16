@@ -469,7 +469,7 @@ export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
 
 const formattedTableConditionsSchema = z.record(
   z.string(), // column name
-  z.record(z.string(), z.union([z.string(), z.number()])), // operator and value
+  z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])), // operator and value
 );
 
 // The complete whereAndArray schema
@@ -481,7 +481,7 @@ export type WhereAndArray = z.infer<typeof whereAndArraySchema>;
 // Table condition schema for row-level security / tenant filtering
 const tableConditionSchema = z.object({
   column: z.string(),
-  value: z.union([z.string(), z.number()]),
+  value: z.union([z.string(), z.number(), z.boolean()]),
 });
 
 export const tableConditionsMapSchema = z
@@ -1006,7 +1006,7 @@ export type InconvoEvalRunExample = z.infer<typeof inconvoEvalRunExample>;
 
 export const inconvoUserContextSchema = z.record(
   z.string(),
-  z.union([z.string(), z.number()]),
+  z.union([z.string(), z.number(), z.boolean()]),
 );
 
 export type InconvoUserContext = z.infer<typeof inconvoUserContextSchema>;
@@ -1168,6 +1168,9 @@ export type SchemaTable = {
     column: { name: string };
     userContextField: { key: string };
   } | null;
+  accessPolicy: {
+    userContextField: { key: string };
+  } | null;
 };
 
 export type Schema = SchemaTable[];
@@ -1177,7 +1180,7 @@ export type Conversation = {
   id: string;
   title: string | null;
   userIdentifier: string;
-  userContext: Record<string, string | number> | null;
+  userContext: Record<string, string | number | boolean> | null;
 };
 
 // Database connector interface - implemented by platform's UserDatabaseConnector

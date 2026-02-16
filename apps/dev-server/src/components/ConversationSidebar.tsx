@@ -17,7 +17,7 @@ export interface ConversationItem {
   title: string | null;
   createdAt: string;
   updatedAt: string;
-  userContext?: Record<string, string | number> | null;
+  userContext?: Record<string, string | number | boolean> | null;
   userIdentifier?: string | null;
 }
 

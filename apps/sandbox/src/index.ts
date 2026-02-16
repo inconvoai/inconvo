@@ -275,7 +275,7 @@ const buildDatasetMounts = async (
   orgId: string,
   agentId: string,
   userIdentifier: string,
-  userContext?: Record<string, string | number>,
+  userContext?: Record<string, string | number | boolean>,
 ): Promise<DatasetMount[]> => {
   const mounts: DatasetMount[] = [];
 

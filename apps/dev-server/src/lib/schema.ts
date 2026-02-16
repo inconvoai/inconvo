@@ -25,6 +25,65 @@ import {
 } from "@repo/connect";
 import { prisma } from "./prisma";
 
+type UserContext = Record<string, string | number | boolean> | null | undefined;
+
+/**
+ * Extract the user-context field keys whose value is exactly `true`.
+ */
+function getTrueBooleanKeys(userContext: UserContext): string[] {
+  if (!userContext) return [];
+  return Object.entries(userContext)
+    .filter(([, v]) => v === true)
+    .map(([k]) => k);
+}
+
+/**
+ * Build a Prisma WHERE condition that excludes tables whose access policy
+ * references a boolean user-context key that is not `true`.
+ */
+function accessPolicyWhereClause(userContext: UserContext): {
+  OR: Array<Record<string, unknown>>;
+} {
+  const trueKeys = getTrueBooleanKeys(userContext);
+
+  return {
+    OR: [
+      { accessPolicy: null },
+      ...(trueKeys.length > 0
+        ? [
+            {
+              accessPolicy: {
+                userContextField: { key: { in: trueKeys } },
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+/**
+ * After DB-level table filtering, prune cross-references (relations and
+ * column relation mappings) that point to tables no longer in the result set.
+ */
+function pruneRelationsToExcludedTables(schema: Schema): Schema {
+  const allowedTableNames = new Set(schema.map((table) => table.name));
+
+  return schema.map((table) => ({
+    ...table,
+    columns: table.columns.map((column) => ({
+      ...column,
+      relation: column.relation.filter((entry) => {
+        const targetTableName = entry.relation?.targetTable?.name;
+        return targetTableName ? allowedTableNames.has(targetTableName) : true;
+      }),
+    })),
+    outwardRelations: table.outwardRelations.filter((relation) =>
+      allowedTableNames.has(relation.targetTable.name),
+    ),
+  }));
+}
+
 /**
  * Get the database schema for the agent.
  * Queries from Prisma SQLite with filtering - matches platform's getSchema.
@@ -37,14 +96,27 @@ import { prisma } from "./prisma";
  */
 export async function getSchema(params?: {
   includeConditions?: boolean;
+  applyAccessPolicies?: boolean;
+  userContext?: Record<string, string | number | boolean> | null;
 }): Promise<Schema> {
   const includeConditions = params?.includeConditions ?? true;
+  const applyAccessPolicies = params?.applyAccessPolicies ?? false;
+  const userContext = params?.userContext;
+  const policyWhere = applyAccessPolicies
+    ? accessPolicyWhereClause(userContext)
+    : undefined;
+
   const tables = await prisma.table.findMany({
     where: {
       access: { not: "OFF" },
-      OR: [
-        { columns: { some: { selected: true } } },
-        { outwardRelations: { some: { selected: true } } },
+      AND: [
+        {
+          OR: [
+            { columns: { some: { selected: true } } },
+            { outwardRelations: { some: { selected: true } } },
+          ],
+        },
+        ...(policyWhere ? [policyWhere] : []),
       ],
     },
     select: {
@@ -143,6 +215,11 @@ export async function getSchema(params?: {
       condition: {
         select: {
           column: { select: { name: true } },
+          userContextField: { select: { key: true } },
+        },
+      },
+      accessPolicy: {
+        select: {
           userContextField: { select: { key: true } },
         },
       },
@@ -274,10 +351,20 @@ export async function getSchema(params?: {
               },
             }
           : null,
+      accessPolicy: table.accessPolicy?.userContextField
+        ? {
+            userContextField: {
+              key: table.accessPolicy.userContextField.key,
+            },
+          }
+        : null,
     };
   });
 
-  return schema;
+  // When access policies are applied, prune cross-references to excluded tables
+  return applyAccessPolicies
+    ? pruneRelationsToExcludedTables(schema)
+    : schema;
 }
 
 /**
@@ -578,6 +665,7 @@ export async function getTablesOverview() {
         },
       },
       condition: true,
+      accessPolicy: true,
     },
     orderBy: { name: "asc" },
   });
@@ -590,6 +678,7 @@ export async function getTablesOverview() {
     configured: true,
     access: table.access,
     hasCondition: !!table.condition,
+    hasAccessPolicy: !!table.accessPolicy,
     computedColumnCount: table._count.computedColumns,
   }));
 }
@@ -629,6 +718,11 @@ export async function getTableIds(params: {
           id: true,
         },
       },
+      accessPolicy: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: { name: "asc" },
     skip: pagination ? (pagination.page - 1) * pagination.perPage : undefined,
@@ -640,6 +734,7 @@ export async function getTableIds(params: {
     name: table.name,
     access: table.access,
     hasCondition: !!table.condition,
+    hasAccessPolicy: !!table.accessPolicy,
   }));
 }
 

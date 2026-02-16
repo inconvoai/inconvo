@@ -33,7 +33,7 @@ export async function POST(
     // Parse request body
     const body = (await request.json()) as {
       userIdentifier?: string;
-      userContext?: Record<string, string | number> | null;
+      userContext?: Record<string, string | number | boolean> | null;
     };
 
     const { userIdentifier, userContext } = body;
@@ -60,7 +60,8 @@ export async function POST(
       );
     }
 
-    let userContextToStore: Record<string, string | number> | null = null;
+    let userContextToStore: Record<string, string | number | boolean> | null =
+      null;
     if (status === "DISABLED") {
       if (userContext !== undefined && userContext !== null) {
         return NextResponse.json(
@@ -99,7 +100,10 @@ export async function POST(
       try {
         userContextToStore = validateUserContextAgainstSchema(
           userContext,
-          fields as Array<{ key: string; type: "STRING" | "NUMBER" }>,
+          fields as Array<{
+            key: string;
+            type: "STRING" | "NUMBER" | "BOOLEAN";
+          }>,
         );
       } catch (error) {
         return NextResponse.json(

@@ -36,7 +36,7 @@ import type { ColumnAliasMap } from "./utils/queryCanonicalization";
 interface RequestParams {
   userQuestion: string;
   schema: Schema;
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   connector: DatabaseConnector;
   agentId: string | number;
   userIdentifier: string;
@@ -48,8 +48,80 @@ export type ContextCondition = {
   table: string;
   column: string; // semantic column name
   operator: "equals";
-  value: string | number;
+  value: string | number | boolean;
 };
+
+function extractTableFromQualifiedColumn(
+  qualifiedColumn: string,
+): string | null {
+  const lastDot = qualifiedColumn.lastIndexOf(".");
+  if (lastDot === -1) return null;
+  return qualifiedColumn.slice(0, lastDot);
+}
+
+export function assertQueryReferencesAllowedTables(
+  query: Query,
+  schema: Schema,
+): void {
+  const allowedTables = new Set(schema.map((table) => table.name));
+  const referencedTables = new Set<string>([query.table]);
+
+  const operationParams = query.operationParameters as
+    | {
+        joins?: Array<{
+          table?: unknown;
+          path?: Array<{
+            source?: unknown;
+            target?: unknown;
+          }>;
+        }> | null;
+      }
+    | null
+    | undefined;
+
+  const joins = operationParams?.joins;
+  if (Array.isArray(joins)) {
+    for (const join of joins) {
+      if (typeof join?.table === "string") {
+        referencedTables.add(join.table);
+      }
+
+      const path = join?.path;
+      if (!Array.isArray(path)) continue;
+
+      for (const hop of path) {
+        if (Array.isArray(hop?.source)) {
+          for (const sourceColumn of hop.source) {
+            if (typeof sourceColumn !== "string") continue;
+            const tableName = extractTableFromQualifiedColumn(sourceColumn);
+            if (tableName) {
+              referencedTables.add(tableName);
+            }
+          }
+        }
+        if (Array.isArray(hop?.target)) {
+          for (const targetColumn of hop.target) {
+            if (typeof targetColumn !== "string") continue;
+            const tableName = extractTableFromQualifiedColumn(targetColumn);
+            if (tableName) {
+              referencedTables.add(tableName);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const disallowed = Array.from(referencedTables).filter(
+    (tableName) => !allowedTables.has(tableName),
+  );
+
+  if (disallowed.length > 0) {
+    throw new Error(
+      `Query references tables not available in runtime schema: ${disallowed.join(", ")}`,
+    );
+  }
+}
 
 export async function databaseRetrieverAgent(params: RequestParams) {
   const promptCacheKey = buildPromptCacheKey({
@@ -253,7 +325,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
           table: state.tableName,
           column: cond.column,
           operator: "equals",
-          value: cond.value as string | number,
+          value: cond.value as string | number | boolean,
         });
       }
     }
@@ -276,7 +348,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
             table: joinedTableName,
             column: cond.column,
             operator: "equals",
-            value: cond.value as string | number,
+            value: cond.value as string | number | boolean,
           });
         }
       }
@@ -382,6 +454,7 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
   const executeQuery = async (state: typeof DatabaseAgentState.State) => {
     try {
+      assertQueryReferencesAllowedTables(state.query, state.schema);
       const queryResponse = await params.connector.query(state.query);
       return { queryResponse: queryResponse };
     } catch (e) {

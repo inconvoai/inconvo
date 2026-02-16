@@ -146,6 +146,13 @@ export interface TableCondition {
   userContextField: { id: string; key: string };
 }
 
+/**
+ * Table-level access policy based on user context.
+ */
+export interface TableAccessPolicy {
+  userContextField: { id: string; key: string };
+}
+
 // =============================================================================
 // Table Types
 // =============================================================================
@@ -162,6 +169,7 @@ export interface TableSchema {
   computedColumns: ComputedColumn[];
   relations: Relation[];
   condition: TableCondition | null;
+  accessPolicy: TableAccessPolicy | null;
 }
 
 /**
@@ -176,6 +184,7 @@ export interface TableSummary {
   computedColumnCount: number;
   relationCount: number;
   hasCondition: boolean;
+  hasAccessPolicy: boolean;
 }
 
 // =============================================================================
@@ -188,7 +197,7 @@ export interface TableSummary {
 export interface UserContextField {
   id: string;
   key: string;
-  type: "STRING" | "NUMBER";
+  type: "STRING" | "NUMBER" | "BOOLEAN";
 }
 
 /**
@@ -267,6 +276,13 @@ export interface ContextFilterPayload {
 }
 
 /**
+ * Table access policy upsert payload.
+ */
+export interface TableAccessPolicyPayload {
+  userContextFieldId: string;
+}
+
+/**
  * Column unit payload (for regular columns)
  */
 export interface ColumnUnitPayload {
@@ -335,4 +351,5 @@ export type UpdateComputedColumnPayload = ComputedColumnUpdatePayload;
 export type CreateManualRelationPayload = ManualRelationCreatePayload;
 export type UpdateManualRelationPayload = ManualRelationUpdatePayload;
 export type UpsertContextFilterPayload = ContextFilterPayload;
+export type UpsertTableAccessPolicyPayload = TableAccessPolicyPayload;
 export type UnitColumnPayload = ColumnUnitPayload;

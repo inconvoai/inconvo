@@ -46,7 +46,7 @@ interface RequestParams {
   tableSchema: Schema[number];
   contextConditions: ContextCondition[];
   joinedTableNames: string[];
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

@@ -26,7 +26,7 @@ interface RequestParams {
   tableSchema: Schema[number];
   tableName: string;
   question: string;
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

@@ -20,6 +20,7 @@ model Table {
   inwardRelations   Relation[]         @relation("relation_target")
   outwardRelations  Relation[]         @relation("relation_source")
   condition         TableCondition?
+  accessPolicy      TableAccessPolicy?
   columnAugmentations ColumnAugmentation[]
 }
 
@@ -144,6 +145,15 @@ model UserContextField {
   key             String           @unique
   type            String
   tableConditions TableCondition[]
+  tableAccessPolicies TableAccessPolicy[]
+}
+
+model TableAccessPolicy {
+  id                 String           @id @default(uuid())
+  tableId            String           @unique
+  userContextFieldId String
+  userContextField   UserContextField @relation(fields: [userContextFieldId], references: [id], onDelete: Cascade)
+  table              Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
 }
 
 model UserContextConfig {

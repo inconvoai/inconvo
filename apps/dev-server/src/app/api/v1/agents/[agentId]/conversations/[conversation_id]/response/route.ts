@@ -103,8 +103,11 @@ export async function POST(
       select: { status: true },
     });
     const userContextEnabled = config?.status === "ENABLED";
-
-    const schema = await getSchema({ includeConditions: userContextEnabled });
+    const schema = await getSchema({
+      includeConditions: userContextEnabled,
+      applyAccessPolicies: true,
+      userContext: userContextEnabled ? conversation.userContext : null,
+    });
     const connector = getConnector();
     const checkpointer = getCheckpointer();
 

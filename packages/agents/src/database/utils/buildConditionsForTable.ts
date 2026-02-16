@@ -10,7 +10,7 @@ type TableSchema = Schema[number];
  */
 export function buildConditionsForTable(
   tableSchema: TableSchema,
-  userContext: Record<string, string | number>,
+  userContext: Record<string, string | number | boolean>,
 ) {
   const { columns = [] } = tableSchema;
   assert(columns.length > 0, "Table has no columns");
@@ -18,7 +18,10 @@ export function buildConditionsForTable(
   const tableCondition = tableSchema.condition;
   if (tableCondition) {
     const value = userContext[tableCondition.userContextField.key];
-    assert(value, "Condition value not provided");
+    assert(
+      value !== undefined && value !== null,
+      "Condition value not provided",
+    );
     const conditions = [
       {
         column: tableCondition.column.name,
@@ -43,11 +46,11 @@ export function buildConditionsForTable(
 export function buildTableConditionsMap(
   schema: Schema,
   relevantTableNames: string[],
-  userContext: Record<string, string | number>,
-): Record<string, { column: string; value: string | number }> | null {
+  userContext: Record<string, string | number | boolean>,
+): Record<string, { column: string; value: string | number | boolean }> | null {
   const tableConditionsMap: Record<
     string,
-    { column: string; value: string | number }
+    { column: string; value: string | number | boolean }
   > = {};
 
   for (const tableName of relevantTableNames) {

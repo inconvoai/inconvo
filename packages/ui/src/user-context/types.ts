@@ -12,7 +12,7 @@ export interface TableConditionRef {
 export interface ContextField {
   id: string;
   key: string;
-  type: "STRING" | "NUMBER";
+  type: "STRING" | "NUMBER" | "BOOLEAN";
   tableConditions?: TableConditionRef[];
 }
 

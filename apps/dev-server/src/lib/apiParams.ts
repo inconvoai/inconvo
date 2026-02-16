@@ -16,12 +16,20 @@ export function parseListParams(searchParams: URLSearchParams) {
   }
 
   // Parse userContext parameters (e.g., userContext[orgId]=123)
-  const userContext: Record<string, string | number> = {};
+  const userContext: Record<string, string | number | boolean> = {};
   for (const [key, value] of searchParams.entries()) {
     const match = /^userContext\[(.+)\]$/.exec(key);
     if (match?.[1]) {
       const contextKey = match[1];
-      // Try to parse as number, otherwise keep as string
+      // Try to parse as boolean/number, otherwise keep as string
+      if (value === "true") {
+        userContext[contextKey] = true;
+        continue;
+      }
+      if (value === "false") {
+        userContext[contextKey] = false;
+        continue;
+      }
       const numValue = Number(value);
       userContext[contextKey] = isNaN(numValue) ? value : numValue;
     }

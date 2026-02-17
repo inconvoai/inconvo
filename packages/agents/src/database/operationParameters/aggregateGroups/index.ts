@@ -29,7 +29,7 @@ export interface DefineAggregateGroupsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "aggregateGroups";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

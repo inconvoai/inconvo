@@ -11,6 +11,8 @@ type SchemaEditorAction =
   | 'schema_synced'
   | 'table_selected'
   | 'table_access_changed'
+  | 'table_access_policy_saved'
+  | 'table_access_policy_deleted'
   | 'table_prompt_edited'
   | 'column_selected'
   | 'column_renamed'

@@ -102,6 +102,7 @@ export const stubSchema = [
       },
     ],
     condition: null,
+    accessPolicy: null,
   },
   {
     name: "Profile",
@@ -157,6 +158,7 @@ export const stubSchema = [
     computedColumns: [],
     outwardRelations: [],
     condition: null,
+    accessPolicy: null,
   },
   {
     name: "Post",
@@ -223,5 +225,6 @@ export const stubSchema = [
     computedColumns: [],
     outwardRelations: [],
     condition: null,
+    accessPolicy: null,
   },
 ] satisfies Schema;

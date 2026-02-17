@@ -28,7 +28,7 @@ export interface DefineFindManyOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findMany";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

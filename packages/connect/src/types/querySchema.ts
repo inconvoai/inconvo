@@ -229,7 +229,7 @@ export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
 
 const formattedTableConditionsSchema = z.record(
   z.string(), // column name
-  z.record(z.string(), z.union([z.string(), z.number()])), // operator and value
+  z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])), // operator and value
 );
 
 // The complete whereAndArray schema
@@ -241,7 +241,7 @@ export type WhereConditions = z.infer<typeof whereAndArraySchema>;
 // Table condition schema for row-level security / tenant filtering
 const tableConditionSchema = z.object({
   column: z.string(),
-  value: z.union([z.string(), z.number()]),
+  value: z.union([z.string(), z.number(), z.boolean()]),
 });
 
 export const tableConditionsMapSchema = z

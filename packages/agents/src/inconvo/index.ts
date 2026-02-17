@@ -374,11 +374,11 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       default: () => [],
     }),
     // Context about the request to pass to the database retriever
-    userContext: Annotation<Record<string, string | number>>({
+    userContext: Annotation<Record<string, string | number | boolean>>({
       reducer: (x, y) => y,
       default: () =>
         (params.conversation.userContext ??
-          {}) as Record<string, string | number>,
+          {}) as Record<string, string | number | boolean>,
     }),
     error: Annotation<Record<string, unknown> | undefined>({
       reducer: (x, y) => y,

@@ -160,7 +160,7 @@ export async function buildOperationParametersPromptMessages(
     operation: keyof typeof operationDocs;
     tableName: string;
     question: string;
-    userContext: Record<string, string | number>;
+    userContext: Record<string, string | number | boolean>;
   },
   tableSchema: string,
 ): Promise<BaseMessage[]> {

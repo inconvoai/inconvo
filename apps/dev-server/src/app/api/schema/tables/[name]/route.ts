@@ -42,6 +42,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             userContextField: true,
           },
         },
+        accessPolicy: {
+          include: {
+            userContextField: true,
+          },
+        },
       },
     });
 

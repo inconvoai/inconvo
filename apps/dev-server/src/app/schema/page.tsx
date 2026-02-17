@@ -59,6 +59,7 @@ interface ApiTableId {
   name: string;
   access: string;
   hasCondition: boolean;
+  hasAccessPolicy: boolean;
 }
 
 interface ApiColumn {
@@ -120,6 +121,9 @@ interface ApiTableDetail {
   outwardRelations: ApiRelation[];
   condition: {
     column: { id: string; name: string };
+    userContextField: { id: string; key: string };
+  } | null;
+  accessPolicy: {
     userContextField: { id: string; key: string };
   } | null;
 }
@@ -203,6 +207,14 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
           userContextField: {
             id: api.condition.userContextField.id,
             key: api.condition.userContextField.key,
+          },
+        }
+      : null,
+    accessPolicy: api.accessPolicy
+      ? {
+          userContextField: {
+            id: api.accessPolicy.userContextField.id,
+            key: api.accessPolicy.userContextField.key,
           },
         }
       : null,
@@ -323,6 +335,7 @@ function SchemaPageContent() {
         computedColumnCount: 0,
         relationCount: 0,
         hasCondition: table.hasCondition,
+        hasAccessPolicy: table.hasAccessPolicy,
       }));
 
       setTables(transformed);
@@ -350,7 +363,7 @@ function SchemaPageContent() {
         (data.fields ?? []).map((f) => ({
           id: f.id,
           key: f.key,
-          type: f.type as "STRING" | "NUMBER",
+          type: f.type as "STRING" | "NUMBER" | "BOOLEAN",
         })),
       );
       setUserContextStatus(data.status ?? "UNSET");
@@ -828,6 +841,57 @@ function SchemaPageContent() {
     [tables, fetchTableDetail],
   );
 
+  const onUpsertTableAccessPolicy = useCallback(
+    async (tableId: string, payload: { userContextFieldId: string }) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch("/api/schema/table-access-policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+          userContextFieldId: payload.userContextFieldId,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "table_access_policy_saved",
+      });
+
+      await fetchTables();
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail, fetchTables],
+  );
+
+  const onDeleteTableAccessPolicy = useCallback(
+    async (tableId: string) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch("/api/schema/table-access-policies", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "table_access_policy_deleted",
+      });
+
+      await fetchTables();
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail, fetchTables],
+  );
+
   // Column conversion callbacks
   const onCreateColumnConversion = useCallback(
     async (
@@ -1177,6 +1241,8 @@ function SchemaPageContent() {
           // Context filter callbacks
           onUpsertContextFilter={onUpsertContextFilter}
           onDeleteContextFilter={onDeleteContextFilter}
+          onUpsertTableAccessPolicy={onUpsertTableAccessPolicy}
+          onDeleteTableAccessPolicy={onDeleteTableAccessPolicy}
           // Column conversion callbacks
           onCreateColumnConversion={onCreateColumnConversion}
           onUpdateColumnConversion={onUpdateColumnConversion}

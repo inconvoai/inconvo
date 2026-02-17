@@ -57,7 +57,7 @@ export const sandboxParamsSchema = z.object({
   conversationId: z.string().min(1, "conversationId is required"),
   runId: z.string().min(1, "runId is required"), // Scopes the sandbox instance per run/message
   userIdentifier: z.string().min(1, "userIdentifier is required"),
-  userContext: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  userContext: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 export type SandboxParams = z.infer<typeof sandboxParamsSchema>;

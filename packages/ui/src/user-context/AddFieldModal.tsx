@@ -9,7 +9,10 @@ export interface AddFieldModalProps {
   /** Callback when the modal is closed */
   onClose: () => void;
   /** Callback when a field is submitted */
-  onSubmit: (field: { key: string; type: "STRING" | "NUMBER" }) => void;
+  onSubmit: (field: {
+    key: string;
+    type: "STRING" | "NUMBER" | "BOOLEAN";
+  }) => void;
   /** Whether the submit button should show loading state */
   loading?: boolean;
   /** Modal title (defaults to "Add Context Field") */
@@ -34,7 +37,10 @@ export function AddFieldModal({
 
   const handleSubmit = () => {
     if (key && type && !isDuplicate) {
-      onSubmit({ key: key.trim(), type: type as "STRING" | "NUMBER" });
+      onSubmit({
+        key: key.trim(),
+        type: type as "STRING" | "NUMBER" | "BOOLEAN",
+      });
       // Reset form
       setKey("");
       setType("STRING");
@@ -65,6 +71,7 @@ export function AddFieldModal({
           data={[
             { value: "STRING", label: "String" },
             { value: "NUMBER", label: "Number" },
+            { value: "BOOLEAN", label: "Boolean" },
           ]}
           value={type}
           onChange={setType}

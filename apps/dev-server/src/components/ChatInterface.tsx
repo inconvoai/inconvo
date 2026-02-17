@@ -9,6 +9,8 @@ import {
   Text,
   Group,
   TextInput,
+  NumberInput,
+  Switch,
   Stack,
   Button,
   Center,
@@ -60,14 +62,14 @@ export function ChatInterface() {
 
   // User context state
   const [contextFields, setContextFields] = useState<UserContextField[]>([]);
-  const [contextValues, setContextValues] = useState<Record<string, string>>(
-    {},
-  );
+  const [contextValues, setContextValues] = useState<
+    Record<string, string | number | boolean>
+  >({});
   const [contextStatus, setContextStatus] = useState<
     "UNSET" | "ENABLED" | "DISABLED"
   >("UNSET");
   const [userContext, setUserContext] = useState<
-    Record<string, string | number> | undefined
+    Record<string, string | number | boolean> | undefined
   >();
   const [userIdentifier, setUserIdentifier] = useState<string>("dev-user");
   const [contextConfirmed, setContextConfirmed] = useState(false);
@@ -127,7 +129,7 @@ export function ChatInterface() {
       const res = await fetch(`/api/v1/agents/dev-agent/conversations/${id}`);
       if (res.ok) {
         const data = (await res.json()) as {
-          userContext?: Record<string, string | number>;
+          userContext?: Record<string, string | number | boolean>;
           userIdentifier?: string;
           messages?: ChatMessage[];
         };
@@ -139,12 +141,11 @@ export function ChatInterface() {
         if (data.userContext) {
           // Store the raw context for display
           setUserContext(data.userContext);
-          // Convert context values to strings for the input fields
-          const stringValues: Record<string, string> = {};
+          const hydratedValues: Record<string, string | number | boolean> = {};
           for (const [key, value] of Object.entries(data.userContext)) {
-            stringValues[key] = String(value);
+            hydratedValues[key] = value;
           }
-          setContextValues(stringValues);
+          setContextValues(hydratedValues);
         }
         setContextConfirmed(true);
       }
@@ -178,17 +179,24 @@ export function ChatInterface() {
 
   // Build user context object from values, converting types as needed
   const buildUserContext = useCallback(() => {
-    const context: Record<string, string | number> = {};
+    const context: Record<string, string | number | boolean> = {};
     for (const field of contextFields) {
       const value = contextValues[field.key];
       if (value !== undefined && value !== "") {
         if (field.type === "NUMBER") {
-          const num = parseFloat(value);
+          const num =
+            typeof value === "number" ? value : Number.parseFloat(String(value));
           if (!isNaN(num)) {
             context[field.key] = num;
           }
+        } else if (field.type === "BOOLEAN") {
+          if (typeof value === "boolean") {
+            context[field.key] = value;
+          } else if (value === "true" || value === "false") {
+            context[field.key] = value === "true";
+          }
         } else {
-          context[field.key] = value;
+          context[field.key] = String(value);
         }
       }
     }
@@ -414,24 +422,63 @@ export function ChatInterface() {
 
                         <Stack gap="sm">
                           {contextFields.map((field) => (
-                            <TextInput
-                              key={field.id}
-                              label={field.key}
-                              description={`Type: ${field.type}`}
-                              placeholder={
-                                field.type === "NUMBER"
-                                  ? "Enter a number"
-                                  : "Enter a value"
-                              }
-                              value={contextValues[field.key] ?? ""}
-                              onChange={(e) => {
-                                const value = e.currentTarget?.value ?? "";
-                                setContextValues((prev) => ({
-                                  ...prev,
-                                  [field.key]: value,
-                                }));
-                              }}
-                            />
+                            <Box key={field.id}>
+                              {field.type === "NUMBER" ? (
+                                <NumberInput
+                                  label={field.key}
+                                  description={`Type: ${field.type}`}
+                                  placeholder="Enter a number"
+                                  value={
+                                    typeof contextValues[field.key] === "number" ||
+                                    typeof contextValues[field.key] === "string"
+                                      ? (contextValues[field.key] as
+                                          | string
+                                          | number)
+                                      : ""
+                                  }
+                                  onChange={(value) => {
+                                    setContextValues((prev) => ({
+                                      ...prev,
+                                      [field.key]: value,
+                                    }));
+                                  }}
+                                />
+                              ) : field.type === "BOOLEAN" ? (
+                                <Switch
+                                  label={field.key}
+                                  description={`Type: ${field.type}`}
+                                  checked={
+                                    typeof contextValues[field.key] === "boolean"
+                                      ? (contextValues[field.key] as boolean)
+                                      : false
+                                  }
+                                  onChange={(e) => {
+                                    setContextValues((prev) => ({
+                                      ...prev,
+                                      [field.key]: e.currentTarget.checked,
+                                    }));
+                                  }}
+                                />
+                              ) : (
+                                <TextInput
+                                  label={field.key}
+                                  description={`Type: ${field.type}`}
+                                  placeholder="Enter a value"
+                                  value={
+                                    typeof contextValues[field.key] === "string"
+                                      ? (contextValues[field.key] as string)
+                                      : ""
+                                  }
+                                  onChange={(e) => {
+                                    const value = e.currentTarget?.value ?? "";
+                                    setContextValues((prev) => ({
+                                      ...prev,
+                                      [field.key]: value,
+                                    }));
+                                  }}
+                                />
+                              )}
+                            </Box>
                           ))}
                         </Stack>
 

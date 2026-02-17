@@ -26,10 +26,10 @@ export interface ConversationWithMetaAndMessages extends ConversationWithMeta {
  */
 function parseUserContext(
   userContext: string | null,
-): Record<string, string | number> | null {
+): Record<string, string | number | boolean> | null {
   if (!userContext) return null;
   try {
-    return JSON.parse(userContext) as Record<string, string | number>;
+    return JSON.parse(userContext) as Record<string, string | number | boolean>;
   } catch {
     return null;
   }
@@ -84,7 +84,7 @@ function toConversationWithMessages(row: {
 
 export async function createConversation(
   userIdentifier: string,
-  userContext?: Record<string, string | number> | null,
+  userContext?: Record<string, string | number | boolean> | null,
 ): Promise<Conversation> {
   const id = `convo_${uuidv4()}`;
 
@@ -195,7 +195,7 @@ export async function listConversationsFiltered(params: {
   cursor?: Date;
   limit: number;
   userIdentifier?: string;
-  userContext?: Record<string, string | number>;
+  userContext?: Record<string, string | number | boolean>;
 }): Promise<{
   conversations: ConversationWithMetaAndMessages[];
   nextCursor: string | null;

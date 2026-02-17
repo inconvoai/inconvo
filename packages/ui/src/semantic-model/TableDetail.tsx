@@ -22,6 +22,7 @@ import {
   IconLink,
   IconRuler,
   IconFilter,
+  IconLock,
   IconCheck,
   IconEdit,
 } from "@tabler/icons-react";
@@ -40,6 +41,7 @@ import type {
   CreateManualRelationPayload,
   UpdateManualRelationPayload,
   UpsertContextFilterPayload,
+  UpsertTableAccessPolicyPayload,
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
   ColumnValueEnumCreatePayload,
@@ -55,6 +57,7 @@ import { ColumnNotesForm } from "./ColumnNotesForm";
 import { ComputedColumnNotesForm } from "./ComputedColumnNotesForm";
 import { UnitsForm } from "./UnitsForm";
 import { ContextFilterForm } from "./ContextFilterForm";
+import { TableAccessPolicyForm } from "./TableAccessPolicyForm";
 import { ManualRelationForm } from "./ManualRelationForm";
 import { ComputedColumnForm } from "./ComputedColumnForm";
 import { ColumnConversionForm } from "./ColumnConversionForm";
@@ -110,6 +113,12 @@ export interface TableDetailProps {
   ) => Promise<void>;
   /** Callback when a context filter is deleted */
   onDeleteContextFilter?: () => Promise<void>;
+  /** Callback when a table access policy is created/updated */
+  onUpsertTableAccessPolicy?: (
+    payload: UpsertTableAccessPolicyPayload,
+  ) => Promise<void>;
+  /** Callback when a table access policy is deleted */
+  onDeleteTableAccessPolicy?: () => Promise<void>;
   /** Callback when a column conversion is created */
   onCreateColumnConversion?: (
     columnId: string,
@@ -152,6 +161,7 @@ type ModalState =
   | { type: "computedColumnNotes"; column: ComputedColumn }
   | { type: "units" }
   | { type: "contextFilter" }
+  | { type: "accessPolicy" }
   | { type: "manualRelation"; relation?: Relation }
   | { type: "computedColumn" }
   | { type: "columnConversion"; column: Column }
@@ -175,6 +185,8 @@ export function TableDetail({
   onDeleteManualRelation,
   onUpsertContextFilter,
   onDeleteContextFilter,
+  onUpsertTableAccessPolicy,
+  onDeleteTableAccessPolicy,
   onCreateColumnConversion,
   onUpdateColumnConversion,
   onDeleteColumnConversion,
@@ -197,6 +209,11 @@ export function TableDetail({
       ? "Constraint active"
       : "Constraint inactive"
     : "Add constraint";
+  const accessPolicyLabel = table.accessPolicy
+    ? isContextEnabled
+      ? "Policy active"
+      : "Policy inactive"
+    : "Add policy";
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -260,6 +277,8 @@ export function TableDetail({
         return "Configure Units";
       case "contextFilter":
         return "Row-level access constraint";
+      case "accessPolicy":
+        return "Table access policy";
       case "manualRelation":
         return modalState.relation ? "Edit Relation" : "Add Relation";
       case "computedColumn":
@@ -350,6 +369,18 @@ export function TableDetail({
             />
           )}
 
+          {table.accessPolicy && (
+            <Paper p="sm" withBorder radius="sm">
+              <Text size="sm">
+                Table access policy: Available when{" "}
+                <strong>
+                  userContext.{table.accessPolicy.userContextField.key}
+                </strong>{" "}
+                equals <strong>true</strong>.
+              </Text>
+            </Paper>
+          )}
+
           {/* Action Buttons */}
           <Paper p="sm" withBorder radius="sm">
             <Group justify="space-between" wrap="wrap" gap="md">
@@ -417,27 +448,46 @@ export function TableDetail({
                   Access Constraints
                 </Text>
                 <Stack gap={2}>
-                <Button
-                  variant={table.condition ? "filled" : "outline"}
-                  color="blue"
-                  size="xs"
-                  leftSection={<IconFilter size={14} />}
-                  rightSection={
-                    table.condition ? <IconCheck size={12} /> : undefined
-                  }
-                  onClick={() => {
-                    if (canEditAccessConstraints) {
-                      setModalState({ type: "contextFilter" });
-                    }
-                  }}
-                  disabled={!canEditAccessConstraints}
-                >
-                  {constraintLabel}
-                </Button>
-                {!isContextEnabled && (
-                  <Text size="xs" c="dimmed">
-                    Enable user context to apply or edit constraints.
-                  </Text>
+                  <Group gap="xs">
+                    <Button
+                      variant={table.condition ? "filled" : "outline"}
+                      color="blue"
+                      size="xs"
+                      leftSection={<IconFilter size={14} />}
+                      rightSection={
+                        table.condition ? <IconCheck size={12} /> : undefined
+                      }
+                      onClick={() => {
+                        if (canEditAccessConstraints) {
+                          setModalState({ type: "contextFilter" });
+                        }
+                      }}
+                      disabled={!canEditAccessConstraints}
+                    >
+                      {constraintLabel}
+                    </Button>
+                    <Button
+                      variant={table.accessPolicy ? "filled" : "outline"}
+                      color="blue"
+                      size="xs"
+                      leftSection={<IconLock size={14} />}
+                      rightSection={
+                        table.accessPolicy ? <IconCheck size={12} /> : undefined
+                      }
+                      onClick={() => {
+                        if (canEditAccessConstraints) {
+                          setModalState({ type: "accessPolicy" });
+                        }
+                      }}
+                      disabled={!canEditAccessConstraints}
+                    >
+                      {accessPolicyLabel}
+                    </Button>
+                  </Group>
+                  {!isContextEnabled && (
+                    <Text size="xs" c="dimmed">
+                      Enable user context to apply or edit access constraints.
+                    </Text>
                   )}
                 </Stack>
               </Group>
@@ -547,6 +597,23 @@ export function TableDetail({
             }}
             onDelete={async () => {
               await onDeleteContextFilter?.();
+              closeModal();
+            }}
+          />
+        )}
+
+        {modalState.type === "accessPolicy" && (
+          <TableAccessPolicyForm
+            table={table}
+            userContextFields={userContextFields}
+            readOnly={readOnly || !isContextEnabled}
+            onClose={closeModal}
+            onSave={async (payload) => {
+              await onUpsertTableAccessPolicy?.(payload);
+              closeModal();
+            }}
+            onDelete={async () => {
+              await onDeleteTableAccessPolicy?.();
               closeModal();
             }}
           />

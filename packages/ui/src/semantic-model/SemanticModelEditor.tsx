@@ -17,6 +17,7 @@ import type {
   ManualRelationCreatePayload,
   ManualRelationUpdatePayload,
   ContextFilterPayload,
+  UpsertTableAccessPolicyPayload,
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
   ColumnValueEnumCreatePayload,
@@ -132,6 +133,13 @@ export interface SemanticModelEditorProps {
   ) => Promise<void>;
   /** Callback when a context filter is deleted */
   onDeleteContextFilter?: (tableId: string) => Promise<void>;
+  /** Callback when a table access policy is created/updated */
+  onUpsertTableAccessPolicy?: (
+    tableId: string,
+    payload: UpsertTableAccessPolicyPayload,
+  ) => Promise<void>;
+  /** Callback when a table access policy is deleted */
+  onDeleteTableAccessPolicy?: (tableId: string) => Promise<void>;
   /** Callback when a column conversion is created */
   onCreateColumnConversion?: (
     tableId: string,
@@ -218,6 +226,8 @@ export function SemanticModelEditor({
   onDeleteManualRelation,
   onUpsertContextFilter,
   onDeleteContextFilter,
+  onUpsertTableAccessPolicy,
+  onDeleteTableAccessPolicy,
   onCreateColumnConversion,
   onUpdateColumnConversion,
   onDeleteColumnConversion,
@@ -345,6 +355,21 @@ export function SemanticModelEditor({
       await onDeleteContextFilter?.(selectedTable.id);
     }
   }, [selectedTable, onDeleteContextFilter]);
+
+  const handleUpsertTableAccessPolicy = useCallback(
+    async (payload: UpsertTableAccessPolicyPayload) => {
+      if (selectedTable) {
+        await onUpsertTableAccessPolicy?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onUpsertTableAccessPolicy],
+  );
+
+  const handleDeleteTableAccessPolicy = useCallback(async () => {
+    if (selectedTable) {
+      await onDeleteTableAccessPolicy?.(selectedTable.id);
+    }
+  }, [selectedTable, onDeleteTableAccessPolicy]);
 
   const handleCreateColumnConversion = useCallback(
     async (columnId: string, payload: ColumnConversionCreatePayload) => {
@@ -494,6 +519,8 @@ export function SemanticModelEditor({
             onDeleteManualRelation={handleDeleteManualRelation}
             onUpsertContextFilter={handleUpsertContextFilter}
             onDeleteContextFilter={handleDeleteContextFilter}
+            onUpsertTableAccessPolicy={handleUpsertTableAccessPolicy}
+            onDeleteTableAccessPolicy={handleDeleteTableAccessPolicy}
             onCreateColumnConversion={handleCreateColumnConversion}
             onUpdateColumnConversion={handleUpdateColumnConversion}
             onDeleteColumnConversion={handleDeleteColumnConversion}

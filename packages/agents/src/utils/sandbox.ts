@@ -157,7 +157,7 @@ export interface SandboxParams {
   /** User identifier for scoping datasets and conversation data. */
   userIdentifier: string;
   /** Optional user context for context-scoped dataset mounting. */
-  userContext?: Record<string, string | number>;
+  userContext?: Record<string, string | number | boolean>;
 }
 
 export interface ConversationDataUploadParams {
@@ -187,7 +187,7 @@ export interface AvailableDataset {
 
 export interface FetchAvailableDatasetsParams {
   userIdentifier: string;
-  userContext?: Record<string, string | number> | null;
+  userContext?: Record<string, string | number | boolean> | null;
 }
 
 export interface FetchAvailableDatasetsResponse {

@@ -12,7 +12,7 @@ interface RouteParams {
 }
 
 type PatchBody = {
-  kind: "CONVERSION" | "STATIC_ENUM";
+  kind: "CONVERSION" | "STATIC_ENUM" | "DYNAMIC_ENUM";
   selected?: boolean;
   conversionConfig?: {
     ast?: unknown;
@@ -39,9 +39,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = (await request.json()) as PatchBody;
     const { kind, selected, conversionConfig, staticEnumConfig } = body;
 
-    if (!kind || (kind !== "CONVERSION" && kind !== "STATIC_ENUM")) {
+    if (
+      !kind ||
+      (kind !== "CONVERSION" &&
+        kind !== "STATIC_ENUM" &&
+        kind !== "DYNAMIC_ENUM")
+    ) {
       return NextResponse.json(
-        { error: "kind must be CONVERSION or STATIC_ENUM" },
+        { error: "kind must be CONVERSION, STATIC_ENUM, or DYNAMIC_ENUM" },
         { status: 400 },
       );
     }
@@ -85,11 +90,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           { status: 400 },
         );
       }
-    } else if (conversionConfig) {
+    } else if (kind === "STATIC_ENUM" && conversionConfig) {
       return NextResponse.json(
         { error: "conversionConfig is not allowed for STATIC_ENUM" },
         { status: 400 },
       );
+    }
+
+    if (kind === "DYNAMIC_ENUM") {
+      if (conversionConfig) {
+        return NextResponse.json(
+          { error: "conversionConfig is not allowed for DYNAMIC_ENUM" },
+          { status: 400 },
+        );
+      }
+      if (staticEnumConfig) {
+        return NextResponse.json(
+          { error: "staticEnumConfig is not allowed for DYNAMIC_ENUM" },
+          { status: 400 },
+        );
+      }
     }
 
     const existing = await prisma.columnAugmentation.findUnique({
@@ -131,7 +151,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { status: 400 },
       );
     }
-    if (kind === "STATIC_ENUM" && !NUMERIC_OR_STRING_LOGICAL_TYPES.has(rawType)) {
+    if (
+      (kind === "STATIC_ENUM" || kind === "DYNAMIC_ENUM") &&
+      !NUMERIC_OR_STRING_LOGICAL_TYPES.has(rawType)
+    ) {
       return NextResponse.json(
         { error: "Enums are only supported for string or numeric columns" },
         { status: 400 },
@@ -210,6 +233,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       include: {
         conversionConfig: true,
         staticEnumConfig: true,
+        dynamicEnumConfig: true,
       },
     });
 

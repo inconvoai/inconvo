@@ -155,6 +155,8 @@ export function ColumnTable({
       (column.valueEnum.entries ?? []).some((entry) => entry.selected !== false)
         ? column.valueEnum
         : null;
+    const isDynamicEnum =
+      column.enumMode === "DYNAMIC" && column.valueEnum?.selected !== false;
 
     return (
       <Table.Tr key={column.id}>
@@ -229,14 +231,14 @@ export function ColumnTable({
                 → {column.effectiveType}
               </Badge>
             )}
-            {activeEnum && (
+            {(activeEnum || isDynamicEnum) && (
               <Badge
                 size="xs"
                 color="cyan"
                 variant="light"
                 style={{ flexShrink: 0 }}
               >
-                Enum
+                {isDynamicEnum ? "Dynamic Enum" : "Enum"}
               </Badge>
             )}
           </Group>

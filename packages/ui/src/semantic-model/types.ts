@@ -51,6 +51,8 @@ export interface ColumnValueEnumEntryInput {
   position?: number;
 }
 
+export type ColumnValueEnumMode = "STATIC" | "DYNAMIC";
+
 /**
  * Relation mapping info shown on a column (for display purposes)
  */
@@ -74,6 +76,7 @@ export interface Column {
   selected: boolean;
   unit: string | null;
   conversion: ColumnConversion | null;
+  enumMode: ColumnValueEnumMode | null;
   valueEnum?: ColumnValueEnum | null;
   relation: ColumnRelationMapping[];
 }
@@ -320,18 +323,30 @@ export interface ColumnConversionUpdatePayload {
 /**
  * Column value enum create payload
  */
-export interface ColumnValueEnumCreatePayload {
-  entries: ColumnValueEnumEntryInput[];
-  selected?: boolean;
-}
+export type ColumnValueEnumCreatePayload =
+  | {
+      mode: "STATIC";
+      entries: ColumnValueEnumEntryInput[];
+      selected?: boolean;
+    }
+  | {
+      mode: "DYNAMIC";
+      selected?: boolean;
+    };
 
 /**
  * Column value enum update payload
  */
-export interface ColumnValueEnumUpdatePayload {
-  entries?: ColumnValueEnumEntryInput[];
-  selected?: boolean;
-}
+export type ColumnValueEnumUpdatePayload =
+  | {
+      mode: "STATIC";
+      entries?: ColumnValueEnumEntryInput[];
+      selected?: boolean;
+    }
+  | {
+      mode: "DYNAMIC";
+      selected?: boolean;
+    };
 
 /**
  * Table update payload

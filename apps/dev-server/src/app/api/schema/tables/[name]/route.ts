@@ -22,6 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               include: {
                 conversionConfig: true,
                 staticEnumConfig: true,
+                dynamicEnumConfig: true,
               },
             },
           },
@@ -84,11 +85,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 selected: column.augmentation.selected,
                 entries: column.augmentation.staticEnumConfig.entries,
               }
+            : column.augmentation?.kind === "DYNAMIC_ENUM" &&
+                column.augmentation.dynamicEnumConfig
+              ? {
+                  id: column.augmentation.id,
+                  selected: column.augmentation.selected,
+                  entries: [],
+                }
             : null;
+        const enumMode =
+          column.augmentation?.kind === "STATIC_ENUM"
+            ? "STATIC"
+            : column.augmentation?.kind === "DYNAMIC_ENUM"
+              ? "DYNAMIC"
+              : null;
 
         const { augmentation, ...rest } = column;
         return {
           ...rest,
+          enumMode,
           conversion,
           valueEnum,
         };

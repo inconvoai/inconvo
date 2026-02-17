@@ -1128,6 +1128,7 @@ export type SchemaColumn = {
   type: string;
   effectiveType: string;
   conversion: SchemaColumnConversion | null;
+  enumMode: "STATIC" | "DYNAMIC" | null;
   valueEnum?: SchemaColumnValueEnum | null;
   unit: string | null;
   relation: ColumnRelationEntry[];

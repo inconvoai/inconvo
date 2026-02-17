@@ -17,6 +17,7 @@ function createTable(name: string): Schema[number] {
         type: "number",
         effectiveType: "number",
         conversion: null,
+        enumMode: null,
         valueEnum: null,
         unit: null,
         relation: [],

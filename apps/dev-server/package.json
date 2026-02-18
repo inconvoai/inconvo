@@ -26,6 +26,7 @@
     "@prisma/client": "catalog:",
     "@repo/agents": "workspace:*",
     "@repo/connect": "workspace:*",
+    "@repo/schema-utils": "workspace:*",
     "@repo/types": "workspace:*",
     "@repo/ui": "workspace:*",
     "@t3-oss/env-nextjs": "catalog:",

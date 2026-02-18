@@ -7,86 +7,51 @@ import type {
   SQLComputedColumnAst,
 } from "@repo/types";
 import {
-  resolveEffectiveColumnType,
-  normalizeColumnValueEnum,
-} from "@repo/types";
-
-// Matches the internal ColumnRelationEntry type in @repo/types
-type ColumnRelationEntry = {
-  relation: {
-    targetTable: { name: string | null };
-  };
-  targetColumn: { name: string | null };
-};
+  accessPolicyWhereClause,
+  buildColumnProjectionFromAugmentation,
+  extractOrderedRelationColumns,
+  mapColumnRelationEntries,
+  mapSchemaAccessPolicy,
+  mapSchemaCondition,
+  pruneRelationsToExcludedTables,
+  resolveDynamicEnumsForSchema,
+  type DynamicEnumCache,
+} from "@repo/schema-utils";
 import type { SchemaResponse } from "@repo/connect";
 import {
   writeUnifiedAugmentation,
   computeAugmentationsHash,
 } from "@repo/connect";
+import type { Prisma } from "../../prisma/generated/client/client";
 import { prisma } from "./prisma";
+import { getConnector } from "./connector";
 
-type UserContext = Record<string, string | number | boolean> | null | undefined;
+const columnAugmentationProjectionSelect = {
+  id: true,
+  kind: true,
+  selected: true,
+  conversionConfig: {
+    select: {
+      ast: true,
+      type: true,
+    },
+  },
+  staticEnumConfig: {
+    select: {
+      entries: true,
+    },
+  },
+  dynamicEnumConfig: {
+    select: {
+      id: true,
+    },
+  },
+} satisfies Prisma.ColumnAugmentationSelect;
 
-/**
- * Extract the user-context field keys whose value is exactly `true`.
- */
-function getTrueBooleanKeys(userContext: UserContext): string[] {
-  if (!userContext) return [];
-  return Object.entries(userContext)
-    .filter(([, v]) => v === true)
-    .map(([k]) => k);
-}
-
-/**
- * Build a Prisma WHERE condition that excludes tables whose access policy
- * references a boolean user-context key that is not `true`.
- */
-function accessPolicyWhereClause(userContext: UserContext): {
-  OR: Array<Record<string, unknown>>;
-} {
-  const trueKeys = getTrueBooleanKeys(userContext);
-
-  return {
-    OR: [
-      { accessPolicy: null },
-      ...(trueKeys.length > 0
-        ? [
-            {
-              accessPolicy: {
-                userContextField: { key: { in: trueKeys } },
-              },
-            },
-          ]
-        : []),
-    ],
-  };
-}
-
-/**
- * After DB-level table filtering, prune cross-references (relations and
- * column relation mappings) that point to tables no longer in the result set.
- */
-function pruneRelationsToExcludedTables(schema: Schema): Schema {
-  const allowedTableNames = new Set(schema.map((table) => table.name));
-
-  return schema.map((table) => ({
-    ...table,
-    columns: table.columns.map((column) => ({
-      ...column,
-      relation: column.relation.filter((entry) => {
-        const targetTableName = entry.relation?.targetTable?.name;
-        return targetTableName ? allowedTableNames.has(targetTableName) : true;
-      }),
-    })),
-    outwardRelations: table.outwardRelations.filter((relation) =>
-      allowedTableNames.has(relation.targetTable.name),
-    ),
-  }));
-}
+const dynamicEnumCache: DynamicEnumCache = new Map();
 
 /**
  * Get the database schema for the agent.
- * Queries from Prisma SQLite with filtering - matches platform's getSchema.
  *
  * Filtering behavior (matches platform):
  * - Only includes tables not marked as OFF
@@ -98,10 +63,12 @@ export async function getSchema(params?: {
   includeConditions?: boolean;
   applyAccessPolicies?: boolean;
   userContext?: Record<string, string | number | boolean> | null;
+  resolveDynamicEnums?: boolean;
 }): Promise<Schema> {
   const includeConditions = params?.includeConditions ?? true;
+  const userContext = params?.userContext ?? null;
   const applyAccessPolicies = params?.applyAccessPolicies ?? false;
-  const userContext = params?.userContext;
+  const resolveDynamicEnums = params?.resolveDynamicEnums ?? false;
   const policyWhere = applyAccessPolicies
     ? accessPolicyWhereClause(userContext)
     : undefined;
@@ -132,22 +99,7 @@ export async function getSchema(params?: {
           type: true,
           unit: true,
           augmentation: {
-            select: {
-              id: true,
-              kind: true,
-              selected: true,
-              conversionConfig: {
-                select: {
-                  ast: true,
-                  type: true,
-                },
-              },
-              staticEnumConfig: {
-                select: {
-                  entries: true,
-                },
-              },
-            },
+            select: columnAugmentationProjectionSelect,
           },
           // Get FK mappings where this column is the source
           sourceRelationMappings: {
@@ -231,49 +183,25 @@ export async function getSchema(params?: {
   const schema: Schema = tables.map((table) => {
     // Format columns with relation mappings
     const columns: SchemaColumn[] = table.columns.map((column) => {
-      // Build relation array from source relation mappings
-      const relation: ColumnRelationEntry[] = (
-        column.sourceRelationMappings ?? []
-      ).map((mapping) => ({
-        relation: {
-          targetTable: {
-            name: mapping.relation?.targetTable?.name ?? null,
+      const relation = mapColumnRelationEntries(
+        column.sourceRelationMappings ?? [],
+      );
+      const augmentation = column.augmentation;
+      const { conversion, enumMode, valueEnum, effectiveType } =
+        buildColumnProjectionFromAugmentation({
+          columnType: column.type,
+          augmentation,
+          parseConversionAst: (ast) => {
+            if (typeof ast !== "string") {
+              return ast;
+            }
+            try {
+              return JSON.parse(ast) as SQLCastExpressionAst;
+            } catch {
+              return ast;
+            }
           },
-        },
-        targetColumn: {
-          name: mapping.targetColumn?.name ?? mapping.targetColumnName ?? null,
-        },
-      }));
-
-      const conversion =
-        column.augmentation?.kind === "CONVERSION" &&
-        column.augmentation.conversionConfig
-          ? {
-              id: column.augmentation.id,
-              ast: (() => {
-                try {
-                  return JSON.parse(
-                    column.augmentation.conversionConfig.ast,
-                  ) as SQLCastExpressionAst;
-                } catch {
-                  return column.augmentation.conversionConfig.ast;
-                }
-              })(),
-              type: column.augmentation.conversionConfig.type ?? null,
-              selected: column.augmentation.selected,
-            }
-          : null;
-      const valueEnumInput =
-        column.augmentation?.kind === "STATIC_ENUM" &&
-        column.augmentation.staticEnumConfig
-          ? {
-              id: column.augmentation.id,
-              selected: column.augmentation.selected,
-              entries: column.augmentation.staticEnumConfig.entries,
-            }
-          : null;
-      const effectiveType = resolveEffectiveColumnType(column.type, conversion);
-      const valueEnum = normalizeColumnValueEnum(valueEnumInput);
+        });
 
       return {
         name: column.rename ?? column.name,
@@ -283,6 +211,7 @@ export async function getSchema(params?: {
         type: column.type,
         effectiveType,
         conversion,
+        enumMode,
         valueEnum,
         unit: column.unit ?? null,
         relation,
@@ -305,19 +234,9 @@ export async function getSchema(params?: {
     const outwardRelations: SchemaRelation[] = (
       table.outwardRelations ?? []
     ).map((relation) => {
-      const mappings = [...(relation.columnMappings ?? [])].sort(
-        (a, b) => a.position - b.position,
+      const { sourceColumns, targetColumns } = extractOrderedRelationColumns(
+        relation.columnMappings ?? [],
       );
-      const sourceColumns = mappings
-        .map((m) => m.sourceColumn?.name ?? m.sourceColumnName)
-        .filter((name): name is string =>
-          Boolean(name && name.trim().length > 0),
-        );
-      const targetColumns = mappings
-        .map((m) => m.targetColumn?.name ?? m.targetColumnName)
-        .filter((name): name is string =>
-          Boolean(name && name.trim().length > 0),
-        );
 
       return {
         name: relation.name,
@@ -342,29 +261,33 @@ export async function getSchema(params?: {
       columns,
       computedColumns,
       outwardRelations,
-      condition:
-        includeConditions && table.condition
-          ? {
-              column: { name: table.condition.column.name },
-              userContextField: {
-                key: table.condition.userContextField.key,
-              },
-            }
-          : null,
-      accessPolicy: table.accessPolicy?.userContextField
-        ? {
-            userContextField: {
-              key: table.accessPolicy.userContextField.key,
-            },
-          }
-        : null,
+      condition: mapSchemaCondition({
+        includeCondition: includeConditions,
+        condition: table.condition,
+      }),
+      accessPolicy: mapSchemaAccessPolicy(table.accessPolicy),
     };
   });
 
-  // When access policies are applied, prune cross-references to excluded tables
-  return applyAccessPolicies
-    ? pruneRelationsToExcludedTables(schema)
+  const resolvedSchema = resolveDynamicEnums
+    ? await resolveDynamicEnumsForSchema({
+        schema,
+        connector: getConnector(),
+        userContext: userContext ?? {},
+        connectionId: "default",
+        cache: dynamicEnumCache,
+        onError: ({ tableName, columnName, error }) => {
+          console.warn(
+            `[resolveDynamicEnumsForSchema] Failed to resolve dynamic enum for ${tableName}.${columnName}`,
+            error,
+          );
+        },
+      })
     : schema;
+
+  return applyAccessPolicies
+    ? pruneRelationsToExcludedTables(resolvedSchema)
+    : resolvedSchema;
 }
 
 /**

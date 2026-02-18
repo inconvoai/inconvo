@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Group,
+  SegmentedControl,
   Stack,
   Switch,
   Text,
@@ -17,6 +18,7 @@ import type {
   Column,
   ColumnValueEnumCreatePayload,
   ColumnValueEnumEntryInput,
+  ColumnValueEnumMode,
   ColumnValueEnumUpdatePayload,
 } from "./types";
 
@@ -57,6 +59,8 @@ export function ColumnValueEnumForm({
   loading = false,
 }: ColumnValueEnumFormProps) {
   const existingEnum = column.valueEnum ?? null;
+  const initialMode: ColumnValueEnumMode =
+    column.enumMode === "DYNAMIC" ? "DYNAMIC" : "STATIC";
   const rawType = column.type.toLowerCase();
   const isNumeric = NUMERIC_LOGICAL_TYPES.has(rawType);
   const supportsEnums = isNumeric || rawType === "string";
@@ -79,6 +83,7 @@ export function ColumnValueEnumForm({
   }, [existingEnum]);
 
   const [enabled, setEnabled] = useState(existingEnum?.selected ?? true);
+  const [mode, setMode] = useState<ColumnValueEnumMode>(initialMode);
   const [entries, setEntries] = useState<EditableEnumEntry[]>(initialEntries);
   const [autoLoading, setAutoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,8 +159,24 @@ export function ColumnValueEnumForm({
     }
 
     try {
+      if (mode === "DYNAMIC") {
+        const payload: ColumnValueEnumCreatePayload = {
+          mode: "DYNAMIC",
+          selected: enabled,
+        };
+        if (existingEnum && onUpdate) {
+          await onUpdate(payload);
+          return;
+        }
+        if (onCreate) {
+          await onCreate(payload);
+        }
+        return;
+      }
+
       const normalizedEntries = normalizeEntries();
       const payload: ColumnValueEnumCreatePayload = {
+        mode: "STATIC",
         selected: enabled,
         entries: normalizedEntries,
       };
@@ -242,93 +263,111 @@ export function ColumnValueEnumForm({
         disabled={loading}
       />
 
-      <Stack gap="xs">
-        <Group justify="space-between">
-          <Text size="sm" fw={500}>
-            Entries
-          </Text>
-          <Group gap="xs">
-            {onAutoFill && (
+      <SegmentedControl
+        value={mode}
+        onChange={(value) => setMode(value as ColumnValueEnumMode)}
+        data={[
+          { label: "Static", value: "STATIC" },
+          { label: "Dynamic", value: "DYNAMIC" },
+        ]}
+        disabled={loading}
+      />
+
+      {mode === "DYNAMIC" ? (
+        <Alert color="teal" icon={<IconInfoCircle size={16} />}>
+          Dynamic mode fetches distinct values at schema time for this column
+          using current user context. If more than 50 values exist, the agent
+          falls back to the normal column type without enum restrictions.
+        </Alert>
+      ) : (
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text size="sm" fw={500}>
+              Entries
+            </Text>
+            <Group gap="xs">
+              {onAutoFill && (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => void handleAutoFill()}
+                  loading={autoLoading}
+                  disabled={loading}
+                >
+                  Auto-fill distinct values
+                </Button>
+              )}
               <Button
                 size="xs"
-                variant="default"
-                onClick={() => void handleAutoFill()}
-                loading={autoLoading}
+                variant="light"
+                leftSection={<IconPlus size={14} />}
+                onClick={() => setEntries((prev) => [...prev, createEntry()])}
                 disabled={loading}
               >
-                Auto-fill distinct values
+                Add entry
               </Button>
-            )}
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<IconPlus size={14} />}
-              onClick={() => setEntries((prev) => [...prev, createEntry()])}
-              disabled={loading}
-            >
-              Add entry
-            </Button>
+            </Group>
           </Group>
-        </Group>
-        {entries.map((entry, index) => (
-          <Box
-            key={entry.id}
-            p="sm"
-            style={{
-              border: "1px solid var(--mantine-color-gray-3)",
-              borderRadius: 8,
-              backgroundColor: "var(--mantine-color-gray-0)",
-            }}
-          >
-            <Stack gap="xs">
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">
-                  Entry {index + 1}
-                </Text>
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  color="red"
-                  leftSection={<IconTrash size={12} />}
-                  onClick={() => removeEntry(entry.id)}
-                  disabled={loading || entries.length <= 1}
-                >
-                  Remove
-                </Button>
-              </Group>
+          {entries.map((entry, index) => (
+            <Box
+              key={entry.id}
+              p="sm"
+              style={{
+                border: "1px solid var(--mantine-color-gray-3)",
+                borderRadius: 8,
+                backgroundColor: "var(--mantine-color-gray-0)",
+              }}
+            >
+              <Stack gap="xs">
+                <Group justify="space-between">
+                  <Text size="xs" c="dimmed">
+                    Entry {index + 1}
+                  </Text>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="red"
+                    leftSection={<IconTrash size={12} />}
+                    onClick={() => removeEntry(entry.id)}
+                    disabled={loading || entries.length <= 1}
+                  >
+                    Remove
+                  </Button>
+                </Group>
 
-              <TextInput
-                label={isNumeric ? "Value (number)" : "Value"}
-                description="Canonical value stored in DB and used in final filters."
-                placeholder={isNumeric ? "e.g. 1" : "e.g. joined"}
-                value={entry.valueInput}
-                onChange={(event) =>
-                  updateEntry(entry.id, { valueInput: event.currentTarget.value })
-                }
-                disabled={loading}
-              />
-              <TextInput
-                label="Label"
-                description="Required semantic label the agent can use."
-                placeholder="e.g. Joined"
-                value={entry.label}
-                onChange={(event) =>
-                  updateEntry(entry.id, { label: event.currentTarget.value })
-                }
-                disabled={loading}
-              />
-              <Switch
-                label="Entry enabled"
-                checked={entry.selected}
-                onChange={(event) =>
-                  updateEntry(entry.id, { selected: event.currentTarget.checked })
-                }
-                disabled={loading}
-              />
-            </Stack>
-          </Box>
-        ))}
-      </Stack>
+                <TextInput
+                  label={isNumeric ? "Value (number)" : "Value"}
+                  description="Canonical value stored in DB and used in final filters."
+                  placeholder={isNumeric ? "e.g. 1" : "e.g. joined"}
+                  value={entry.valueInput}
+                  onChange={(event) =>
+                    updateEntry(entry.id, { valueInput: event.currentTarget.value })
+                  }
+                  disabled={loading}
+                />
+                <TextInput
+                  label="Label"
+                  description="Required semantic label the agent can use."
+                  placeholder="e.g. Joined"
+                  value={entry.label}
+                  onChange={(event) =>
+                    updateEntry(entry.id, { label: event.currentTarget.value })
+                  }
+                  disabled={loading}
+                />
+                <Switch
+                  label="Entry enabled"
+                  checked={entry.selected}
+                  onChange={(event) =>
+                    updateEntry(entry.id, { selected: event.currentTarget.checked })
+                  }
+                  disabled={loading}
+                />
+              </Stack>
+            </Box>
+          ))}
+        </Stack>
+      )}
 
       {error && (
         <Alert color="red" icon={<IconInfoCircle size={16} />}>

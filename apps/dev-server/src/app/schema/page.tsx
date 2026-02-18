@@ -70,6 +70,7 @@ interface ApiColumn {
   type: string;
   selected: boolean;
   unit: string | null;
+  enumMode: "STATIC" | "DYNAMIC" | null;
   conversion: {
     id: string;
     ast: unknown;
@@ -148,6 +149,7 @@ function transformColumn(api: ApiColumn): Column {
           selected: api.conversion.selected,
         }
       : null,
+    enumMode: api.enumMode ?? null,
     valueEnum,
     relation: [], // Not needed for display
   };
@@ -983,18 +985,27 @@ function SchemaPageContent() {
       columnId: string,
       payload: ColumnValueEnumCreatePayload,
     ) => {
+      const createBody =
+        payload.mode === "DYNAMIC"
+          ? {
+              tableId,
+              columnId,
+              kind: "DYNAMIC_ENUM" as const,
+              selected: payload.selected ?? true,
+            }
+          : {
+              tableId,
+              columnId,
+              kind: "STATIC_ENUM" as const,
+              selected: payload.selected ?? true,
+              staticEnumConfig: {
+                entries: payload.entries,
+              },
+            };
       const res = await fetch("/api/schema/augmentations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tableId,
-          columnId,
-          kind: "STATIC_ENUM",
-          selected: payload.selected ?? true,
-          staticEnumConfig: {
-            entries: payload.entries,
-          },
-        }),
+        body: JSON.stringify(createBody),
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
@@ -1013,16 +1024,71 @@ function SchemaPageContent() {
       columnId: string,
       payload: ColumnValueEnumUpdatePayload,
     ) => {
+      const currentColumn = selectedTable?.columns.find(
+        (column) => column.id === columnId,
+      );
+      const currentMode =
+        currentColumn?.enumMode === "DYNAMIC" ? "DYNAMIC" : "STATIC";
+
+      if (payload.mode !== currentMode) {
+        if (
+          payload.mode === "STATIC" &&
+          (!payload.entries || payload.entries.length === 0)
+        ) {
+          throw new Error("Static enum mode requires at least one entry.");
+        }
+
+        const createBody =
+          payload.mode === "DYNAMIC"
+            ? {
+                tableId,
+                columnId,
+                kind: "DYNAMIC_ENUM" as const,
+                selected: payload.selected ?? true,
+              }
+            : {
+                tableId,
+                columnId,
+                kind: "STATIC_ENUM" as const,
+                selected: payload.selected ?? true,
+                staticEnumConfig: {
+                  entries: payload.entries ?? [],
+                },
+              };
+
+        const createRes = await fetch("/api/schema/augmentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createBody),
+        });
+        const createData = (await createRes.json()) as { error?: string };
+        if (createData.error) throw new Error(createData.error);
+
+        const table = tables.find((t) => t.id === tableId);
+        if (table) {
+          await fetchTableDetail(table.name);
+        }
+        return;
+      }
+
+      const updateBody =
+        payload.mode === "DYNAMIC"
+          ? {
+              kind: "DYNAMIC_ENUM" as const,
+              selected: payload.selected,
+            }
+          : {
+              kind: "STATIC_ENUM" as const,
+              selected: payload.selected,
+              ...(payload.entries !== undefined
+                ? { staticEnumConfig: { entries: payload.entries } }
+                : {}),
+            };
+
       const res = await fetch(`/api/schema/augmentations/${columnId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "STATIC_ENUM",
-          selected: payload.selected,
-          ...(payload.entries !== undefined
-            ? { staticEnumConfig: { entries: payload.entries } }
-            : {}),
-        }),
+        body: JSON.stringify(updateBody),
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
@@ -1032,7 +1098,7 @@ function SchemaPageContent() {
         await fetchTableDetail(table.name);
       }
     },
-    [tables, fetchTableDetail],
+    [selectedTable, tables, fetchTableDetail],
   );
 
   const onDeleteColumnValueEnum = useCallback(

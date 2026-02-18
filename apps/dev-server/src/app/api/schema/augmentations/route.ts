@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "~/lib/prisma";
 import { syncAugmentationsToFile } from "~/lib/schema";
+import { resolveEffectiveColumnType } from "@repo/types";
 import {
-  NUMERIC_LOGICAL_TYPES,
-  resolveEffectiveColumnType,
-} from "@repo/types";
+  isFindDistinctLimitHitError,
+  normalizeDistinctEntriesForEnum,
+} from "@repo/schema-utils";
 import {
   ENUM_FETCH_LIMIT,
   MAX_ENUM_ENTRIES,
@@ -18,89 +19,10 @@ async function getConnectModule() {
   return await import("@repo/connect");
 }
 
-function normalizeDistinctEntries(params: {
-  rows: unknown;
-  tableName: string;
-  columnName: string;
-  effectiveType: string;
-}) {
-  const { rows, tableName, columnName, effectiveType } = params;
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  const isNumeric = NUMERIC_LOGICAL_TYPES.has(effectiveType);
-  const qualifiedColumn = `${tableName}.${columnName}`;
-  const seen = new Set<string>();
-  const entries: Array<{
-    value: string | number;
-    label: string;
-    selected: boolean;
-    position: number;
-  }> = [];
-
-  for (const row of rows) {
-    let rawValue: unknown = row;
-    if (row && typeof row === "object" && !Array.isArray(row)) {
-      const record = row as Record<string, unknown>;
-      rawValue =
-        record[qualifiedColumn] ??
-        record[columnName] ??
-        Object.values(record)[0];
-    }
-
-    let canonicalValue: string | number | null = null;
-    if (isNumeric) {
-      if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-        canonicalValue = rawValue;
-      } else if (
-        typeof rawValue === "string" &&
-        rawValue.trim().length > 0 &&
-        Number.isFinite(Number(rawValue))
-      ) {
-        canonicalValue = Number(rawValue);
-      }
-    } else if (typeof rawValue === "string") {
-      const trimmed = rawValue.trim();
-      if (trimmed.length > 0) {
-        canonicalValue = trimmed;
-      }
-    } else if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-      canonicalValue = String(rawValue);
-    }
-
-    if (canonicalValue === null) {
-      continue;
-    }
-
-    const dedupeKey =
-      typeof canonicalValue === "number"
-        ? `n:${canonicalValue}`
-        : `s:${canonicalValue.toLowerCase()}`;
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-    seen.add(dedupeKey);
-
-    entries.push({
-      value: canonicalValue,
-      label: String(canonicalValue),
-      selected: true,
-      position: entries.length,
-    });
-
-    if (entries.length >= ENUM_FETCH_LIMIT) {
-      break;
-    }
-  }
-
-  return entries;
-}
-
 type CreateBody = {
   tableId: string;
   columnId: string;
-  kind: "CONVERSION" | "STATIC_ENUM";
+  kind: "CONVERSION" | "STATIC_ENUM" | "DYNAMIC_ENUM";
   selected?: boolean;
   conversionConfig?: {
     ast: unknown;
@@ -165,7 +87,7 @@ export async function GET(request: NextRequest) {
         : null;
     const effectiveType = resolveEffectiveColumnType(column.type, conversionLike);
     if (
-      !(effectiveType === "string" || NUMERIC_LOGICAL_TYPES.has(effectiveType))
+      !NUMERIC_OR_STRING_LOGICAL_TYPES.has(effectiveType)
     ) {
       return NextResponse.json(
         {
@@ -199,10 +121,7 @@ export async function GET(request: NextRequest) {
         dialect: env.DATABASE_DIALECT,
       });
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes(`Find Distinct limit hit at ${ENUM_FETCH_LIMIT}`)
-      ) {
+      if (isFindDistinctLimitHitError(error, ENUM_FETCH_LIMIT)) {
         return NextResponse.json(
           { error: "Sorry, enum is currently limited to 50 distinct values." },
           { status: 400 },
@@ -211,11 +130,12 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    const entries = normalizeDistinctEntries({
+    const entries = normalizeDistinctEntriesForEnum({
       rows: queryResponse.data,
       tableName: column.table.name,
       columnName: column.name,
       effectiveType,
+      fetchLimit: ENUM_FETCH_LIMIT,
     });
     if (entries.length >= ENUM_FETCH_LIMIT) {
       return NextResponse.json(
@@ -256,7 +176,11 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (kind !== "CONVERSION" && kind !== "STATIC_ENUM") {
+    if (
+      kind !== "CONVERSION" &&
+      kind !== "STATIC_ENUM" &&
+      kind !== "DYNAMIC_ENUM"
+    ) {
       return NextResponse.json(
         { error: "Unsupported augmentation kind" },
         { status: 400 },
@@ -293,6 +217,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (kind === "DYNAMIC_ENUM") {
+      if (body.conversionConfig) {
+        return NextResponse.json(
+          { error: "conversionConfig is not allowed for DYNAMIC_ENUM" },
+          { status: 400 },
+        );
+      }
+      if (body.staticEnumConfig) {
+        return NextResponse.json(
+          { error: "staticEnumConfig is not allowed for DYNAMIC_ENUM" },
+          { status: 400 },
+        );
+      }
+    }
+
     const column = await prisma.column.findFirst({
       where: {
         id: columnId,
@@ -322,7 +261,10 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    if (kind === "STATIC_ENUM" && !NUMERIC_OR_STRING_LOGICAL_TYPES.has(rawType)) {
+    if (
+      (kind === "STATIC_ENUM" || kind === "DYNAMIC_ENUM") &&
+      !NUMERIC_OR_STRING_LOGICAL_TYPES.has(rawType)
+    ) {
       return NextResponse.json(
         { error: "Enums are only supported for string or numeric columns" },
         { status: 400 },
@@ -399,10 +341,18 @@ export async function POST(request: NextRequest) {
                 },
               }
             : {}),
+          ...(kind === "DYNAMIC_ENUM"
+            ? {
+                dynamicEnumConfig: {
+                  create: {},
+                },
+              }
+            : {}),
         },
         include: {
           conversionConfig: true,
           staticEnumConfig: true,
+          dynamicEnumConfig: true,
         },
       });
     });

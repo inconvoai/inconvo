@@ -103,10 +103,16 @@ export async function POST(
       select: { status: true },
     });
     const userContextEnabled = config?.status === "ENABLED";
+
+    const userContextForAgent =
+      userContextEnabled && conversation.userContext
+        ? conversation.userContext
+        : {};
     const schema = await getSchema({
       includeConditions: userContextEnabled,
       applyAccessPolicies: true,
       userContext: userContextEnabled ? conversation.userContext : null,
+      resolveDynamicEnums: true,
     });
     const connector = getConnector();
     const checkpointer = getCheckpointer();
@@ -129,11 +135,6 @@ export async function POST(
       userIdentifier: conversation.userIdentifier,
       provider: "openai",
     });
-
-    const userContextForAgent =
-      userContextEnabled && conversation.userContext
-        ? conversation.userContext
-        : {};
 
     // Track start time for performance metrics
     const startTime = Date.now();

@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
-    "hono": "^4.11.7",
+    "hono": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/sandbox": "^0.7.0",
+    "@cloudflare/sandbox": "^0.7.4",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",

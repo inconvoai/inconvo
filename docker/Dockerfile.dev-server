@@ -29,6 +29,7 @@ COPY turbo.json ./
 COPY apps/dev-server/package.json ./apps/dev-server/
 COPY packages/agents/package.json ./packages/agents/
 COPY packages/connect/package.json ./packages/connect/
+COPY packages/schema-utils/package.json ./packages/schema-utils/
 COPY packages/types/package.json ./packages/types/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/eslint-config/package.json ./packages/eslint-config/

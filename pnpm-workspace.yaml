@@ -18,47 +18,49 @@ catalog:
   uuid: 13.0.0
   react: 19.2.4
   react-dom: 19.2.4
-  "@types/react": 19.2.10
+  "@types/react": 19.2.14
   "@types/react-dom": 19.2.3
-  "@mantine/charts": 8.3.13
-  "@mantine/code-highlight": 8.3.13
-  "@mantine/core": 8.3.13
-  "@mantine/dropzone": 8.3.13
-  "@mantine/form": 8.3.13
-  "@mantine/hooks": 8.3.13
-  "@mantine/modals": 8.3.13
-  "@mantine/notifications": 8.3.13
+  "@mantine/charts": 8.3.15
+  "@mantine/code-highlight": 8.3.15
+  "@mantine/core": 8.3.15
+  "@mantine/dropzone": 8.3.15
+  "@mantine/form": 8.3.15
+  "@mantine/hooks": 8.3.15
+  "@mantine/modals": 8.3.15
+  "@mantine/notifications": 8.3.15
   "@monaco-editor/react": 4.7.0
   monaco-editor: 0.55.1
-  "@langchain/core": 1.1.17
-  "@langchain/langgraph": 1.1.2
+  "@langchain/core": 1.1.26
+  "@langchain/langgraph": 1.1.5
   "@langchain/langgraph-checkpoint-postgres": 1.0.0
-  "@langchain/openai": 1.2.3
-  langchain: 1.2.15
-  kysely: 0.28.10
-  pg: 8.17.2
+  "@langchain/openai": 1.2.8
+  langchain: 1.2.25
+  kysely: 0.28.11
+  pg: 8.18.0
   "@types/pg": 8.16.0
-  "@prisma/client": 7.3.0
-  prisma: 7.3.0
+  "@prisma/client": 7.4.0
+  prisma: 7.4.0
   next: 16.1.6
   "@t3-oss/env-nextjs": 0.13.10
   clsx: 2.1.1
-  dotenv: 17.2.3
+  dotenv: 17.3.1
   yaml: 2.8.2
   "@tabler/icons-react": 3.36.1
   vega: 6.2.0
   vega-lite: 6.4.2
   vega-embed: 7.1.0
   react-vega: 8.0.0
-  posthog-js: 1.336.4
-  posthog-node: 5.24.7
+  posthog-js: 1.350.0
+  posthog-node: 5.24.16
   postcss: 8.5.6
   postcss-import: 16.1.1
   postcss-preset-mantine: 1.18.0
   postcss-simple-vars: 7.0.1
-  "@types/node": 25.1.0
+  "@types/node": 25.2.3
+  "@eslint/js": 9.39.2
   eslint: 9.39.2
   vitest: 4.0.18
   tsx: 4.21.0
   concurrently: 9.2.1
-  wrangler: 4.61.1
+  wrangler: 4.66.0
+  hono: 4.11.9

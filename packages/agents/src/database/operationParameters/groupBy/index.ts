@@ -3,6 +3,7 @@ import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { generateJoinGraph } from "../../utils/tableRelations";
 import type { Schema } from "@repo/types";
+import { NUMERIC_LOGICAL_TYPES, isActiveEnumColumn } from "@repo/types";
 import type { GroupByQuery } from "@repo/types";
 import {
   validateGroupByCandidate,
@@ -28,7 +29,7 @@ export interface DefineGroupByOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "groupBy";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;
@@ -60,13 +61,6 @@ export async function defineGroupByOperationParameters(
 
   const columnCatalog = new Map<string, ColumnMetadata>();
   const temporalTypes = new Set(["DateTime", "Date"]);
-  const numericTypes = new Set([
-    "number",
-    "integer",
-    "bigint",
-    "decimal",
-    "float",
-  ]);
 
   uniqueTableNames.forEach((tableName) => {
     const tableSchema = params.schema.find(
@@ -78,7 +72,7 @@ export async function defineGroupByOperationParameters(
       const columnType = column.effectiveType ?? column.type;
       columnCatalog.set(key, {
         isTemporal: temporalTypes.has(columnType),
-        isNumeric: numericTypes.has(columnType),
+        isNumeric: !isActiveEnumColumn(column.valueEnum) && NUMERIC_LOGICAL_TYPES.has(columnType),
       });
     });
     tableSchema.computedColumns.forEach(

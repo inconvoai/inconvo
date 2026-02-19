@@ -89,4 +89,19 @@ describe("query limit validation", () => {
       }),
     ).toThrow();
   });
+
+  test("rejects limit>500 for findDistinct", () => {
+    expect(() =>
+      QuerySchema.parse({
+        table: "users",
+        tableConditions: null,
+        whereAndArray: [],
+        operation: "findDistinct" as const,
+        operationParameters: {
+          column: "users.id",
+          limit: 501,
+        },
+      }),
+    ).toThrow();
+  });
 });

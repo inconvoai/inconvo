@@ -22,6 +22,7 @@ import {
   IconLink,
   IconRuler,
   IconFilter,
+  IconLock,
   IconCheck,
   IconEdit,
 } from "@tabler/icons-react";
@@ -40,8 +41,12 @@ import type {
   CreateManualRelationPayload,
   UpdateManualRelationPayload,
   UpsertContextFilterPayload,
+  UpsertTableAccessPolicyPayload,
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
+  ColumnValueEnumCreatePayload,
+  ColumnValueEnumEntryInput,
+  ColumnValueEnumUpdatePayload,
   UnitColumnPayload,
   ComputedColumnUnitPayload,
 } from "./types";
@@ -52,9 +57,11 @@ import { ColumnNotesForm } from "./ColumnNotesForm";
 import { ComputedColumnNotesForm } from "./ComputedColumnNotesForm";
 import { UnitsForm } from "./UnitsForm";
 import { ContextFilterForm } from "./ContextFilterForm";
+import { TableAccessPolicyForm } from "./TableAccessPolicyForm";
 import { ManualRelationForm } from "./ManualRelationForm";
 import { ComputedColumnForm } from "./ComputedColumnForm";
 import { ColumnConversionForm } from "./ColumnConversionForm";
+import { ColumnValueEnumForm } from "./ColumnValueEnumForm";
 
 export interface TableDetailProps {
   /** The table to display */
@@ -106,6 +113,12 @@ export interface TableDetailProps {
   ) => Promise<void>;
   /** Callback when a context filter is deleted */
   onDeleteContextFilter?: () => Promise<void>;
+  /** Callback when a table access policy is created/updated */
+  onUpsertTableAccessPolicy?: (
+    payload: UpsertTableAccessPolicyPayload,
+  ) => Promise<void>;
+  /** Callback when a table access policy is deleted */
+  onDeleteTableAccessPolicy?: () => Promise<void>;
   /** Callback when a column conversion is created */
   onCreateColumnConversion?: (
     columnId: string,
@@ -118,6 +131,22 @@ export interface TableDetailProps {
   ) => Promise<void>;
   /** Callback when a column conversion is deleted */
   onDeleteColumnConversion?: (columnId: string) => Promise<void>;
+  /** Callback when a column enum is created */
+  onCreateColumnValueEnum?: (
+    columnId: string,
+    payload: ColumnValueEnumCreatePayload,
+  ) => Promise<void>;
+  /** Callback when a column enum is updated */
+  onUpdateColumnValueEnum?: (
+    columnId: string,
+    payload: ColumnValueEnumUpdatePayload,
+  ) => Promise<void>;
+  /** Callback when a column enum is deleted */
+  onDeleteColumnValueEnum?: (columnId: string) => Promise<void>;
+  /** Callback to auto-generate enum entries from distinct values */
+  onAutoFillColumnValueEnum?: (
+    columnId: string,
+  ) => Promise<ColumnValueEnumEntryInput[]>;
   /** Callback when a column unit is added */
   onAddColumnUnit?: (payload: UnitColumnPayload) => Promise<void>;
   /** Callback when a computed column unit is updated */
@@ -132,9 +161,11 @@ type ModalState =
   | { type: "computedColumnNotes"; column: ComputedColumn }
   | { type: "units" }
   | { type: "contextFilter" }
+  | { type: "accessPolicy" }
   | { type: "manualRelation"; relation?: Relation }
   | { type: "computedColumn" }
-  | { type: "columnConversion"; column: Column };
+  | { type: "columnConversion"; column: Column }
+  | { type: "columnValueEnum"; column: Column };
 
 export function TableDetail({
   table,
@@ -154,9 +185,15 @@ export function TableDetail({
   onDeleteManualRelation,
   onUpsertContextFilter,
   onDeleteContextFilter,
+  onUpsertTableAccessPolicy,
+  onDeleteTableAccessPolicy,
   onCreateColumnConversion,
   onUpdateColumnConversion,
   onDeleteColumnConversion,
+  onCreateColumnValueEnum,
+  onUpdateColumnValueEnum,
+  onDeleteColumnValueEnum,
+  onAutoFillColumnValueEnum,
   onAddColumnUnit,
   onUpdateComputedColumnUnit,
 }: TableDetailProps) {
@@ -172,6 +209,11 @@ export function TableDetail({
       ? "Constraint active"
       : "Constraint inactive"
     : "Add constraint";
+  const accessPolicyLabel = table.accessPolicy
+    ? isContextEnabled
+      ? "Policy active"
+      : "Policy inactive"
+    : "Add policy";
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -235,12 +277,16 @@ export function TableDetail({
         return "Configure Units";
       case "contextFilter":
         return "Row-level access constraint";
+      case "accessPolicy":
+        return "Table access policy";
       case "manualRelation":
         return modalState.relation ? "Edit Relation" : "Add Relation";
       case "computedColumn":
         return "Add Computed Column";
       case "columnConversion":
         return `Configure Conversion - ${modalState.column.name}`;
+      case "columnValueEnum":
+        return `Configure Enum - ${modalState.column.name}`;
       default:
         return "";
     }
@@ -252,6 +298,7 @@ export function TableDetail({
         return "xl";
       case "manualRelation":
       case "columnConversion":
+      case "columnValueEnum":
         return "lg";
       default:
         return "md";
@@ -322,6 +369,18 @@ export function TableDetail({
             />
           )}
 
+          {table.accessPolicy && (
+            <Paper p="sm" withBorder radius="sm">
+              <Text size="sm">
+                Table access policy: Available when{" "}
+                <strong>
+                  userContext.{table.accessPolicy.userContextField.key}
+                </strong>{" "}
+                equals <strong>true</strong>.
+              </Text>
+            </Paper>
+          )}
+
           {/* Action Buttons */}
           <Paper p="sm" withBorder radius="sm">
             <Group justify="space-between" wrap="wrap" gap="md">
@@ -389,27 +448,46 @@ export function TableDetail({
                   Access Constraints
                 </Text>
                 <Stack gap={2}>
-                <Button
-                  variant={table.condition ? "filled" : "outline"}
-                  color="blue"
-                  size="xs"
-                  leftSection={<IconFilter size={14} />}
-                  rightSection={
-                    table.condition ? <IconCheck size={12} /> : undefined
-                  }
-                  onClick={() => {
-                    if (canEditAccessConstraints) {
-                      setModalState({ type: "contextFilter" });
-                    }
-                  }}
-                  disabled={!canEditAccessConstraints}
-                >
-                  {constraintLabel}
-                </Button>
-                {!isContextEnabled && (
-                  <Text size="xs" c="dimmed">
-                    Enable user context to apply or edit constraints.
-                  </Text>
+                  <Group gap="xs">
+                    <Button
+                      variant={table.condition ? "filled" : "outline"}
+                      color="blue"
+                      size="xs"
+                      leftSection={<IconFilter size={14} />}
+                      rightSection={
+                        table.condition ? <IconCheck size={12} /> : undefined
+                      }
+                      onClick={() => {
+                        if (canEditAccessConstraints) {
+                          setModalState({ type: "contextFilter" });
+                        }
+                      }}
+                      disabled={!canEditAccessConstraints}
+                    >
+                      {constraintLabel}
+                    </Button>
+                    <Button
+                      variant={table.accessPolicy ? "filled" : "outline"}
+                      color="blue"
+                      size="xs"
+                      leftSection={<IconLock size={14} />}
+                      rightSection={
+                        table.accessPolicy ? <IconCheck size={12} /> : undefined
+                      }
+                      onClick={() => {
+                        if (canEditAccessConstraints) {
+                          setModalState({ type: "accessPolicy" });
+                        }
+                      }}
+                      disabled={!canEditAccessConstraints}
+                    >
+                      {accessPolicyLabel}
+                    </Button>
+                  </Group>
+                  {!isContextEnabled && (
+                    <Text size="xs" c="dimmed">
+                      Enable user context to apply or edit access constraints.
+                    </Text>
                   )}
                 </Stack>
               </Group>
@@ -430,6 +508,9 @@ export function TableDetail({
             }
             onColumnConversionClick={(column) =>
               setModalState({ type: "columnConversion", column })
+            }
+            onColumnValueEnumClick={(column) =>
+              setModalState({ type: "columnValueEnum", column })
             }
             onComputedColumnSelectedChange={handleComputedColumnSelectedChange}
             onComputedColumnRename={handleComputedColumnRename}
@@ -521,6 +602,23 @@ export function TableDetail({
           />
         )}
 
+        {modalState.type === "accessPolicy" && (
+          <TableAccessPolicyForm
+            table={table}
+            userContextFields={userContextFields}
+            readOnly={readOnly || !isContextEnabled}
+            onClose={closeModal}
+            onSave={async (payload) => {
+              await onUpsertTableAccessPolicy?.(payload);
+              closeModal();
+            }}
+            onDelete={async () => {
+              await onDeleteTableAccessPolicy?.();
+              closeModal();
+            }}
+          />
+        )}
+
         {modalState.type === "manualRelation" && (
           <ManualRelationForm
             table={table}
@@ -564,6 +662,30 @@ export function TableDetail({
             onDelete={async () => {
               await onDeleteColumnConversion?.(modalState.column.id);
               closeModal();
+            }}
+          />
+        )}
+
+        {modalState.type === "columnValueEnum" && (
+          <ColumnValueEnumForm
+            column={modalState.column}
+            onClose={closeModal}
+            onCreate={async (payload) => {
+              await onCreateColumnValueEnum?.(modalState.column.id, payload);
+              closeModal();
+            }}
+            onUpdate={async (payload) => {
+              await onUpdateColumnValueEnum?.(modalState.column.id, payload);
+              closeModal();
+            }}
+            onDelete={async () => {
+              await onDeleteColumnValueEnum?.(modalState.column.id);
+              closeModal();
+            }}
+            onAutoFill={async () => {
+              return (
+                (await onAutoFillColumnValueEnum?.(modalState.column.id)) ?? []
+              );
             }}
           />
         )}

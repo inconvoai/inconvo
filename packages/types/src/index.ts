@@ -53,13 +53,14 @@ const relationSchema = z
     targetTable: z.string(),
     sourceColumns: z.array(z.string()).optional(),
     targetColumns: z.array(z.string()).optional(),
+    targetSchema: z.string().optional(),
   })
   .strict();
 
 const tableSchema = z
   .object({
     name: z.string(),
-    schema: z.string().optional(),  // Database schema name (e.g., 'public', 'sales')
+    schema: z.string().optional(), // Database schema name (e.g., 'public', 'sales')
     columns: z.array(columnSchema),
     relations: z.array(relationSchema).optional(),
   })
@@ -68,7 +69,7 @@ const tableSchema = z
 export const SchemaResponseSchema = z
   .object({
     tables: z.array(tableSchema),
-    databaseSchemas: z.array(z.string()).nullable().optional(),  // Schema(s) to include for the connection
+    databaseSchemas: z.array(z.string()).nullable().optional(), // Schema(s) to include for the connection
   })
   .strict();
 
@@ -79,8 +80,8 @@ export const InconvoOptionsSchema = z
     baseURL: z.string().url(),
     signingSecret: z.string(),
     augmentationsHash: z.string().optional(),
-    /** Connection ID for Lambda-based connectors. Required for shared Lambda, not needed for AppRunner. */
-    connectionId: z.string().optional(),
+    connectionId: z.string(),
+    connectionVersion: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -468,7 +469,7 @@ export type QuestionConditions = z.infer<typeof questionConditionsSchema>;
 
 const formattedTableConditionsSchema = z.record(
   z.string(), // column name
-  z.record(z.string(), z.union([z.string(), z.number()])), // operator and value
+  z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])), // operator and value
 );
 
 // The complete whereAndArray schema
@@ -480,7 +481,7 @@ export type WhereAndArray = z.infer<typeof whereAndArraySchema>;
 // Table condition schema for row-level security / tenant filtering
 const tableConditionSchema = z.object({
   column: z.string(),
-  value: z.union([z.string(), z.number()]),
+  value: z.union([z.string(), z.number(), z.boolean()]),
 });
 
 export const tableConditionsMapSchema = z
@@ -491,7 +492,7 @@ export type TableConditionsMap = z.infer<typeof tableConditionsMapSchema>;
 
 const baseSchema = {
   table: z.string(),
-  tableSchema: z.string().nullable().optional(),  // Database schema name (e.g., 'public', 'sales')
+  tableSchema: z.string().nullable().optional(), // Database schema name (e.g., 'public', 'sales')
   whereAndArray: whereAndArraySchema,
   tableConditions: tableConditionsMapSchema,
 };
@@ -562,6 +563,7 @@ const findDistinctSchema = z
     operationParameters: z
       .object({
         column: z.string(),
+        limit: z.number().int().positive().max(500).optional(),
       })
       .strict(),
   })
@@ -1004,7 +1006,7 @@ export type InconvoEvalRunExample = z.infer<typeof inconvoEvalRunExample>;
 
 export const inconvoUserContextSchema = z.record(
   z.string(),
-  z.union([z.string(), z.number()]),
+  z.union([z.string(), z.number(), z.boolean()]),
 );
 
 export type InconvoUserContext = z.infer<typeof inconvoUserContextSchema>;
@@ -1105,6 +1107,19 @@ export type SchemaColumnConversion = {
   selected: boolean;
 };
 
+export type SchemaColumnValueEnumEntry = {
+  value: string | number;
+  label: string;
+  selected: boolean;
+  position: number;
+};
+
+export type SchemaColumnValueEnum = {
+  id: string;
+  selected: boolean;
+  entries: SchemaColumnValueEnumEntry[];
+};
+
 export type SchemaColumn = {
   dbName: string;
   name: string;
@@ -1113,6 +1128,8 @@ export type SchemaColumn = {
   type: string;
   effectiveType: string;
   conversion: SchemaColumnConversion | null;
+  enumMode: "STATIC" | "DYNAMIC" | null;
+  valueEnum?: SchemaColumnValueEnum | null;
   unit: string | null;
   relation: ColumnRelationEntry[];
 };
@@ -1130,7 +1147,7 @@ export type SchemaRelation = {
   name: string;
   relationId: string | null;
   targetTable: { name: string };
-  targetSchema: string | null;  // For cross-schema relations
+  targetSchema: string | null; // For cross-schema relations
   isList: boolean;
   selected: boolean;
   source: RelationSource;
@@ -1142,7 +1159,7 @@ export type SchemaRelation = {
 
 export type SchemaTable = {
   name: string;
-  schema: string | null;  // Database schema name (e.g., 'public', 'sales')
+  schema: string | null; // Database schema name (e.g., 'public', 'sales')
   access: TableAccess;
   context: string | null;
   columns: SchemaColumn[];
@@ -1150,6 +1167,9 @@ export type SchemaTable = {
   outwardRelations: SchemaRelation[];
   condition: {
     column: { name: string };
+    userContextField: { key: string };
+  } | null;
+  accessPolicy: {
     userContextField: { key: string };
   } | null;
 };
@@ -1161,11 +1181,96 @@ export type Conversation = {
   id: string;
   title: string | null;
   userIdentifier: string;
-  userContext: Record<string, string | number> | null;
+  userContext: Record<string, string | number | boolean> | null;
 };
 
 // Database connector interface - implemented by platform's UserDatabaseConnector
 // and dev-server's direct connector
 export interface DatabaseConnector {
   query(query: Query): Promise<QueryResponse>;
+}
+
+// ============================================================================
+// Shared enum / column-type utilities
+// ============================================================================
+
+export const NUMERIC_LOGICAL_TYPES = new Set([
+  "number",
+  "integer",
+  "bigint",
+  "decimal",
+  "float",
+]);
+
+export function resolveEffectiveColumnType(
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): string {
+  if (conversion?.selected && conversion.type) {
+    return conversion.type;
+  }
+  return columnType;
+}
+
+export function isEffectivelyNumeric(
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): boolean {
+  const effectiveType = resolveEffectiveColumnType(columnType, conversion);
+  return NUMERIC_LOGICAL_TYPES.has(effectiveType);
+}
+
+export function isActiveEnumColumn(
+  valueEnum: SchemaColumnValueEnum | null | undefined,
+): valueEnum is SchemaColumnValueEnum {
+  if (!valueEnum || valueEnum.selected === false) {
+    return false;
+  }
+  return valueEnum.entries.some((entry) => entry.selected !== false);
+}
+
+export function normalizeColumnValueEnum(
+  valueEnum:
+    | { id: string; selected: boolean; entries: unknown }
+    | null
+    | undefined,
+): SchemaColumnValueEnum | null {
+  if (!valueEnum) {
+    return null;
+  }
+
+  // Handle SQLite (string) vs PostgreSQL (already-parsed JSON)
+  let raw: unknown = valueEnum.entries;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw) as unknown;
+    } catch {
+      console.warn(`[normalizeColumnValueEnum] Failed to parse entries JSON for enum ${valueEnum.id}`);
+      raw = [];
+    }
+  }
+
+  const entries: SchemaColumnValueEnumEntry[] = [];
+  if (!Array.isArray(raw)) {
+    console.warn(`[normalizeColumnValueEnum] Expected entries array for enum ${valueEnum.id}, got ${typeof raw}`);
+  } else {
+    raw.forEach((entry, index) => {
+      if (!entry || typeof entry !== "object") return;
+      const e = entry as Record<string, unknown>;
+      const value = e.value;
+      if (typeof value !== "string" && typeof value !== "number") return;
+      entries.push({
+        value,
+        label: typeof e.label === "string" ? e.label : String(value),
+        selected: e.selected !== false,
+        position: typeof e.position === "number" ? e.position : index,
+      });
+    });
+  }
+
+  return {
+    id: valueEnum.id,
+    selected: valueEnum.selected,
+    entries,
+  };
 }

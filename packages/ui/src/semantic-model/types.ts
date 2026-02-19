@@ -31,6 +31,28 @@ export interface ColumnConversion {
   selected: boolean;
 }
 
+export interface ColumnValueEnumEntry {
+  value: string | number;
+  label: string;
+  selected: boolean;
+  position: number;
+}
+
+export interface ColumnValueEnum {
+  id: string;
+  selected: boolean;
+  entries: ColumnValueEnumEntry[];
+}
+
+export interface ColumnValueEnumEntryInput {
+  value: string | number;
+  label: string;
+  selected?: boolean;
+  position?: number;
+}
+
+export type ColumnValueEnumMode = "STATIC" | "DYNAMIC";
+
 /**
  * Relation mapping info shown on a column (for display purposes)
  */
@@ -54,6 +76,8 @@ export interface Column {
   selected: boolean;
   unit: string | null;
   conversion: ColumnConversion | null;
+  enumMode: ColumnValueEnumMode | null;
+  valueEnum?: ColumnValueEnum | null;
   relation: ColumnRelationMapping[];
 }
 
@@ -125,6 +149,13 @@ export interface TableCondition {
   userContextField: { id: string; key: string };
 }
 
+/**
+ * Table-level access policy based on user context.
+ */
+export interface TableAccessPolicy {
+  userContextField: { id: string; key: string };
+}
+
 // =============================================================================
 // Table Types
 // =============================================================================
@@ -141,6 +172,7 @@ export interface TableSchema {
   computedColumns: ComputedColumn[];
   relations: Relation[];
   condition: TableCondition | null;
+  accessPolicy: TableAccessPolicy | null;
 }
 
 /**
@@ -155,6 +187,7 @@ export interface TableSummary {
   computedColumnCount: number;
   relationCount: number;
   hasCondition: boolean;
+  hasAccessPolicy: boolean;
 }
 
 // =============================================================================
@@ -167,7 +200,7 @@ export interface TableSummary {
 export interface UserContextField {
   id: string;
   key: string;
-  type: "STRING" | "NUMBER";
+  type: "STRING" | "NUMBER" | "BOOLEAN";
 }
 
 /**
@@ -246,6 +279,13 @@ export interface ContextFilterPayload {
 }
 
 /**
+ * Table access policy upsert payload.
+ */
+export interface TableAccessPolicyPayload {
+  userContextFieldId: string;
+}
+
+/**
  * Column unit payload (for regular columns)
  */
 export interface ColumnUnitPayload {
@@ -281,6 +321,34 @@ export interface ColumnConversionUpdatePayload {
 }
 
 /**
+ * Column value enum create payload
+ */
+export type ColumnValueEnumCreatePayload =
+  | {
+      mode: "STATIC";
+      entries: ColumnValueEnumEntryInput[];
+      selected?: boolean;
+    }
+  | {
+      mode: "DYNAMIC";
+      selected?: boolean;
+    };
+
+/**
+ * Column value enum update payload
+ */
+export type ColumnValueEnumUpdatePayload =
+  | {
+      mode: "STATIC";
+      entries?: ColumnValueEnumEntryInput[];
+      selected?: boolean;
+    }
+  | {
+      mode: "DYNAMIC";
+      selected?: boolean;
+    };
+
+/**
  * Table update payload
  */
 export interface UpdateTablePayload {
@@ -298,6 +366,5 @@ export type UpdateComputedColumnPayload = ComputedColumnUpdatePayload;
 export type CreateManualRelationPayload = ManualRelationCreatePayload;
 export type UpdateManualRelationPayload = ManualRelationUpdatePayload;
 export type UpsertContextFilterPayload = ContextFilterPayload;
-export type CreateColumnConversionPayload = ColumnConversionCreatePayload;
-export type UpdateColumnConversionPayload = ColumnConversionUpdatePayload;
+export type UpsertTableAccessPolicyPayload = TableAccessPolicyPayload;
 export type UnitColumnPayload = ColumnUnitPayload;

@@ -24,12 +24,16 @@ import type {
   TableSchema,
   TableAccess,
   Column,
+  ColumnValueEnumCreatePayload,
+  ColumnValueEnumEntryInput,
+  ColumnValueEnumUpdatePayload,
   ComputedColumn,
   Relation,
   UserContextField,
   TableWithColumns,
   FilterValue,
 } from "@repo/ui/semantic-model";
+import { normalizeColumnValueEnum } from "@repo/types";
 import posthog from "posthog-js";
 import { trackFeatureUsageClient } from "~/lib/telemetry";
 
@@ -55,6 +59,7 @@ interface ApiTableId {
   name: string;
   access: string;
   hasCondition: boolean;
+  hasAccessPolicy: boolean;
 }
 
 interface ApiColumn {
@@ -65,11 +70,17 @@ interface ApiColumn {
   type: string;
   selected: boolean;
   unit: string | null;
+  enumMode: "STATIC" | "DYNAMIC" | null;
   conversion: {
     id: string;
     ast: unknown;
     type: string | null;
     selected: boolean;
+  } | null;
+  valueEnum: {
+    id: string;
+    selected: boolean;
+    entries: unknown;
   } | null;
 }
 
@@ -113,17 +124,21 @@ interface ApiTableDetail {
     column: { id: string; name: string };
     userContextField: { id: string; key: string };
   } | null;
+  accessPolicy: {
+    userContextField: { id: string; key: string };
+  } | null;
 }
 
 // Transform API data to shared component types
 function transformColumn(api: ApiColumn): Column {
+  const valueEnum = normalizeColumnValueEnum(api.valueEnum);
   return {
     id: api.id,
     name: api.name,
     rename: api.rename,
     notes: api.notes,
     type: api.type,
-    effectiveType: api.conversion?.type ?? api.type,
+    effectiveType: api.conversion?.selected && api.conversion.type ? api.conversion.type : api.type,
     selected: api.selected,
     unit: api.unit,
     conversion: api.conversion
@@ -134,6 +149,8 @@ function transformColumn(api: ApiColumn): Column {
           selected: api.conversion.selected,
         }
       : null,
+    enumMode: api.enumMode ?? null,
+    valueEnum,
     relation: [], // Not needed for display
   };
 }
@@ -192,6 +209,14 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
           userContextField: {
             id: api.condition.userContextField.id,
             key: api.condition.userContextField.key,
+          },
+        }
+      : null,
+    accessPolicy: api.accessPolicy
+      ? {
+          userContextField: {
+            id: api.accessPolicy.userContextField.id,
+            key: api.accessPolicy.userContextField.key,
           },
         }
       : null,
@@ -312,6 +337,7 @@ function SchemaPageContent() {
         computedColumnCount: 0,
         relationCount: 0,
         hasCondition: table.hasCondition,
+        hasAccessPolicy: table.hasAccessPolicy,
       }));
 
       setTables(transformed);
@@ -339,7 +365,7 @@ function SchemaPageContent() {
         (data.fields ?? []).map((f) => ({
           id: f.id,
           key: f.key,
-          type: f.type as "STRING" | "NUMBER",
+          type: f.type as "STRING" | "NUMBER" | "BOOLEAN",
         })),
       );
       setUserContextStatus(data.status ?? "UNSET");
@@ -817,6 +843,57 @@ function SchemaPageContent() {
     [tables, fetchTableDetail],
   );
 
+  const onUpsertTableAccessPolicy = useCallback(
+    async (tableId: string, payload: { userContextFieldId: string }) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch("/api/schema/table-access-policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+          userContextFieldId: payload.userContextFieldId,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "table_access_policy_saved",
+      });
+
+      await fetchTables();
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail, fetchTables],
+  );
+
+  const onDeleteTableAccessPolicy = useCallback(
+    async (tableId: string) => {
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+
+      const res = await fetch("/api/schema/table-access-policies", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      trackFeatureUsageClient(posthog, "schema_editor", {
+        action: "table_access_policy_deleted",
+      });
+
+      await fetchTables();
+      await fetchTableDetail(table.name);
+    },
+    [tables, fetchTableDetail, fetchTables],
+  );
+
   // Column conversion callbacks
   const onCreateColumnConversion = useCallback(
     async (
@@ -824,10 +901,19 @@ function SchemaPageContent() {
       columnId: string,
       payload: { type: string; ast: unknown; selected: boolean },
     ) => {
-      const res = await fetch("/api/schema/conversions", {
+      const res = await fetch("/api/schema/augmentations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columnId, ...payload }),
+        body: JSON.stringify({
+          tableId,
+          columnId,
+          kind: "CONVERSION",
+          selected: payload.selected,
+          conversionConfig: {
+            type: payload.type,
+            ast: payload.ast,
+          },
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
@@ -847,20 +933,18 @@ function SchemaPageContent() {
       columnId: string,
       payload: { type: string; ast: unknown; selected: boolean },
     ) => {
-      // Find conversion ID from current state
-      const column = selectedTable?.columns.find((c) => c.id === columnId);
-      if (!column?.conversion?.id) {
-        throw new Error("Conversion not found");
-      }
-
-      const res = await fetch(
-        `/api/schema/conversions/${column.conversion.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "CONVERSION",
+          selected: payload.selected,
+          conversionConfig: {
+            type: payload.type,
+            ast: payload.ast,
+          },
+        }),
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
@@ -870,23 +954,14 @@ function SchemaPageContent() {
         await fetchTableDetail(table.name);
       }
     },
-    [selectedTable, tables, fetchTableDetail],
+    [tables, fetchTableDetail],
   );
 
   const onDeleteColumnConversion = useCallback(
     async (tableId: string, columnId: string) => {
-      // Find conversion ID from current state
-      const column = selectedTable?.columns.find((c) => c.id === columnId);
-      if (!column?.conversion?.id) {
-        throw new Error("Conversion not found");
-      }
-
-      const res = await fetch(
-        `/api/schema/conversions/${column.conversion.id}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "DELETE",
+      });
       const data = (await res.json()) as { error?: string };
       if (data.error) throw new Error(data.error);
 
@@ -900,7 +975,165 @@ function SchemaPageContent() {
         });
       }
     },
-    [selectedTable],
+    [selectedTable, setSelectedTable],
+  );
+
+  // Column enum callbacks
+  const onCreateColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: ColumnValueEnumCreatePayload,
+    ) => {
+      const createBody =
+        payload.mode === "DYNAMIC"
+          ? {
+              tableId,
+              columnId,
+              kind: "DYNAMIC_ENUM" as const,
+              selected: payload.selected ?? true,
+            }
+          : {
+              tableId,
+              columnId,
+              kind: "STATIC_ENUM" as const,
+              selected: payload.selected ?? true,
+              staticEnumConfig: {
+                entries: payload.entries,
+              },
+            };
+      const res = await fetch("/api/schema/augmentations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createBody),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onUpdateColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+      payload: ColumnValueEnumUpdatePayload,
+    ) => {
+      const currentColumn = selectedTable?.columns.find(
+        (column) => column.id === columnId,
+      );
+      const currentMode =
+        currentColumn?.enumMode === "DYNAMIC" ? "DYNAMIC" : "STATIC";
+
+      if (payload.mode !== currentMode) {
+        if (
+          payload.mode === "STATIC" &&
+          (!payload.entries || payload.entries.length === 0)
+        ) {
+          throw new Error("Static enum mode requires at least one entry.");
+        }
+
+        const createBody =
+          payload.mode === "DYNAMIC"
+            ? {
+                tableId,
+                columnId,
+                kind: "DYNAMIC_ENUM" as const,
+                selected: payload.selected ?? true,
+              }
+            : {
+                tableId,
+                columnId,
+                kind: "STATIC_ENUM" as const,
+                selected: payload.selected ?? true,
+                staticEnumConfig: {
+                  entries: payload.entries ?? [],
+                },
+              };
+
+        const createRes = await fetch("/api/schema/augmentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createBody),
+        });
+        const createData = (await createRes.json()) as { error?: string };
+        if (createData.error) throw new Error(createData.error);
+
+        const table = tables.find((t) => t.id === tableId);
+        if (table) {
+          await fetchTableDetail(table.name);
+        }
+        return;
+      }
+
+      const updateBody =
+        payload.mode === "DYNAMIC"
+          ? {
+              kind: "DYNAMIC_ENUM" as const,
+              selected: payload.selected,
+            }
+          : {
+              kind: "STATIC_ENUM" as const,
+              selected: payload.selected,
+              ...(payload.entries !== undefined
+                ? { staticEnumConfig: { entries: payload.entries } }
+                : {}),
+            };
+
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateBody),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [selectedTable, tables, fetchTableDetail],
+  );
+
+  const onDeleteColumnValueEnum = useCallback(
+    async (tableId: string, columnId: string) => {
+      const res = await fetch(`/api/schema/augmentations/${columnId}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) throw new Error(data.error);
+
+      const table = tables.find((t) => t.id === tableId);
+      if (table) {
+        await fetchTableDetail(table.name);
+      }
+    },
+    [tables, fetchTableDetail],
+  );
+
+  const onAutoFillColumnValueEnum = useCallback(
+    async (
+      tableId: string,
+      columnId: string,
+    ): Promise<ColumnValueEnumEntryInput[]> => {
+      const params = new URLSearchParams({ tableId, columnId });
+      const res = await fetch(
+        `/api/schema/augmentations?${params.toString()}`,
+      );
+      const data = (await res.json()) as {
+        error?: string;
+        entries?: ColumnValueEnumEntryInput[];
+      };
+      if (data.error) throw new Error(data.error);
+      return data.entries ?? [];
+    },
+    [],
   );
 
   // Handle search change (TableList handles debouncing, we just update URL)
@@ -1074,10 +1307,16 @@ function SchemaPageContent() {
           // Context filter callbacks
           onUpsertContextFilter={onUpsertContextFilter}
           onDeleteContextFilter={onDeleteContextFilter}
+          onUpsertTableAccessPolicy={onUpsertTableAccessPolicy}
+          onDeleteTableAccessPolicy={onDeleteTableAccessPolicy}
           // Column conversion callbacks
           onCreateColumnConversion={onCreateColumnConversion}
           onUpdateColumnConversion={onUpdateColumnConversion}
           onDeleteColumnConversion={onDeleteColumnConversion}
+          onCreateColumnValueEnum={onCreateColumnValueEnum}
+          onUpdateColumnValueEnum={onUpdateColumnValueEnum}
+          onDeleteColumnValueEnum={onDeleteColumnValueEnum}
+          onAutoFillColumnValueEnum={onAutoFillColumnValueEnum}
         />
       </Box>
     </Box>

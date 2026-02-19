@@ -17,8 +17,12 @@ import type {
   ManualRelationCreatePayload,
   ManualRelationUpdatePayload,
   ContextFilterPayload,
+  UpsertTableAccessPolicyPayload,
   ColumnConversionCreatePayload,
   ColumnConversionUpdatePayload,
+  ColumnValueEnumCreatePayload,
+  ColumnValueEnumEntryInput,
+  ColumnValueEnumUpdatePayload,
   ColumnUnitPayload,
   ComputedColumnUnitPayload,
 } from "./types";
@@ -129,6 +133,13 @@ export interface SemanticModelEditorProps {
   ) => Promise<void>;
   /** Callback when a context filter is deleted */
   onDeleteContextFilter?: (tableId: string) => Promise<void>;
+  /** Callback when a table access policy is created/updated */
+  onUpsertTableAccessPolicy?: (
+    tableId: string,
+    payload: UpsertTableAccessPolicyPayload,
+  ) => Promise<void>;
+  /** Callback when a table access policy is deleted */
+  onDeleteTableAccessPolicy?: (tableId: string) => Promise<void>;
   /** Callback when a column conversion is created */
   onCreateColumnConversion?: (
     tableId: string,
@@ -146,6 +157,28 @@ export interface SemanticModelEditorProps {
     tableId: string,
     columnId: string,
   ) => Promise<void>;
+  /** Callback when a column value enum is created */
+  onCreateColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnValueEnumCreatePayload,
+  ) => Promise<void>;
+  /** Callback when a column value enum is updated */
+  onUpdateColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+    payload: ColumnValueEnumUpdatePayload,
+  ) => Promise<void>;
+  /** Callback when a column value enum is deleted */
+  onDeleteColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+  ) => Promise<void>;
+  /** Callback to auto-generate enum entries from distinct values */
+  onAutoFillColumnValueEnum?: (
+    tableId: string,
+    columnId: string,
+  ) => Promise<ColumnValueEnumEntryInput[]>;
   /** Callback when a column unit is added */
   onAddColumnUnit?: (
     tableId: string,
@@ -193,9 +226,15 @@ export function SemanticModelEditor({
   onDeleteManualRelation,
   onUpsertContextFilter,
   onDeleteContextFilter,
+  onUpsertTableAccessPolicy,
+  onDeleteTableAccessPolicy,
   onCreateColumnConversion,
   onUpdateColumnConversion,
   onDeleteColumnConversion,
+  onCreateColumnValueEnum,
+  onUpdateColumnValueEnum,
+  onDeleteColumnValueEnum,
+  onAutoFillColumnValueEnum,
   onAddColumnUnit,
   onUpdateComputedColumnUnit,
 }: SemanticModelEditorProps) {
@@ -317,6 +356,21 @@ export function SemanticModelEditor({
     }
   }, [selectedTable, onDeleteContextFilter]);
 
+  const handleUpsertTableAccessPolicy = useCallback(
+    async (payload: UpsertTableAccessPolicyPayload) => {
+      if (selectedTable) {
+        await onUpsertTableAccessPolicy?.(selectedTable.id, payload);
+      }
+    },
+    [selectedTable, onUpsertTableAccessPolicy],
+  );
+
+  const handleDeleteTableAccessPolicy = useCallback(async () => {
+    if (selectedTable) {
+      await onDeleteTableAccessPolicy?.(selectedTable.id);
+    }
+  }, [selectedTable, onDeleteTableAccessPolicy]);
+
   const handleCreateColumnConversion = useCallback(
     async (columnId: string, payload: ColumnConversionCreatePayload) => {
       if (selectedTable) {
@@ -342,6 +396,43 @@ export function SemanticModelEditor({
       }
     },
     [selectedTable, onDeleteColumnConversion],
+  );
+
+  const handleCreateColumnValueEnum = useCallback(
+    async (columnId: string, payload: ColumnValueEnumCreatePayload) => {
+      if (selectedTable) {
+        await onCreateColumnValueEnum?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onCreateColumnValueEnum],
+  );
+
+  const handleUpdateColumnValueEnum = useCallback(
+    async (columnId: string, payload: ColumnValueEnumUpdatePayload) => {
+      if (selectedTable) {
+        await onUpdateColumnValueEnum?.(selectedTable.id, columnId, payload);
+      }
+    },
+    [selectedTable, onUpdateColumnValueEnum],
+  );
+
+  const handleDeleteColumnValueEnum = useCallback(
+    async (columnId: string) => {
+      if (selectedTable) {
+        await onDeleteColumnValueEnum?.(selectedTable.id, columnId);
+      }
+    },
+    [selectedTable, onDeleteColumnValueEnum],
+  );
+
+  const handleAutoFillColumnValueEnum = useCallback(
+    async (columnId: string) => {
+      if (!selectedTable || !onAutoFillColumnValueEnum) {
+        return [];
+      }
+      return await onAutoFillColumnValueEnum(selectedTable.id, columnId);
+    },
+    [selectedTable, onAutoFillColumnValueEnum],
   );
 
   const handleAddColumnUnit = useCallback(
@@ -428,9 +519,15 @@ export function SemanticModelEditor({
             onDeleteManualRelation={handleDeleteManualRelation}
             onUpsertContextFilter={handleUpsertContextFilter}
             onDeleteContextFilter={handleDeleteContextFilter}
+            onUpsertTableAccessPolicy={handleUpsertTableAccessPolicy}
+            onDeleteTableAccessPolicy={handleDeleteTableAccessPolicy}
             onCreateColumnConversion={handleCreateColumnConversion}
             onUpdateColumnConversion={handleUpdateColumnConversion}
             onDeleteColumnConversion={handleDeleteColumnConversion}
+            onCreateColumnValueEnum={handleCreateColumnValueEnum}
+            onUpdateColumnValueEnum={handleUpdateColumnValueEnum}
+            onDeleteColumnValueEnum={handleDeleteColumnValueEnum}
+            onAutoFillColumnValueEnum={handleAutoFillColumnValueEnum}
             onAddColumnUnit={handleAddColumnUnit}
             onUpdateComputedColumnUnit={handleUpdateComputedColumnUnit}
           />

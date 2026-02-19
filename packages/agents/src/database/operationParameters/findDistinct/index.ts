@@ -23,7 +23,7 @@ export interface DefineFindDistinctOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "findDistinct";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;

@@ -1,7 +1,17 @@
 import type { Schema } from "@repo/types";
-import { type SQLComputedColumnAst } from "@repo/types";
+import { type SQLComputedColumnAst, isActiveEnumColumn } from "@repo/types";
 
 type TableSchema = Schema[number];
+
+function buildEnumSummary(
+  valueEnum: TableSchema["columns"][number]["valueEnum"],
+) {
+  if (!isActiveEnumColumn(valueEnum)) {
+    return "";
+  }
+  const entries = valueEnum.entries.filter((entry) => entry.selected !== false);
+  return entries.map((entry) => entry.label).join(", ");
+}
 
 export function stringifyComputedColumnAst(
   columnAst: SQLComputedColumnAst,
@@ -59,7 +69,11 @@ export function buildTableSchemaStringFromTableSchema(
       const typeLabel = hasConversion
         ? `${column.effectiveType ?? column.type} (cast from ${column.type})`
         : (column.effectiveType ?? column.type);
-      return `\t\t- ${displayName} (${typeLabel}${unitSuffix})${notesSuffix}`;
+      const enumSummary = column.valueEnum
+        ? buildEnumSummary(column.valueEnum)
+        : "";
+      const enumSuffix = enumSummary ? ` - Allowed values: ${enumSummary}` : "";
+      return `\t\t- ${displayName} (${typeLabel}${unitSuffix})${notesSuffix}${enumSuffix}`;
     })
     .join("\n")
     .replace(/^/, `\tColumns:\n`);

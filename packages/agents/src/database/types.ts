@@ -18,6 +18,6 @@ export interface DBQuery {
   whereAndArray?: WhereAndArray;
   tableConditions: Record<
     string,
-    { column: string; value: string | number }
+    { column: string; value: string | number | boolean }
   > | null;
 }

@@ -1,4 +1,4 @@
-FROM docker.io/cloudflare/sandbox:0.7.0-python
+FROM docker.io/cloudflare/sandbox:0.7.4-python
 
 # On a Mac with Apple Silicon, you might need to specify the platform:
 # FROM --platform=linux/arm64 docker.io/cloudflare/sandbox:0.4.3

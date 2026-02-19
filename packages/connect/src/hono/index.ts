@@ -102,6 +102,24 @@ export interface LambdaDeps {
   clearAllCaches?: (connectionId: string) => void;
 
   /**
+   * Optional: Invalidate caches when the connection version increases.
+   */
+  invalidateCacheIfStale?: (
+    connectionId: string,
+    requestVersion: number,
+  ) => Promise<void> | void;
+
+  /**
+   * Optional: Validate augmentations hash parity before executing queries.
+   * If the expected hash is missing, no validation should occur.
+   * If validation fails, this should throw to block the request.
+   */
+  validateAugmentationsHash?: (
+    connectionId: string,
+    expectedHash?: string,
+  ) => Promise<void>;
+
+  /**
    * Optional: Version string to return from GET /version.
    * If not provided, returns "unknown".
    */
@@ -183,6 +201,19 @@ export function createApp(deps: LambdaDeps) {
     await next();
   });
 
+  // Invalidate caches when the connection version increases
+  app.use("/*", async (c, next) => {
+    if (deps.invalidateCacheIfStale) {
+      const connectionId = c.get("connectionId");
+      const versionHeader = c.req.header("inconvo-connection-version");
+      const requestVersion = versionHeader ? Number(versionHeader) : NaN;
+      if (Number.isFinite(requestVersion)) {
+        await deps.invalidateCacheIfStale(connectionId, requestVersion);
+      }
+    }
+    await next();
+  });
+
   // Database health check - requires auth (needs connection ID to know which DB)
   app.get("/healthz/db", async (c) => {
     const connectionId = c.get("connectionId");
@@ -241,7 +272,10 @@ export function createApp(deps: LambdaDeps) {
         tableCount: sanitizedTables.length,
       });
 
-      return c.json({ tables: sanitizedTables });
+      return c.json({
+        tables: sanitizedTables,
+        databaseSchemas: schema.databaseSchemas,
+      });
     } catch (error) {
       logger.error("Failed to fetch schema", error);
       return c.json({ error: "Failed to fetch schema" }, 500);
@@ -341,6 +375,22 @@ export function createApp(deps: LambdaDeps) {
     const startTime = Date.now();
 
     try {
+      if (deps.validateAugmentationsHash) {
+        const expectedHash = c.req.header("inconvo-augmentations-hash") ?? undefined;
+        try {
+          await deps.validateAugmentationsHash(connectionId, expectedHash);
+        } catch (error) {
+          logger.error("Augmentations sync failed", error);
+          return c.json(
+            {
+              error: "Augmentations sync failed",
+              details: error instanceof Error ? error.message : String(error),
+            },
+            503,
+          );
+        }
+      }
+
       const parsedQuery = QuerySchema.parse(body);
       const { operation } = parsedQuery;
 
@@ -432,3 +482,6 @@ export type {
   IntrospectionDialect,
   IntrospectionLogger,
 } from "../util/buildSchemaFromDb";
+
+// Utility export for Lambda hash parity checks.
+export { computeAugmentationsHash } from "../util/schemaAugmentationStore";

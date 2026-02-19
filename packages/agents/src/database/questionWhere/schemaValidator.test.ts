@@ -26,6 +26,8 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
   const toOneRel = table.outwardRelations.find((r) => r.isList === false);
   const toManyRel = table.outwardRelations.find((r) => r.isList === true);
 
+  const cloneSchema = () => JSON.parse(JSON.stringify(fullSchema)) as typeof fullSchema;
+
   test("null (no filters) is valid", () => {
     const result = validateQuestionConditions(null, table, fullSchema, tableName);
     expect(result.success).toBe(true);
@@ -84,6 +86,134 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
       };
       const result = validateQuestionConditions(candidate, table, fullSchema, tableName);
       expect(result.success).toBe(true);
+    });
+  }
+
+  if (numberCol) {
+    test("numeric enum resolves label to canonical numeric value", () => {
+      const enumSchema = cloneSchema();
+      const enumTable = enumSchema.find((t) => t.name === tableName);
+      expect(enumTable).toBeTruthy();
+      if (!enumTable) return;
+
+      const targetColumn = enumTable.columns.find((c) => c.name === numberCol.name);
+      expect(targetColumn).toBeTruthy();
+      if (!targetColumn) return;
+
+      (targetColumn as { valueEnum?: unknown }).valueEnum = {
+        id: "enum_status",
+        selected: true,
+        entries: [
+          { value: 0, label: "Plan Used", selected: true, position: 0 },
+          { value: 1, label: "Joined", selected: true, position: 1 },
+        ],
+      };
+
+      const candidate = {
+        AND: [
+          {
+            [qualify(numberCol.name)]: { equals: "Joined" },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, enumTable, enumSchema, tableName);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(
+          (result.data as { AND: Array<Record<string, { equals: number }>> }).AND[0]?.[
+            qualify(numberCol.name)
+          ]?.equals,
+        ).toBe(1);
+      }
+    });
+
+    test("numeric enum rejects range operators", () => {
+      const enumSchema = cloneSchema();
+      const enumTable = enumSchema.find((t) => t.name === tableName);
+      expect(enumTable).toBeTruthy();
+      if (!enumTable) return;
+
+      const targetColumn = enumTable.columns.find((c) => c.name === numberCol.name);
+      expect(targetColumn).toBeTruthy();
+      if (!targetColumn) return;
+
+      (targetColumn as { valueEnum?: unknown }).valueEnum = {
+        id: "enum_status",
+        selected: true,
+        entries: [
+          { value: 0, label: "Plan Used", selected: true, position: 0 },
+          { value: 1, label: "Joined", selected: true, position: 1 },
+        ],
+      };
+
+      const candidate = {
+        AND: [
+          {
+            [qualify(numberCol.name)]: { gt: 0 },
+          },
+        ],
+      };
+      const result = validateQuestionConditions(candidate, enumTable, enumSchema, tableName);
+      expect(result.success).toBe(false);
+    });
+  }
+
+  if (stringCol) {
+    test("string enum resolves label to canonical value and rejects unknown labels", () => {
+      const enumSchema = cloneSchema();
+      const enumTable = enumSchema.find((t) => t.name === tableName);
+      expect(enumTable).toBeTruthy();
+      if (!enumTable) return;
+
+      const targetColumn = enumTable.columns.find((c) => c.name === stringCol.name);
+      expect(targetColumn).toBeTruthy();
+      if (!targetColumn) return;
+
+      (targetColumn as { valueEnum?: unknown }).valueEnum = {
+        id: "enum_string",
+        selected: true,
+        entries: [
+          { value: "alpha", label: "Alpha Friendly", selected: true, position: 0 },
+          { value: "beta", label: "Beta Friendly", selected: true, position: 1 },
+        ],
+      };
+
+      const allowedCandidate = {
+        AND: [
+          {
+            [qualify(stringCol.name)]: { equals: "Alpha Friendly" },
+          },
+        ],
+      };
+      const deniedCandidate = {
+        AND: [
+          {
+            [qualify(stringCol.name)]: { equals: "Gamma Friendly" },
+          },
+        ],
+      };
+
+      const allowedResult = validateQuestionConditions(
+        allowedCandidate,
+        enumTable,
+        enumSchema,
+        tableName,
+      );
+      const deniedResult = validateQuestionConditions(
+        deniedCandidate,
+        enumTable,
+        enumSchema,
+        tableName,
+      );
+
+      expect(allowedResult.success).toBe(true);
+      if (allowedResult.success) {
+        expect(
+          (allowedResult.data as { AND: Array<Record<string, { equals: string }>> })
+            .AND[0]?.[qualify(stringCol.name)]?.equals,
+        ).toBe("alpha");
+      }
+      expect(deniedResult.success).toBe(false);
     });
   }
 

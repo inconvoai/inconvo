@@ -53,7 +53,7 @@ function toContextFields(apiFields: ApiUserContextField[]): ContextField[] {
   return apiFields.map((f) => ({
     id: f.id,
     key: f.key,
-    type: f.type as "STRING" | "NUMBER",
+    type: f.type as "STRING" | "NUMBER" | "BOOLEAN",
     tableConditions: f.tableConditions.map((tc) => ({
       id: tc.id,
       tableName: tc.table.name,
@@ -161,7 +161,7 @@ export default function UserContextPage() {
 
   const handleAddField = async (field: {
     key: string;
-    type: "STRING" | "NUMBER";
+    type: "STRING" | "NUMBER" | "BOOLEAN";
   }) => {
     setAddFieldLoading(true);
     try {

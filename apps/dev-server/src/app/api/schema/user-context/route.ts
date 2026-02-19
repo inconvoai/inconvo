@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["STRING", "NUMBER"].includes(type)) {
+    if (!["STRING", "NUMBER", "BOOLEAN"].includes(type)) {
       return NextResponse.json(
-        { error: "type must be STRING or NUMBER" },
+        { error: "type must be STRING, NUMBER, or BOOLEAN" },
         { status: 400 },
       );
     }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { generateJoinGraph } from "../../utils/tableRelations";
 import type { Schema } from "@repo/types";
+import { NUMERIC_LOGICAL_TYPES, isActiveEnumColumn } from "@repo/types";
 import type { AggregateGroupsQuery } from "@repo/types";
 import {
   validateAggregateGroupsCandidate,
@@ -28,7 +29,7 @@ export interface DefineAggregateGroupsOperationParametersParams {
   question: string;
   tableSchema: Schema[number];
   operation: "aggregateGroups";
-  userContext: Record<string, string | number>;
+  userContext: Record<string, string | number | boolean>;
   agentId: string | number;
   userIdentifier: string;
   provider: AIProvider;
@@ -60,7 +61,6 @@ export async function defineAggregateGroupsOperationParameters(
 
   const columnCatalog = new Map<string, ColumnMetadata>();
   const temporalTypes = new Set(["DateTime", "Date"]);
-  const numericTypes = new Set(["number"]);
 
   uniqueTableNames.forEach((tableName) => {
     const tableSchema = params.schema.find(
@@ -69,9 +69,10 @@ export async function defineAggregateGroupsOperationParameters(
     if (!tableSchema) return;
     tableSchema.columns.forEach((column: Schema[number]["columns"][number]) => {
       const key = `${tableName}.${column.name}`;
+      const columnType = column.effectiveType ?? column.type;
       columnCatalog.set(key, {
-        isTemporal: temporalTypes.has(column.type),
-        isNumeric: numericTypes.has(column.type),
+        isTemporal: temporalTypes.has(columnType),
+        isNumeric: !isActiveEnumColumn(column.valueEnum) && NUMERIC_LOGICAL_TYPES.has(columnType),
       });
     });
     tableSchema.computedColumns.forEach(

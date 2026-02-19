@@ -6,38 +6,52 @@ import type {
   SQLCastExpressionAst,
   SQLComputedColumnAst,
 } from "@repo/types";
-
-// Matches the internal ColumnRelationEntry type in @repo/types
-type ColumnRelationEntry = {
-  relation: {
-    targetTable: { name: string | null };
-  };
-  targetColumn: { name: string | null };
-};
+import {
+  accessPolicyWhereClause,
+  buildColumnProjectionFromAugmentation,
+  extractOrderedRelationColumns,
+  mapColumnRelationEntries,
+  mapSchemaAccessPolicy,
+  mapSchemaCondition,
+  pruneRelationsToExcludedTables,
+  resolveDynamicEnumsForSchema,
+  type DynamicEnumCache,
+} from "@repo/schema-utils";
 import type { SchemaResponse } from "@repo/connect";
 import {
   writeUnifiedAugmentation,
   computeAugmentationsHash,
 } from "@repo/connect";
+import type { Prisma } from "../../prisma/generated/client/client";
 import { prisma } from "./prisma";
+import { getConnector } from "./connector";
 
-/**
- * Resolve effective column type considering conversion.
- * Matches platform's resolveEffectiveColumnType.
- */
-function resolveEffectiveColumnType(
-  columnType: string,
-  conversion?: { selected?: boolean | null; type?: string | null } | null,
-): string {
-  if (conversion?.selected && conversion.type) {
-    return conversion.type;
-  }
-  return columnType;
-}
+const columnAugmentationProjectionSelect = {
+  id: true,
+  kind: true,
+  selected: true,
+  conversionConfig: {
+    select: {
+      ast: true,
+      type: true,
+    },
+  },
+  staticEnumConfig: {
+    select: {
+      entries: true,
+    },
+  },
+  dynamicEnumConfig: {
+    select: {
+      id: true,
+    },
+  },
+} satisfies Prisma.ColumnAugmentationSelect;
+
+const dynamicEnumCache: DynamicEnumCache = new Map();
 
 /**
  * Get the database schema for the agent.
- * Queries from Prisma SQLite with filtering - matches platform's getSchema.
  *
  * Filtering behavior (matches platform):
  * - Only includes tables not marked as OFF
@@ -47,14 +61,29 @@ function resolveEffectiveColumnType(
  */
 export async function getSchema(params?: {
   includeConditions?: boolean;
+  applyAccessPolicies?: boolean;
+  userContext?: Record<string, string | number | boolean> | null;
+  resolveDynamicEnums?: boolean;
 }): Promise<Schema> {
   const includeConditions = params?.includeConditions ?? true;
+  const userContext = params?.userContext ?? null;
+  const applyAccessPolicies = params?.applyAccessPolicies ?? false;
+  const resolveDynamicEnums = params?.resolveDynamicEnums ?? false;
+  const policyWhere = applyAccessPolicies
+    ? accessPolicyWhereClause(userContext)
+    : undefined;
+
   const tables = await prisma.table.findMany({
     where: {
       access: { not: "OFF" },
-      OR: [
-        { columns: { some: { selected: true } } },
-        { outwardRelations: { some: { selected: true } } },
+      AND: [
+        {
+          OR: [
+            { columns: { some: { selected: true } } },
+            { outwardRelations: { some: { selected: true } } },
+          ],
+        },
+        ...(policyWhere ? [policyWhere] : []),
       ],
     },
     select: {
@@ -69,13 +98,8 @@ export async function getSchema(params?: {
           notes: true,
           type: true,
           unit: true,
-          conversion: {
-            select: {
-              id: true,
-              ast: true,
-              type: true,
-              selected: true,
-            },
+          augmentation: {
+            select: columnAugmentationProjectionSelect,
           },
           // Get FK mappings where this column is the source
           sourceRelationMappings: {
@@ -146,6 +170,11 @@ export async function getSchema(params?: {
           userContextField: { select: { key: true } },
         },
       },
+      accessPolicy: {
+        select: {
+          userContextField: { select: { key: true } },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -154,22 +183,25 @@ export async function getSchema(params?: {
   const schema: Schema = tables.map((table) => {
     // Format columns with relation mappings
     const columns: SchemaColumn[] = table.columns.map((column) => {
-      // Build relation array from source relation mappings
-      const relation: ColumnRelationEntry[] = (
-        column.sourceRelationMappings ?? []
-      ).map((mapping) => ({
-        relation: {
-          targetTable: {
-            name: mapping.relation?.targetTable?.name ?? null,
+      const relation = mapColumnRelationEntries(
+        column.sourceRelationMappings ?? [],
+      );
+      const augmentation = column.augmentation;
+      const { conversion, enumMode, valueEnum, effectiveType } =
+        buildColumnProjectionFromAugmentation({
+          columnType: column.type,
+          augmentation,
+          parseConversionAst: (ast) => {
+            if (typeof ast !== "string") {
+              return ast;
+            }
+            try {
+              return JSON.parse(ast) as SQLCastExpressionAst;
+            } catch {
+              return ast;
+            }
           },
-        },
-        targetColumn: {
-          name: mapping.targetColumn?.name ?? mapping.targetColumnName ?? null,
-        },
-      }));
-
-      const conversion = column.conversion;
-      const effectiveType = resolveEffectiveColumnType(column.type, conversion);
+        });
 
       return {
         name: column.rename ?? column.name,
@@ -178,14 +210,9 @@ export async function getSchema(params?: {
         notes: column.notes ?? null,
         type: column.type,
         effectiveType,
-        conversion: conversion
-          ? {
-              id: conversion.id,
-              ast: JSON.parse(conversion.ast) as SQLCastExpressionAst,
-              type: conversion.type ?? null,
-              selected: conversion.selected,
-            }
-          : null,
+        conversion,
+        enumMode,
+        valueEnum,
         unit: column.unit ?? null,
         relation,
       };
@@ -207,19 +234,9 @@ export async function getSchema(params?: {
     const outwardRelations: SchemaRelation[] = (
       table.outwardRelations ?? []
     ).map((relation) => {
-      const mappings = [...(relation.columnMappings ?? [])].sort(
-        (a, b) => a.position - b.position,
+      const { sourceColumns, targetColumns } = extractOrderedRelationColumns(
+        relation.columnMappings ?? [],
       );
-      const sourceColumns = mappings
-        .map((m) => m.sourceColumn?.name ?? m.sourceColumnName)
-        .filter((name): name is string =>
-          Boolean(name && name.trim().length > 0),
-        );
-      const targetColumns = mappings
-        .map((m) => m.targetColumn?.name ?? m.targetColumnName)
-        .filter((name): name is string =>
-          Boolean(name && name.trim().length > 0),
-        );
 
       return {
         name: relation.name,
@@ -244,19 +261,33 @@ export async function getSchema(params?: {
       columns,
       computedColumns,
       outwardRelations,
-      condition:
-        includeConditions && table.condition
-          ? {
-              column: { name: table.condition.column.name },
-              userContextField: {
-                key: table.condition.userContextField.key,
-              },
-            }
-          : null,
+      condition: mapSchemaCondition({
+        includeCondition: includeConditions,
+        condition: table.condition,
+      }),
+      accessPolicy: mapSchemaAccessPolicy(table.accessPolicy),
     };
   });
 
-  return schema;
+  const resolvedSchema = resolveDynamicEnums
+    ? await resolveDynamicEnumsForSchema({
+        schema,
+        connector: getConnector(),
+        userContext: userContext ?? {},
+        connectionId: "default",
+        cache: dynamicEnumCache,
+        onError: ({ tableName, columnName, error }) => {
+          console.warn(
+            `[resolveDynamicEnumsForSchema] Failed to resolve dynamic enum for ${tableName}.${columnName}`,
+            error,
+          );
+        },
+      })
+    : schema;
+
+  return applyAccessPolicies
+    ? pruneRelationsToExcludedTables(resolvedSchema)
+    : resolvedSchema;
 }
 
 /**
@@ -557,6 +588,7 @@ export async function getTablesOverview() {
         },
       },
       condition: true,
+      accessPolicy: true,
     },
     orderBy: { name: "asc" },
   });
@@ -569,6 +601,7 @@ export async function getTablesOverview() {
     configured: true,
     access: table.access,
     hasCondition: !!table.condition,
+    hasAccessPolicy: !!table.accessPolicy,
     computedColumnCount: table._count.computedColumns,
   }));
 }
@@ -608,6 +641,11 @@ export async function getTableIds(params: {
           id: true,
         },
       },
+      accessPolicy: {
+        select: {
+          id: true,
+        },
+      },
     },
     orderBy: { name: "asc" },
     skip: pagination ? (pagination.page - 1) * pagination.perPage : undefined,
@@ -619,6 +657,7 @@ export async function getTableIds(params: {
     name: table.name,
     access: table.access,
     hasCondition: !!table.condition,
+    hasAccessPolicy: !!table.accessPolicy,
   }));
 }
 
@@ -677,9 +716,17 @@ export async function syncAugmentationsToFile(): Promise<void> {
     },
   });
 
-  // Fetch column conversions
-  const columnConversions = await prisma.columnConversion.findMany({
-    include: {
+  // Fetch column conversions from augmentations
+  const columnConversions = await prisma.columnAugmentation.findMany({
+    where: { kind: "CONVERSION" },
+    select: {
+      selected: true,
+      conversionConfig: {
+        select: {
+          ast: true,
+          type: true,
+        },
+      },
       column: { select: { name: true } },
       table: { select: { name: true } },
     },
@@ -708,13 +755,24 @@ export async function syncAugmentationsToFile(): Promise<void> {
     selected: cc.selected,
   }));
 
-  const columnConversionsPayload = columnConversions.map((conv) => ({
-    column: conv.column.name,
-    table: conv.table.name,
-    ast: JSON.parse(conv.ast) as SQLCastExpressionAst,
-    type: conv.type ?? undefined,
-    selected: conv.selected,
-  }));
+  const columnConversionsPayload = columnConversions
+    .map((conv) => {
+      if (!conv.conversionConfig) {
+        return null;
+      }
+      try {
+        return {
+          column: conv.column.name,
+          table: conv.table.name,
+          ast: JSON.parse(conv.conversionConfig.ast) as SQLCastExpressionAst,
+          type: conv.conversionConfig.type ?? undefined,
+          selected: conv.selected,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const payload = {
     relations,

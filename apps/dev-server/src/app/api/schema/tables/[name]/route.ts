@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "~/lib/prisma";
+import { syncAugmentationsToFile } from "~/lib/schema";
 
 interface RouteParams {
   params: Promise<{ name: string }>;
@@ -134,6 +135,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     };
     const { access, context } = body;
 
+    const currentTable = await prisma.table.findUnique({
+      where: { name },
+      select: { access: true },
+    });
+
+    if (!currentTable) {
+      return NextResponse.json({ error: "Table not found" }, { status: 404 });
+    }
+
     const table = await prisma.table.update({
       where: { name },
       data: {
@@ -141,6 +151,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(context !== undefined && { context }),
       },
     });
+
+    const accessCrossedOffBoundary =
+      access !== undefined && (currentTable.access === "OFF") !== (table.access === "OFF");
+    if (accessCrossedOffBoundary) {
+      await syncAugmentationsToFile();
+    }
 
     return NextResponse.json({ table });
   } catch (error) {

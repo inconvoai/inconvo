@@ -3,6 +3,9 @@ import type { SQLCastExpressionAst, SQLComputedColumnAst } from "./querySchema";
 export interface SchemaColumn {
   name: string;
   type: string;
+  // Optional semantic-model metadata applied from augmentations
+  dbName?: string;
+  semanticName?: string;
   nullable?: boolean;
   isUnique?: boolean;
   isPrimaryKey?: boolean;
@@ -42,6 +45,11 @@ export interface SchemaTable {
   name: string;
   schema?: string;
   columns: SchemaColumn[];
+  // Internal rename maps used for semantic-to-db resolution at query time
+  columnRenameMap?: {
+    semanticToDb: Record<string, string>;
+    dbToSemantic: Record<string, string>;
+  };
   relations?: SchemaRelation[];
   computedColumns?: SchemaComputedColumn[];
   columnConversions?: SchemaColumnConversion[];

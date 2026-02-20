@@ -732,6 +732,20 @@ export async function syncAugmentationsToFile(): Promise<void> {
     },
   });
 
+  const columnRenames = await prisma.column.findMany({
+    where: {
+      selected: true,
+      rename: { not: null },
+      table: { access: { not: "OFF" } },
+    },
+    select: {
+      name: true,
+      rename: true,
+      table: { select: { name: true } },
+    },
+    orderBy: [{ table: { name: "asc" } }, { name: "asc" }],
+  });
+
   // Transform to unified augmentation format
   const relations = manualRelations.map((rel) => ({
     name: rel.name,
@@ -774,10 +788,19 @@ export async function syncAugmentationsToFile(): Promise<void> {
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
+  const columnRenamesPayload = columnRenames
+    .filter((column) => Boolean(column.rename?.trim()))
+    .map((column) => ({
+      table: column.table.name,
+      dbName: column.name,
+      semanticName: column.rename!.trim(),
+    }));
+
   const payload = {
     relations,
     computedColumns: computedColumnsPayload,
     columnConversions: columnConversionsPayload,
+    columnRenames: columnRenamesPayload,
   };
 
   // Compute hash and write to file
@@ -789,5 +812,6 @@ export async function syncAugmentationsToFile(): Promise<void> {
     relations,
     computedColumns: computedColumnsPayload,
     columnConversions: columnConversionsPayload,
+    columnRenames: columnRenamesPayload,
   });
 }

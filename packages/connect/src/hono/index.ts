@@ -148,11 +148,14 @@ function sanitizeSchema(tables: SchemaTable[]) {
       schema: _tableSchema,
       computedColumns: _computedColumns,
       columnConversions: _columnConversions,
+      columnRenameMap: _columnRenameMap,
       ...table
     }) => ({
       ...table,
       columns: table.columns.map(
         ({
+          dbName: _dbName,
+          semanticName: _semanticName,
           isStructField: _isStructField,
           structParent: _structParent,
           structFieldPath: _structFieldPath,
@@ -327,6 +330,7 @@ export function createApp(deps: LambdaDeps) {
         relations: payload.relations?.length ?? 0,
         computedColumns: payload.computedColumns?.length ?? 0,
         columnConversions: payload.columnConversions?.length ?? 0,
+        columnRenames: payload.columnRenames?.length ?? 0,
       });
 
       await deps.writeAugmentations(connectionId, {

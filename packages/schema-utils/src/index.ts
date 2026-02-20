@@ -112,6 +112,22 @@ export type RelationColumnMappingInput = {
   targetColumnName: string | null;
 };
 
+export type ColumnRenameConflict = {
+  type: "column" | "computedColumn";
+  name: string;
+};
+
+type ColumnRenameConflictColumnInput = {
+  id: string;
+  name: string;
+  rename?: string | null;
+};
+
+type ColumnRenameConflictComputedColumnInput = {
+  name: string;
+  selected?: boolean | null;
+};
+
 export function extractOrderedRelationColumns(
   mappings: RelationColumnMappingInput[],
 ): { sourceColumns: string[]; targetColumns: string[] } {
@@ -127,6 +143,50 @@ export function extractOrderedRelationColumns(
       Boolean(name && name.trim().length > 0),
     );
   return { sourceColumns, targetColumns };
+}
+
+/**
+ * Finds whether a column rename would collide with an existing column name/effective
+ * name or computed column name in the same table.
+ */
+export function findColumnRenameConflict(params: {
+  currentColumnId: string;
+  nextEffectiveName: string;
+  tableColumns: ColumnRenameConflictColumnInput[];
+  computedColumns?: ColumnRenameConflictComputedColumnInput[] | null;
+}): ColumnRenameConflict | null {
+  const normalizedNextName = params.nextEffectiveName.trim();
+  if (!normalizedNextName) {
+    return null;
+  }
+
+  const columnConflict = params.tableColumns.find((column) => {
+    if (column.id === params.currentColumnId) {
+      return false;
+    }
+    const effectiveName = (column.rename ?? column.name).trim();
+    return effectiveName === normalizedNextName || column.name === normalizedNextName;
+  });
+  if (columnConflict) {
+    return {
+      type: "column",
+      name: columnConflict.name,
+    };
+  }
+
+  const computedColumnConflict = (params.computedColumns ?? []).find(
+    (computedColumn) =>
+      computedColumn.selected !== false &&
+      computedColumn.name.trim() === normalizedNextName,
+  );
+  if (computedColumnConflict) {
+    return {
+      type: "computedColumn",
+      name: computedColumnConflict.name,
+    };
+  }
+
+  return null;
 }
 
 export function mapSchemaCondition(params: {

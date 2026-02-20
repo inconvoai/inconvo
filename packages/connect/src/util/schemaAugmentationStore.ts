@@ -41,6 +41,18 @@ function normalizeObject(obj: unknown): unknown {
   return sorted;
 }
 
+function getStringKey(item: unknown, key: string): string {
+  if (!item || typeof item !== "object") {
+    return "";
+  }
+  const value = (item as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function buildSortKey(item: unknown, primary: string, secondary: string): string {
+  return `${getStringKey(item, primary)}.${getStringKey(item, secondary)}`;
+}
+
 /**
  * Compute a deterministic SHA-256 hash of augmentations.
  * Arrays are sorted by deterministic keys for consistent hashing.
@@ -50,23 +62,35 @@ export function computeAugmentationsHash(payload: {
   relations: unknown[];
   computedColumns: unknown[];
   columnConversions: unknown[];
+  columnRenames: unknown[];
 }): string {
   const sorted = {
     relations: [...payload.relations]
-      .sort((a: any, b: any) =>
-        `${a.sourceTable}.${a.name}`.localeCompare(
-          `${b.sourceTable}.${b.name}`,
+      .sort((a, b) =>
+        buildSortKey(a, "sourceTable", "name").localeCompare(
+          buildSortKey(b, "sourceTable", "name"),
         ),
       )
       .map(normalizeObject),
     computedColumns: [...payload.computedColumns]
-      .sort((a: any, b: any) =>
-        `${a.table}.${a.name}`.localeCompare(`${b.table}.${b.name}`),
+      .sort((a, b) =>
+        buildSortKey(a, "table", "name").localeCompare(
+          buildSortKey(b, "table", "name"),
+        ),
       )
       .map(normalizeObject),
     columnConversions: [...payload.columnConversions]
-      .sort((a: any, b: any) =>
-        `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`),
+      .sort((a, b) =>
+        buildSortKey(a, "table", "column").localeCompare(
+          buildSortKey(b, "table", "column"),
+        ),
+      )
+      .map(normalizeObject),
+    columnRenames: [...payload.columnRenames]
+      .sort((a, b) =>
+        buildSortKey(a, "table", "dbName").localeCompare(
+          buildSortKey(b, "table", "dbName"),
+        ),
       )
       .map(normalizeObject),
   };
@@ -96,6 +120,7 @@ export async function readUnifiedAugmentation(): Promise<UnifiedAugmentation> {
     relations: [],
     computedColumns: [],
     columnConversions: [],
+    columnRenames: [],
   };
 
   try {

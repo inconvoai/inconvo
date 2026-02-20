@@ -17,6 +17,7 @@ type RelationNameRegistry = Map<string, Map<string, number>>;
 function cloneTables(base: SchemaResponse): SchemaTable[] {
   return base.tables.map((table) => ({
     ...table,
+    columns: table.columns.map((column) => ({ ...column })),
     relations: table.relations ? [...table.relations] : [],
     computedColumns: table.computedColumns
       ? [...table.computedColumns]
@@ -159,6 +160,16 @@ function deriveSimpleTypeFromCast(
   }
 }
 
+function getOrCreateColumnRenameMap(table: SchemaTable): NonNullable<SchemaTable["columnRenameMap"]> {
+  if (!table.columnRenameMap) {
+    table.columnRenameMap = {
+      semanticToDb: {},
+      dbToSemantic: {},
+    };
+  }
+  return table.columnRenameMap;
+}
+
 export async function buildAugmentedSchema(): Promise<SchemaResponse> {
   const [baseSchema, augmentations] = await Promise.all([
     getCachedSchema(),
@@ -168,6 +179,84 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
   const tables = cloneTables(baseSchema);
   const tableMap = new Map(tables.map((table) => [table.name, table]));
   const relationRegistry = initRelationRegistry(tables);
+
+  for (const rename of augmentations.columnRenames ?? []) {
+    const targetTable = tableMap.get(rename.table);
+    if (!targetTable) {
+      logger.warn(
+        { table: rename.table, dbName: rename.dbName, semanticName: rename.semanticName },
+        "Augmented schema - column rename references unknown table",
+      );
+      continue;
+    }
+
+    const targetColumn = targetTable.columns.find(
+      (column) => column.name === rename.dbName,
+    );
+    if (!targetColumn) {
+      logger.warn(
+        { table: rename.table, dbName: rename.dbName, semanticName: rename.semanticName },
+        "Augmented schema - column rename references unknown column",
+      );
+      continue;
+    }
+
+    const renameMap = getOrCreateColumnRenameMap(targetTable);
+    const semanticConflict = renameMap.semanticToDb[rename.semanticName];
+    if (semanticConflict && semanticConflict !== rename.dbName) {
+      logger.warn(
+        {
+          table: rename.table,
+          semanticName: rename.semanticName,
+          dbName: rename.dbName,
+          conflictingDbName: semanticConflict,
+        },
+        "Augmented schema - duplicate semantic rename in table",
+      );
+      continue;
+    }
+    const dbConflict = renameMap.dbToSemantic[rename.dbName];
+    if (dbConflict && dbConflict !== rename.semanticName) {
+      logger.warn(
+        {
+          table: rename.table,
+          dbName: rename.dbName,
+          semanticName: rename.semanticName,
+          conflictingSemanticName: dbConflict,
+        },
+        "Augmented schema - duplicate db rename mapping in table",
+      );
+      continue;
+    }
+
+    const physicalNameConflict = targetTable.columns.some(
+      (column) =>
+        column.name === rename.semanticName && column.name !== rename.dbName,
+    );
+    if (physicalNameConflict) {
+      logger.warn(
+        { table: rename.table, semanticName: rename.semanticName, dbName: rename.dbName },
+        "Augmented schema - semantic rename conflicts with physical column name",
+      );
+      continue;
+    }
+
+    const computedNameConflict = targetTable.computedColumns?.some(
+      (computedColumn) => computedColumn.name === rename.semanticName,
+    );
+    if (computedNameConflict) {
+      logger.warn(
+        { table: rename.table, semanticName: rename.semanticName, dbName: rename.dbName },
+        "Augmented schema - semantic rename conflicts with computed column name",
+      );
+      continue;
+    }
+
+    renameMap.semanticToDb[rename.semanticName] = rename.dbName;
+    renameMap.dbToSemantic[rename.dbName] = rename.semanticName;
+    targetColumn.dbName = rename.dbName;
+    targetColumn.semanticName = rename.semanticName;
+  }
 
   for (const relation of augmentations.relations ?? []) {
     if (relation.selected === false) {

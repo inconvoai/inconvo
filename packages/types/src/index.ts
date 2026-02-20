@@ -394,6 +394,16 @@ export type ColumnConversionSyncItem = z.infer<
   typeof columnConversionSyncItemSchema
 >;
 
+export const columnRenameSyncItemSchema = z
+  .object({
+    table: z.string(),
+    dbName: z.string(),
+    semanticName: z.string(),
+  })
+  .strict();
+
+export type ColumnRenameSyncItem = z.infer<typeof columnRenameSyncItemSchema>;
+
 export const columnConversionsSyncSchema = z
   .object({
     updatedAt: z.string().datetime().optional(),
@@ -403,6 +413,15 @@ export const columnConversionsSyncSchema = z
 
 export type ColumnConversionsSync = z.infer<typeof columnConversionsSyncSchema>;
 
+export const columnRenamesSyncSchema = z
+  .object({
+    updatedAt: z.string().datetime().optional(),
+    columnRenames: z.array(columnRenameSyncItemSchema),
+  })
+  .strict();
+
+export type ColumnRenamesSync = z.infer<typeof columnRenamesSyncSchema>;
+
 // Unified augmentations schema - combines all three augmentation types
 export const unifiedAugmentationsSyncSchema = z
   .object({
@@ -411,6 +430,7 @@ export const unifiedAugmentationsSyncSchema = z
     relations: z.array(manualRelationSyncSchemaItem),
     computedColumns: z.array(computedColumnSyncItemSchema),
     columnConversions: z.array(columnConversionSyncItemSchema),
+    columnRenames: z.array(columnRenameSyncItemSchema).optional().default([]),
   })
   .strict();
 

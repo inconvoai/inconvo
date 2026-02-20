@@ -99,12 +99,15 @@ export async function inconvo(): Promise<Router> {
         ({
           computedColumns: _computedColumns,
           columnConversions: _columnConversions,
+          columnRenameMap: _columnRenameMap,
           ...table
         }) => ({
           ...table,
           // Strip internal STRUCT metadata from columns (BigQuery-specific)
           columns: table.columns.map(
             ({
+              dbName: _dbName,
+              semanticName: _semanticName,
               isStructField: _isStructField,
               structParent: _structParent,
               structFieldPath: _structFieldPath,
@@ -135,6 +138,15 @@ export async function inconvo(): Promise<Router> {
   router.post("/sync/augmentations", async (req: Request, res: Response) => {
     try {
       const payload = unifiedAugmentationSchema.parse(req.body);
+      logger.info(
+        {
+          relations: payload.relations.length,
+          computedColumns: payload.computedColumns.length,
+          columnConversions: payload.columnConversions.length,
+          columnRenames: payload.columnRenames.length,
+        },
+        "POST /sync/augmentations - syncing payload",
+      );
       await writeUnifiedAugmentation({
         ...payload,
         updatedAt: payload.updatedAt ?? new Date().toISOString(),

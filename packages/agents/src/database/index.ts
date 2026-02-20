@@ -26,12 +26,6 @@ import { generateJoinGraph } from "./utils/tableRelations";
 import { extractJoinedTableNames } from "./utils/extractJoinedTableNames";
 import { whereConditionDocsSummary } from "./utils/whereDocs";
 import { buildPromptCacheKey } from "../utils/promptCacheKey";
-import {
-  buildColumnLookup,
-  canonicalizeQueryColumnReferences,
-  canonicalizeQuestionConditions,
-} from "./utils/queryCanonicalization";
-import type { ColumnAliasMap } from "./utils/queryCanonicalization";
 
 interface RequestParams {
   userQuestion: string;
@@ -150,10 +144,6 @@ export async function databaseRetrieverAgent(params: RequestParams) {
       warning?: string;
     }>({
       reducer: (x, y) => y,
-    }),
-    columnAliasMap: Annotation<ColumnAliasMap>({
-      reducer: (x, y) => y,
-      default: () => ({}) as ColumnAliasMap,
     }),
     error: Annotation<Record<string, unknown>>({
       reducer: (x, y) => y,
@@ -380,33 +370,11 @@ export async function databaseRetrieverAgent(params: RequestParams) {
   const buildQuery = async (state: typeof DatabaseAgentState.State) => {
     const query: DBQuery = {
       table: state.tableName,
-      tableSchema: state.tableSchema.schema ?? null,  // Include schema from selected table
+      tableSchema: state.tableSchema.schema ?? null, // Include schema from selected table
       operation: state.operation,
       operationParameters: state.operationParams,
       tableConditions: null, // Set below after building tableConditionsMap
     };
-
-    const columnLookup = buildColumnLookup(state.schema);
-    // Tracker passed by ref and updated in the canonicalization functions
-    const columnAliasTracker: ColumnAliasMap = {};
-
-    // Canonicalize context conditions (convert semantic column names to db names)
-    const canonicalizedContextConditions: ContextCondition[] =
-      state.contextConditions.map((c) => {
-        const canonicalColumn =
-          columnLookup.get(c.table)?.get(c.column) ?? c.column;
-        return {
-          ...c,
-          column: canonicalColumn,
-        };
-      });
-    const canonicalizedQuestionConditions = canonicalizeQuestionConditions(
-      state.questionConditions,
-      state.tableName,
-      state.schema,
-      columnLookup,
-      columnAliasTracker,
-    );
 
     // Build tableConditions map for all relevant tables (for relation subquery filtering)
     const { uniqueTableNames } = generateJoinGraph(
@@ -422,34 +390,16 @@ export async function databaseRetrieverAgent(params: RequestParams) {
 
     // Build whereAndArray from context conditions and question conditions
     const whereAndArray = generatePrismaWhereArray(
-      canonicalizedContextConditions,
-      canonicalizedQuestionConditions,
+      state.contextConditions,
+      state.questionConditions,
     );
 
     query.whereAndArray = whereAndArraySchema.parse(whereAndArray);
     query.tableConditions = tableConditionsMap ?? null;
 
-    const queryWithConditions = query;
+    const parsedQuery = querySchema.parse(query);
 
-    const queryUsingDbNames = canonicalizeQueryColumnReferences(
-      queryWithConditions,
-      state.tableName,
-      columnLookup,
-      columnAliasTracker,
-    );
-
-    const parsedQuery = querySchema.parse(queryUsingDbNames);
-
-    const columnAliasMap = Object.entries(
-      columnAliasTracker,
-    ).reduce<ColumnAliasMap>((acc, [table, entries]) => {
-      if (entries.length > 0) {
-        acc[table] = entries;
-      }
-      return acc;
-    }, {});
-
-    return { query: parsedQuery, columnAliasMap };
+    return { query: parsedQuery };
   };
 
   const executeQuery = async (state: typeof DatabaseAgentState.State) => {

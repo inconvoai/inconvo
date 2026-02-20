@@ -7,6 +7,25 @@ import type {
 import type { SchemaResponse } from "../../types/types";
 import type { DatabaseDialect } from "../types";
 
+function resolveColumnNameInTable(
+  table: SchemaResponse["tables"][number],
+  requestedColumnName: string,
+): string {
+  // Fast path: direct DB column name exists.
+  if (table.columns.some((column) => column.name === requestedColumnName)) {
+    return requestedColumnName;
+  }
+
+  // Semantic rename map takes precedence for renamed columns.
+  const mappedDbName = table.columnRenameMap?.semanticToDb[requestedColumnName];
+  if (mappedDbName) {
+    return mappedDbName;
+  }
+
+  // Keep legacy behavior for unknown columns - downstream validation will fail naturally.
+  return requestedColumnName;
+}
+
 export function getColumnFromTable({
   columnName,
   tableName,
@@ -25,6 +44,8 @@ export function getColumnFromTable({
     throw new Error(`Table not found in schema: ${tableName}`);
   }
 
+  const resolvedColumnName = resolveColumnNameInTable(table, columnName);
+
   // Use tableAlias for SQL references if provided, otherwise use tableName
   const sqlTableRef = tableAlias ?? tableName;
 
@@ -40,18 +61,19 @@ export function getColumnFromTable({
       schema,
       dialect,
       false,
+      tableName,
     );
   }
 
   const columnConversion = table.columnConversions?.find(
-    (conversion) => conversion.column === columnName,
+    (conversion) => conversion.column === resolvedColumnName,
   );
 
   if (columnConversion) {
     return generateColumnConversionAsSQL(columnConversion.ast, sqlTableRef, dialect);
   }
 
-  return buildColumnReference(sqlTableRef, columnName, dialect);
+  return buildColumnReference(sqlTableRef, resolvedColumnName, dialect);
 }
 
 function buildColumnReference(
@@ -116,32 +138,42 @@ function generateColumnConversionAsSQL(
 
 function generateComputedColumnAsSQL(
   ast: SQLComputedColumnAst,
-  tableName: string,
+  tableSqlRef: string,
   schema: SchemaResponse,
   dialect: DatabaseDialect,
   numericRequired: boolean,
+  schemaTableName?: string,
 ): RawBuilder<unknown> {
   switch (ast.type) {
     case "column": {
       // If a conversion exists, use it; otherwise enforce numeric when required
-      const table = schema.tables.find((t) => t.name === tableName);
+      const table = schemaTableName
+        ? schema.tables.find((t) => t.name === schemaTableName)
+        : undefined;
+      const resolvedColumnName = table
+        ? resolveColumnNameInTable(table, ast.name)
+        : ast.name;
       const conversion = table?.columnConversions?.find(
-        (c) => c.column === ast.name,
+        (c) => c.column === resolvedColumnName,
       );
       if (conversion) {
-        return generateColumnConversionAsSQL(conversion.ast, tableName, dialect);
+        return generateColumnConversionAsSQL(
+          conversion.ast,
+          tableSqlRef,
+          dialect,
+        );
       }
       if (numericRequired) {
         const columnType = table?.columns.find(
-          (col) => col.name === ast.name,
+          (col) => col.name === resolvedColumnName,
         )?.type;
         if (columnType && columnType.toLowerCase() !== "number") {
           throw new Error(
-            `Computed column requires numeric input but '${ast.name}' is type '${columnType}' without a conversion`,
+            `Computed column requires numeric input but '${resolvedColumnName}' is type '${columnType}' without a conversion`,
           );
         }
       }
-      return sql`${sql.ref(tableName)}.${sql.ref(ast.name)}`;
+      return buildColumnReference(tableSqlRef, resolvedColumnName, dialect);
     }
 
     case "value":
@@ -151,17 +183,25 @@ function generateComputedColumnAsSQL(
       const [arg] = ast.arguments;
       const compiledArg = generateComputedColumnAsSQL(
         arg,
-        tableName,
+        tableSqlRef,
         schema,
         dialect,
         true,
+        schemaTableName,
       );
       return sql`${sql.raw(ast.name)}(${compiledArg})`;
     }
 
     case "operation": {
       const operands = ast.operands.map((operand) =>
-        generateComputedColumnAsSQL(operand, tableName, schema, dialect, true),
+        generateComputedColumnAsSQL(
+          operand,
+          tableSqlRef,
+          schema,
+          dialect,
+          true,
+          schemaTableName,
+        ),
       );
 
       switch (ast.operator) {
@@ -183,10 +223,11 @@ function generateComputedColumnAsSQL(
     case "brackets": {
       const inner = generateComputedColumnAsSQL(
         ast.expression,
-        tableName,
+        tableSqlRef,
         schema,
         dialect,
         numericRequired,
+        schemaTableName,
       );
       return sql`(${inner})`;
     }

@@ -73,6 +73,14 @@ export type ColumnConversionsAugmentation = z.infer<
   typeof columnConversionsAugmentationSchema
 >;
 
+export const columnRenameAugmentationItemSchema = z
+  .object({
+    table: z.string(),
+    dbName: z.string(),
+    semanticName: z.string(),
+  })
+  .strict();
+
 // Unified augmentation schema - combines all three augmentation types
 // Hash is optional for storage (legacy data may not have it)
 export const unifiedAugmentationSchema = z
@@ -82,6 +90,7 @@ export const unifiedAugmentationSchema = z
     relations: z.array(manualRelationSchema),
     computedColumns: z.array(computedColumnAugmentationItemSchema),
     columnConversions: z.array(columnConversionAugmentationItemSchema),
+    columnRenames: z.array(columnRenameAugmentationItemSchema).optional().default([]),
   })
   .strict();
 

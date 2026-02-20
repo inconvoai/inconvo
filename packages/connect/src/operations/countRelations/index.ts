@@ -108,9 +108,12 @@ export async function countRelations(
     }
 
     const countExpression = distinctColumnQualified
-      ? sql`COUNT(DISTINCT ${sql.ref(
-          `${distinctColumnQualified.tableName}.${distinctColumnQualified.columnName}`,
-        )})`
+      ? sql`COUNT(DISTINCT ${getColumnFromTable({
+          columnName: distinctColumnQualified.columnName,
+          tableName: distinctColumnQualified.tableName,
+          schema,
+          dialect,
+        })})`
       : sql`COUNT(${sql.ref(
           `${targetTableName}.${targetColumns[0]!.columnName}`,
         )})`;

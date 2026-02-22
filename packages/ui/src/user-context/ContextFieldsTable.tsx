@@ -96,7 +96,21 @@ export function ContextFieldsTable({
             {fields.map((field) => (
               <Table.Tr key={field.id}>
                 <Table.Td>
-                  <Text fw={500}>{field.key}</Text>
+                  <div>
+                    <Group gap="xs">
+                      <Text fw={500}>{field.key}</Text>
+                      {field.inherited && (
+                        <Badge size="xs" color="grape" variant="light">
+                          Inherited
+                        </Badge>
+                      )}
+                    </Group>
+                    {field.sourceLabel && (
+                      <Text size="xs" c="dimmed">
+                        {field.sourceLabel}
+                      </Text>
+                    )}
+                  </div>
                 </Table.Td>
                 <Table.Td>
                   <Badge size="sm" variant="light">
@@ -119,14 +133,20 @@ export function ContextFieldsTable({
                   )}
                 </Table.Td>
                 <Table.Td>
-                  <ActionIcon
-                    color="red"
-                    variant="subtle"
-                    onClick={() => handleDelete(field)}
-                    loading={deletingFieldId === field.id}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
+                  {field.canDelete === false ? (
+                    <Text size="xs" c="dimmed">
+                      Owner-managed
+                    </Text>
+                  ) : (
+                    <ActionIcon
+                      color="red"
+                      variant="subtle"
+                      onClick={() => handleDelete(field)}
+                      loading={deletingFieldId === field.id}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  )}
                 </Table.Td>
               </Table.Tr>
             ))}

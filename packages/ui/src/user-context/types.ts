@@ -14,6 +14,9 @@ export interface ContextField {
   key: string;
   type: "STRING" | "NUMBER" | "BOOLEAN";
   tableConditions?: TableConditionRef[];
+  inherited?: boolean;
+  canDelete?: boolean;
+  sourceLabel?: string;
 }
 
 export interface TableCondition {

@@ -8,6 +8,7 @@ import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import { resolveJoinDescriptor } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
+import { resolveBaseSource, resolveJoinTargetSource } from "../utils/logicalTableSource";
 
 interface JoinInfo {
   tableName: string;
@@ -56,8 +57,16 @@ export async function findMany(
   const joinEdges: JoinEdge[] = [];
   const usedSqlAliases = new Set<string>([table]);
   const hopToSqlAlias = new Map<string, string>();
-  const baseTableId = getTableIdentifier(table, query.tableSchema, dialect);
-  const baseAlias = dialect === "bigquery" ? table : baseTableId;
+  const { source: baseSource, isVirtual: isBaseVirtual } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  const baseTableId = isBaseVirtual
+    ? table
+    : getTableIdentifier(table, query.tableSchema, dialect);
+  const baseAlias = isBaseVirtual ? table : dialect === "bigquery" ? table : baseTableId;
 
   const allocateSqlAlias = (tableName: string) => {
     if (!usedSqlAliases.has(tableName)) {
@@ -149,8 +158,7 @@ export async function findMany(
   }
 
   // Build query with schema-qualified table name
-  const tableId = baseTableId;
-  let dbQuery: any = db.selectFrom(tableId);
+  let dbQuery: any = db.selectFrom(baseSource as any);
 
   // Add JOINs - use SQL alias when joining same table multiple times
   // Track which SQL aliases we've already created JOINs for to avoid duplicates
@@ -159,17 +167,12 @@ export async function findMany(
     if (createdJoins.has(joinEdge.targetAlias)) continue;
     createdJoins.add(joinEdge.targetAlias);
 
-    const joinedTable = schema.tables.find((t) => t.name === joinEdge.targetTable);
-    const joinedTableId = getTableIdentifier(
-      joinEdge.targetTable,
-      joinedTable?.schema,
+    const joinTarget = resolveJoinTargetSource({
+      tableName: joinEdge.targetTable,
+      sqlAlias: joinEdge.targetAlias,
+      schema,
       dialect,
-    );
-
-    const joinTarget =
-      joinEdge.targetAlias !== joinEdge.targetTable
-        ? `${joinedTableId} as ${joinEdge.targetAlias}`
-        : joinedTableId;
+    }).source;
 
     dbQuery = dbQuery.leftJoin(joinTarget, (join: any) =>
       join.onRef(

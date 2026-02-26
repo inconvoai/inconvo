@@ -195,6 +195,7 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
   return {
     id: api.id,
     name: api.name,
+    source: "PHYSICAL",
     access: api.access as TableAccess,
     context: api.context,
     columns: api.columns.map(transformColumn),
@@ -331,6 +332,7 @@ function SchemaPageContent() {
       const transformed: TableSummary[] = (data.tables ?? []).map((table) => ({
         id: table.id,
         name: table.name,
+        source: "PHYSICAL" as const,
         access: table.access as TableAccess,
         columnCount: 0,
         selectedColumnCount: 0,

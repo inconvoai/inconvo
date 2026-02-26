@@ -12,7 +12,7 @@ import {
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
+import { resolveBaseSource } from "../utils/logicalTableSource";
 import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
 import { buildDateComponentExpressions } from "../utils/buildDateComponentExpression";
 import assert from "assert";
@@ -37,8 +37,13 @@ export async function groupBy(
   const having = operationParameters.having ?? null;
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
-  let dbQuery = dbForQuery.selectFrom(tableId);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  let dbQuery = dbForQuery.selectFrom(baseSource as any);
 
   // Handle joins if specified - deduplicate hops to avoid duplicate table joins
   if (joins && joins.length > 0) {

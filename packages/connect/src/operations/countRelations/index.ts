@@ -3,7 +3,6 @@ import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
 import assert from "assert";
 import {
   normaliseJoinHop,
@@ -11,6 +10,10 @@ import {
 } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
+import {
+  resolveBaseSource,
+  resolveJoinTargetSource,
+} from "../utils/logicalTableSource";
 
 type RelationCountPlan = {
   cteName: string;
@@ -97,7 +100,14 @@ export async function countRelations(
       );
     }
 
-    let cte = db.selectFrom(targetTableName);
+    const { source: targetSource } = resolveJoinTargetSource({
+      tableName: targetTableName,
+      sqlAlias: targetTableName,
+      schema,
+      dialect,
+    });
+
+    let cte = db.selectFrom(targetSource as any);
 
     for (const column of targetColumns) {
       cte = cte.select(
@@ -142,9 +152,13 @@ export async function countRelations(
     builder = builder.with(plan.cteName, () => plan.cteQuery);
   }
 
-  // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
-  let selectBuilder = builder.selectFrom(tableId);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  let selectBuilder = builder.selectFrom(baseSource as any);
 
   const baseSelections: any[] = [];
   for (const column of columns ?? []) {

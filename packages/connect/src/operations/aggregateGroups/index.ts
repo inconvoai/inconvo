@@ -4,7 +4,7 @@ import type { Expression, SqlBool } from "kysely";
 import type { Query } from "../../types/querySchema";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
+import { resolveBaseSource } from "../utils/logicalTableSource";
 import { createAggregationFields } from "../utils/createAggregationFields";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { buildDateIntervalExpression } from "../utils/buildDateIntervalExpression";
@@ -203,8 +203,13 @@ export async function aggregateGroups(
   }
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
-  let groupQuery = dbForQuery.selectFrom(tableId);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  let groupQuery = dbForQuery.selectFrom(baseSource as any);
 
   // Handle joins if specified - deduplicate hops to avoid duplicate table joins
   if (joins && joins.length > 0) {

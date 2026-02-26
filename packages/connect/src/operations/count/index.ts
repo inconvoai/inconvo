@@ -4,7 +4,7 @@ import type { OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
+import { resolveBaseSource } from "../utils/logicalTableSource";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -27,8 +27,13 @@ export async function count(
   const dbForQuery = getSchemaBoundDb(db, schema, dialect);
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
-  let dbQuery = dbForQuery.selectFrom(tableId);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  let dbQuery = dbForQuery.selectFrom(baseSource as any);
 
   const resolvedJoins =
     (joins ?? []).map((join) =>

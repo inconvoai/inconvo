@@ -16,6 +16,7 @@ import {
   Loader,
   Select,
   rem,
+  Button,
 } from "@mantine/core";
 import {
   IconSearch,
@@ -27,6 +28,7 @@ import {
   IconLockOpen,
   IconAlertCircle,
   IconDatabase,
+  IconPlus,
 } from "@tabler/icons-react";
 import { useDebouncedCallback } from "@mantine/hooks";
 import type { TableSummary, TableAccess, UserContextStatus } from "./types";
@@ -74,6 +76,10 @@ export interface TableListProps {
   onConnectionChange?: (connectionId: string | null) => void;
   /** User context status for access constraints */
   userContextStatus?: UserContextStatus;
+  /** Callback to create a new virtual table */
+  onCreateVirtualTable?: () => void;
+  /** Disable virtual table creation button */
+  disableCreateVirtualTable?: boolean;
 }
 
 function getAccessColor(access: TableAccess): string {
@@ -120,6 +126,8 @@ export function TableList({
   selectedConnectionId,
   onConnectionChange,
   userContextStatus = "UNSET",
+  onCreateVirtualTable,
+  disableCreateVirtualTable = false,
 }: TableListProps) {
   // Internal state for uncontrolled mode
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
@@ -329,6 +337,11 @@ export function TableList({
                       >
                         {table.name}
                       </Text>
+                      {table.source === "VIRTUAL" && (
+                        <Badge size="xs" variant="light" color="violet">
+                          Virtual
+                        </Badge>
+                      )}
                       {userContextStatus === "ENABLED" ? (
                         <Box
                           title={
@@ -397,6 +410,19 @@ export function TableList({
             onChange={onPageChange}
           />
         </Center>
+      )}
+
+      {onCreateVirtualTable && (
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<IconPlus size={12} />}
+          onClick={onCreateVirtualTable}
+          disabled={disableCreateVirtualTable}
+          color="dimmed"
+        >
+          New Virtual Table
+        </Button>
       )}
     </Stack>
   );

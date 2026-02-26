@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { sql, type Kysely } from "kysely";
 import { ZodError } from "zod";
-import { SchemaResponseSchema } from "@repo/types";
+import {
+  SchemaResponseSchema,
+  validateVirtualTableRequestSchema,
+  validateVirtualTableResponseSchema,
+} from "@repo/types";
 import { createHmacMiddleware } from "./middleware/hmac";
 import { QuerySchema } from "../types/querySchema";
 import { aggregate } from "../operations/aggregate";
@@ -16,6 +20,7 @@ import { unifiedAugmentationSchema } from "../types/customSchema";
 import type { SchemaTable, SchemaResponse } from "../types/types";
 import type { DatabaseDialect, OperationContext } from "../operations/types";
 import { QueryExecutionError } from "../util/queryErrors";
+import { validateVirtualTableCore } from "../util/validateVirtualTableCore";
 
 /**
  * Logger interface for structured logging.
@@ -149,6 +154,7 @@ function sanitizeSchema(tables: SchemaTable[]) {
       computedColumns: _computedColumns,
       columnConversions: _columnConversions,
       columnRenameMap: _columnRenameMap,
+      virtualTable: _virtualTable,
       ...table
     }) => ({
       ...table,
@@ -368,6 +374,76 @@ export function createApp(deps: LambdaDeps) {
     } catch (error) {
       logger.error("Failed to clear caches", error);
       return c.json({ error: "Failed to clear caches" }, 500);
+    }
+  });
+
+  // Validate/probe SQL virtual table definition
+  app.post("/validate/virtual-table", async (c) => {
+    const connectionId = c.get("connectionId");
+    const logger = c.get("logger");
+    const body = c.get("parsedBody");
+    const startTime = Date.now();
+
+    try {
+      const parsed = validateVirtualTableRequestSchema.parse(body);
+      const { db, dialect } = await deps.loadSchemaAndAugmentations(connectionId);
+      const response = await validateVirtualTableCore({
+        sql: parsed.sql,
+        dialect,
+        requestDialect: parsed.dialect,
+        previewLimit: parsed.previewLimit ?? 1,
+        db,
+      });
+
+      logger.timing("Validated SQL virtual table", Date.now() - startTime, {
+        previewRows: response.ok ? (response.previewRows?.length ?? 0) : 0,
+        columns: response.ok ? response.columns.length : 0,
+      });
+
+      return c.body(
+        safeJsonStringify(validateVirtualTableResponseSchema.parse(response)),
+        200,
+        { "Content-Type": "application/json" },
+      );
+    } catch (error) {
+      logger.error("Virtual table validation failed", error, {
+        durationMs: Date.now() - startTime,
+      });
+
+      if (error instanceof ZodError) {
+        return c.json({ error: error.issues }, 400);
+      }
+
+      if (error instanceof QueryExecutionError) {
+        return c.body(
+          safeJsonStringify(
+            validateVirtualTableResponseSchema.parse({
+              ok: false,
+              error: {
+                message: error.details.message,
+                sql: error.details.sql,
+                code: error.details.code,
+                detail: error.details.detail,
+                hint: error.details.hint,
+              },
+            }),
+          ),
+          200,
+          { "Content-Type": "application/json" },
+        );
+      }
+
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return c.body(
+        safeJsonStringify(
+          validateVirtualTableResponseSchema.parse({
+            ok: false,
+            error: { message },
+          }),
+        ),
+        200,
+        { "Content-Type": "application/json" },
+      );
     }
   });
 

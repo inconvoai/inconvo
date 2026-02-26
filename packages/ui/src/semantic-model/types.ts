@@ -17,6 +17,14 @@ import type {
   LogicalCastType,
 } from "@repo/types";
 
+export type TableSource = "PHYSICAL" | "VIRTUAL";
+export type VirtualTableDialect =
+  | "postgresql"
+  | "mysql"
+  | "redshift"
+  | "mssql"
+  | "bigquery";
+
 // =============================================================================
 // Column Types
 // =============================================================================
@@ -166,13 +174,23 @@ export interface TableAccessPolicy {
 export interface TableSchema {
   id: string;
   name: string;
+  source: TableSource;
   access: TableAccess;
   context: string | null;
+  virtualTableConfig?: VirtualTableConfig | null;
   columns: Column[];
   computedColumns: ComputedColumn[];
   relations: Relation[];
   condition: TableCondition | null;
   accessPolicy: TableAccessPolicy | null;
+}
+
+export interface VirtualTableConfig {
+  id: string;
+  dialect: VirtualTableDialect;
+  sql: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 }
 
 /**
@@ -181,6 +199,7 @@ export interface TableSchema {
 export interface TableSummary {
   id: string;
   name: string;
+  source: TableSource;
   access: TableAccess;
   columnCount: number;
   selectedColumnCount: number;
@@ -354,6 +373,50 @@ export type ColumnValueEnumUpdatePayload =
 export interface UpdateTablePayload {
   access?: TableAccess;
   context?: string | null;
+}
+
+export interface VirtualTableValidationColumn {
+  sourceName: string;
+  type: string;
+  nullable?: boolean | null;
+}
+
+export type VirtualTableValidationResult =
+  | {
+      ok: true;
+      columns: VirtualTableValidationColumn[];
+      previewRows?: Array<Record<string, unknown>>;
+    }
+  | {
+      ok: false;
+      error: {
+        message: string;
+        sql?: string;
+        code?: string;
+        detail?: string;
+        hint?: string;
+      };
+    };
+
+export interface CreateVirtualTablePayload {
+  name: string;
+  dialect: VirtualTableDialect;
+  sql: string;
+  context?: string | null;
+  access?: TableAccess;
+}
+
+export interface UpdateVirtualTableSqlPayload {
+  sql: string;
+  dialect?: VirtualTableDialect;
+}
+
+export interface VirtualTableColumnRefreshResult {
+  tableId: string;
+  previewRows: Array<Record<string, unknown>>;
+  createdColumns: number;
+  updatedColumns: number;
+  removedColumns: string[];
 }
 
 // =============================================================================

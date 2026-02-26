@@ -6,6 +6,7 @@ import type {
 } from "../../types/querySchema";
 import { getColumnFromTable } from "./computedColumns";
 import { getTableIdentifier } from "./tableIdentifier";
+import { resolveJoinTargetSource } from "./logicalTableSource";
 import type { SchemaResponse } from "../../types/types";
 import type { DatabaseDialect } from "../types";
 
@@ -342,19 +343,26 @@ function buildRelationFilter(
   ];
 
   // Build schema-qualified table identifiers for cross-schema support
+  // For virtual tables, the SQL alias is always set to the logical table name
+  // (see resolveBaseSource in logicalTableSource.ts), so we use currentTableName
+  // directly rather than schema-qualifying it.
   const currentTableId =
-    dialect === "bigquery"
+    currentTable.virtualTable || dialect === "bigquery"
       ? currentTableName
       : getTableIdentifier(currentTableName, currentTable.schema, dialect);
+  const resolvedTargetSource = resolveJoinTargetSource({
+    tableName: targetTable,
+    sqlAlias: targetTable,
+    schema,
+    dialect,
+  });
   const targetTableId =
-    dialect === "bigquery"
+    resolvedTargetSource.isVirtual || dialect === "bigquery"
       ? targetTable
       : getTableIdentifier(targetTable, targetSchema, dialect);
-  const targetTableFromId =
-    dialect === "bigquery"
-      ? targetTable
-      : getTableIdentifier(targetTable, targetSchema, dialect);
-  const targetTableRef = sql.table(targetTableFromId);
+  const targetTableRef = resolvedTargetSource.isVirtual
+    ? resolvedTargetSource.source
+    : sql.table(targetTableId);
 
   // Build table condition expression for the target table (row-level security)
   // Use schema-qualified table name for cross-schema relations

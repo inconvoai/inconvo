@@ -8,20 +8,32 @@ datasource db {
 }
 
 model Table {
-  id                String             @id @default(uuid())
-  name              String             @unique
-  schema            String?            // Database schema name (e.g., 'public', 'sales')
-  access            String             @default("OFF")
+  id                String              @id @default(uuid())
+  name              String              @unique
+  schema            String?             // Database schema name (e.g., 'public', 'sales')
+  source            String              @default("PHYSICAL")
+  access            String              @default("OFF")
   context           String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   columns           Column[]
   computedColumns   ComputedColumn[]
-  inwardRelations   Relation[]         @relation("relation_target")
-  outwardRelations  Relation[]         @relation("relation_source")
+  inwardRelations   Relation[]          @relation("relation_target")
+  outwardRelations  Relation[]          @relation("relation_source")
   condition         TableCondition?
   accessPolicy      TableAccessPolicy?
   columnAugmentations ColumnAugmentation[]
+  virtualTableConfig  VirtualTableConfig?
+}
+
+model VirtualTableConfig {
+  id        String   @id @default(uuid())
+  tableId   String   @unique
+  dialect   String
+  sql       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
 }
 
 model Column {

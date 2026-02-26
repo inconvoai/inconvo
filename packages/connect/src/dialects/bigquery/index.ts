@@ -56,6 +56,13 @@ export interface StructFieldMetadata {
   dataType: string;
 }
 
+export interface BigQueryQuerySchemaField {
+  name?: string;
+  type?: string;
+  mode?: string;
+  fields?: BigQueryQuerySchemaField[];
+}
+
 export class BigQueryDialect implements Dialect {
   constructor(private readonly config: BigQueryDialectConfig) {}
 
@@ -152,7 +159,11 @@ class BigQueryConnection implements DatabaseConnection {
       },
     })) as unknown as JobResponse;
 
-    const [rows] = await job.getQueryResults();
+    const [rows, _nextQuery, apiResponse] = (await job.getQueryResults()) as [
+      unknown[],
+      unknown,
+      { schema?: { fields?: BigQueryQuerySchemaField[] } } | undefined,
+    ];
 
     const affectedRowsValue =
       job.metadata?.statistics?.query?.numDmlAffectedRows ?? undefined;
@@ -161,10 +172,19 @@ class BigQueryConnection implements DatabaseConnection {
         ? BigInt(affectedRowsValue)
         : undefined;
 
-    return {
+    const result: QueryResult<O> & {
+      schemaFields?: BigQueryQuerySchemaField[];
+    } = {
       rows: rows as O[],
       numAffectedRows: normalizedAffectedRows,
     };
+
+    const schemaFields = apiResponse?.schema?.fields;
+    if (Array.isArray(schemaFields)) {
+      result.schemaFields = schemaFields;
+    }
+
+    return result;
   }
 
   async *streamQuery<R>(

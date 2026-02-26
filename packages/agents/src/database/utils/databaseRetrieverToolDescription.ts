@@ -58,4 +58,4 @@ ${whereConditionDocsSummary}
 - **Multiple joins to same table:** You can join the same table multiple times using different aliases (e.g., join \`users\` as both \`orders.buyer\` and \`orders.seller\`). Each alias creates a separate join with its own columns in the output.
 - OrderBy is optional for operations that support it - set to null if not needed
 - Limit can be used to restrict the number of results returned
-- Never ask the database retriever for computed columns - only ever mention columns that exist in the schema`;
+- Never ask the database retriever to invent ad-hoc computed expressions - only mention columns that exist in the schema.`;

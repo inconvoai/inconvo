@@ -7,6 +7,9 @@ export {
 } from "./util/schemaAugmentationStore";
 export { clearAugmentedSchemaCache, getAugmentedSchema } from "./util/augmentedSchemaCache";
 export { env } from "./env";
+export { validateVirtualTableCore } from "./util/validateVirtualTableCore";
+export type { ValidateVirtualTableCoreInput } from "./util/validateVirtualTableCore";
+export { QueryExecutionError } from "./util/queryErrors";
 // Note: Express middleware exported separately from "@repo/connect/express"
 export { BigQueryDialect } from "./dialects/bigquery";
 export type { BigQueryDialectConfig } from "./dialects/bigquery";

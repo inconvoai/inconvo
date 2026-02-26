@@ -144,4 +144,95 @@ describe("PostgreSQL countRelations Operation", () => {
 
     expect(resultRows).toEqual(expected);
   }, 10000);
+
+  test("countRelations works when the base table is a SQL virtual table", async () => {
+    const usersTable = ctx.schema.tables.find((t: any) => t.name === "users");
+    expect(usersTable).toBeTruthy();
+
+    const virtualSchema = {
+      ...ctx.schema,
+      tables: [
+        ...ctx.schema.tables,
+        {
+          name: "virtual_users",
+          columns: [{ name: "id", type: "number" }],
+          relations: [
+            {
+              name: "orders",
+              isList: true,
+              targetTable: "orders",
+              ...(usersTable?.schema ? { targetSchema: usersTable.schema } : {}),
+              sourceColumns: ["id"],
+              targetColumns: ["user_id"],
+            },
+          ],
+          computedColumns: [],
+          columnConversions: [],
+          virtualTable: {
+            sql: "SELECT id FROM users",
+            dialect: "postgresql",
+            sourceColumns: [{ sourceName: "id", name: "id" }],
+          },
+        },
+      ],
+    };
+
+    const iql = {
+      table: "virtual_users",
+      tableConditions: null,
+      whereAndArray: [],
+      operation: "countRelations" as const,
+      operationParameters: {
+        columns: ["id"],
+        joins: [
+          {
+            table: "orders",
+            name: "orders",
+            path: [
+              {
+                source: ["virtual_users.id"],
+                target: ["orders.user_id"],
+              },
+            ],
+            joinType: "left",
+          },
+        ],
+        relationsToCount: [
+          {
+            name: "orders",
+            distinct: "orders.id",
+          },
+        ],
+        orderBy: null,
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await countRelations(db, parsed, {
+      ...ctx,
+      schema: virtualSchema,
+    });
+
+    const expectedRows = await db
+      .selectFrom("users as u")
+      .leftJoin("orders as o", "o.user_id", "u.id")
+      .select([
+        sql`u.id`.as("id"),
+        sql<number>`COUNT(DISTINCT o.id)::int`.as("orders_distinctCount"),
+      ])
+      .groupBy("u.id")
+      .orderBy("u.id", "asc")
+      .limit(5)
+      .execute();
+
+    const expected = expectedRows.map((row: any) => ({
+      id: row.id,
+      orders_distinctCount: Number(row.orders_distinctCount),
+    }));
+
+    const resultRows = Array.isArray(response) ? response : response.data;
+
+    expect(resultRows).toEqual(expected);
+  }, 10000);
 });

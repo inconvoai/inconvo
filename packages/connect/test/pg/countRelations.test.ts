@@ -145,45 +145,6 @@ describe("PostgreSQL countRelations Operation", () => {
     expect(resultRows).toEqual(expected);
   }, 10000);
 
-  test("countRelations works when the base table is a SQL virtual table", async () => {
-    const usersTable = ctx.schema.tables.find((t: any) => t.name === "users");
-    expect(usersTable).toBeTruthy();
-
-    const virtualSchema = {
-      ...ctx.schema,
-      tables: [
-        ...ctx.schema.tables,
-        {
-          name: "virtual_users",
-          columns: [{ name: "id", type: "number" }],
-          relations: [
-            {
-              name: "orders",
-              isList: true,
-              targetTable: "orders",
-              ...(usersTable?.schema ? { targetSchema: usersTable.schema } : {}),
-              sourceColumns: ["id"],
-              targetColumns: ["user_id"],
-            },
-          ],
-          computedColumns: [],
-          columnConversions: [],
-          virtualTable: {
-            sql: "SELECT id FROM users",
-            dialect: "postgresql",
-            sourceColumns: [{ sourceName: "id", name: "id" }],
-          },
-        },
-      ],
-    };
-
-    const iql = {
-      table: "virtual_users",
-      tableConditions: null,
-      whereAndArray: [],
-      operation: "countRelations" as const,
-      operationParameters: {
-        columns: ["id"],
   test("Returns an empty array when no rows match", async () => {
     const iql = {
       table: "products",

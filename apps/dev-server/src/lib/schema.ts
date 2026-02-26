@@ -5,6 +5,7 @@ import type {
   SchemaComputedColumn,
   SQLCastExpressionAst,
   SQLComputedColumnAst,
+  VirtualTableSyncItem,
 } from "@repo/types";
 import {
   accessPolicyWhereClause,
@@ -305,8 +306,9 @@ export async function syncSchema(): Promise<{
   let added = 0;
   let updated = 0;
 
-  // Fetch existing tables
+  // Fetch existing physical tables only (virtual tables are managed separately)
   const existingTables = await prisma.table.findMany({
+    where: { source: "PHYSICAL" },
     include: {
       columns: true,
       outwardRelations: {
@@ -315,10 +317,20 @@ export async function syncSchema(): Promise<{
     },
   });
 
+  // Collect virtual table names to avoid overwriting them with physical tables
+  const virtualTableNames = new Set(
+    (
+      await prisma.table.findMany({
+        where: { source: "VIRTUAL" },
+        select: { name: true },
+      })
+    ).map((t) => t.name),
+  );
+
   const existingTableMap = new Map(existingTables.map((t) => [t.name, t]));
   const schemaTableNames = new Set(schemaResponse.tables.map((t) => t.name));
 
-  // Delete obsolete tables (tables that no longer exist in DB)
+  // Delete obsolete physical tables (tables that no longer exist in DB)
   const tablesToDelete = existingTables
     .filter((t) => !schemaTableNames.has(t.name))
     .map((t) => t.id);
@@ -331,6 +343,14 @@ export async function syncSchema(): Promise<{
 
   // Process each table from introspected schema
   for (const table of schemaResponse.tables) {
+    // Skip physical sync for tables shadowed by a virtual table
+    if (virtualTableNames.has(table.name)) {
+      console.warn(
+        `Skipping physical table sync for ${table.name} because a virtual table with the same name exists`,
+      );
+      continue;
+    }
+
     const existingTable = existingTableMap.get(table.name);
 
     if (!existingTable) {
@@ -339,6 +359,7 @@ export async function syncSchema(): Promise<{
         data: {
           name: table.name,
           schema: table.schema ?? null,
+          source: "PHYSICAL",
           access: "QUERYABLE",
           columns: {
             create: table.columns.map((col) => ({
@@ -796,11 +817,102 @@ export async function syncAugmentationsToFile(): Promise<void> {
       semanticName: column.rename!.trim(),
     }));
 
+  // Fetch virtual tables
+  const virtualTableRows = await prisma.table.findMany({
+    where: { source: "VIRTUAL" },
+    select: {
+      name: true,
+      access: true,
+      context: true,
+      virtualTableConfig: {
+        select: { dialect: true, sql: true },
+      },
+      columns: {
+        select: {
+          name: true,
+          rename: true,
+          type: true,
+          selected: true,
+          unit: true,
+          notes: true,
+        },
+        orderBy: { name: "asc" },
+      },
+      outwardRelations: {
+        where: { source: "MANUAL" },
+        select: {
+          name: true,
+          isList: true,
+          selected: true,
+          status: true,
+          errorTag: true,
+          targetTable: { select: { name: true } },
+          columnMappings: {
+            select: { sourceColumnName: true, targetColumnName: true },
+            orderBy: { position: "asc" },
+          },
+        },
+        orderBy: { name: "asc" },
+      },
+      condition: {
+        select: {
+          column: { select: { name: true } },
+          userContextField: { select: { key: true } },
+        },
+      },
+      accessPolicy: {
+        select: { userContextField: { select: { key: true } } },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const virtualTablesPayload: VirtualTableSyncItem[] = virtualTableRows
+    .filter((row) => row.virtualTableConfig !== null)
+    .map((row) => {
+      const config = row.virtualTableConfig!;
+      return {
+        name: row.name,
+        dialect: config.dialect as VirtualTableSyncItem["dialect"],
+        sql: config.sql,
+        access: (row.access as VirtualTableSyncItem["access"]) ?? undefined,
+        context: row.context ?? null,
+        columns: row.columns.map((col) => ({
+          sourceName: col.name,
+          name: col.rename ?? col.name,
+          type: col.type,
+          selected: col.selected,
+          unit: col.unit ?? null,
+          notes: col.notes ?? null,
+        })),
+        relations: row.outwardRelations.map((rel) => ({
+          name: rel.name,
+          targetTable: rel.targetTable.name,
+          isList: rel.isList,
+          sourceColumns: rel.columnMappings.map((m) => m.sourceColumnName),
+          targetColumns: rel.columnMappings.map((m) => m.targetColumnName),
+          selected: rel.selected,
+          status: (rel.status as VirtualTableSyncItem["relations"][number]["status"]) ?? undefined,
+          errorTag: rel.errorTag ?? null,
+        })),
+        condition: row.condition
+          ? {
+              column: row.condition.column.name,
+              userContextFieldKey: row.condition.userContextField.key,
+            }
+          : null,
+        accessPolicy: row.accessPolicy
+          ? { userContextFieldKey: row.accessPolicy.userContextField.key }
+          : null,
+      };
+    });
+
   const payload = {
     relations,
     computedColumns: computedColumnsPayload,
     columnConversions: columnConversionsPayload,
     columnRenames: columnRenamesPayload,
+    virtualTables: virtualTablesPayload,
   };
 
   // Compute hash and write to file
@@ -813,5 +925,6 @@ export async function syncAugmentationsToFile(): Promise<void> {
     computedColumns: computedColumnsPayload,
     columnConversions: columnConversionsPayload,
     columnRenames: columnRenamesPayload,
+    virtualTables: virtualTablesPayload,
   });
 }

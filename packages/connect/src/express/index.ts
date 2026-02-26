@@ -4,6 +4,10 @@ import { authenticated } from "./middlewares";
 import { QuerySchema } from "../types/querySchema";
 import { ZodError } from "zod";
 import {
+  validateVirtualTableRequestSchema,
+  validateVirtualTableResponseSchema,
+} from "@repo/types";
+import {
   clearSchemaCache,
   getCachedSchema,
   preloadSchema,
@@ -27,6 +31,7 @@ import { logDatabaseHealthCheckHint } from "../util/databaseDiagnostics";
 import { env } from "../env";
 import type { OperationContext } from "../operations/types";
 import { QueryExecutionError } from "../util/queryErrors";
+import { validateVirtualTableCore } from "../util/validateVirtualTableCore";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {
@@ -172,6 +177,65 @@ export async function inconvo(): Promise<Router> {
         .status(500)
         .setHeader("Content-Type", "application/json")
         .send(safeJsonStringify({ error: "Failed to persist augmentations" }));
+    }
+  });
+
+  router.post("/validate/virtual-table", async (req: Request, res: Response) => {
+    try {
+      const parsed = validateVirtualTableRequestSchema.parse(req.body);
+      const db = await getDb();
+      const response = await validateVirtualTableCore({
+        sql: parsed.sql,
+        dialect: env.DATABASE_DIALECT,
+        requestDialect: parsed.dialect,
+        previewLimit: parsed.previewLimit ?? 1,
+        db,
+      });
+      return res
+        .status(200)
+        .setHeader("Content-Type", "application/json")
+        .send(safeJsonStringify(validateVirtualTableResponseSchema.parse(response)));
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res
+          .status(400)
+          .setHeader("Content-Type", "application/json")
+          .send(safeJsonStringify({ error: error.issues }));
+      }
+
+      if (error instanceof QueryExecutionError) {
+        return res
+          .status(200)
+          .setHeader("Content-Type", "application/json")
+          .send(
+            safeJsonStringify(
+              validateVirtualTableResponseSchema.parse({
+                ok: false,
+                error: {
+                  message: error.details.message,
+                  sql: error.details.sql,
+                  code: error.details.code,
+                  detail: error.details.detail,
+                  hint: error.details.hint,
+                },
+              }),
+            ),
+          );
+      }
+
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error({ error }, "POST /validate/virtual-table - failed");
+      return res
+        .status(200)
+        .setHeader("Content-Type", "application/json")
+        .send(
+          safeJsonStringify(
+            validateVirtualTableResponseSchema.parse({
+              ok: false,
+              error: { message },
+            }),
+          ),
+        );
     }
   });
 

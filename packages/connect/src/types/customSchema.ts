@@ -81,6 +81,79 @@ export const columnRenameAugmentationItemSchema = z
   })
   .strict();
 
+const virtualTableDialectSchema = z.enum([
+  "postgresql",
+  "redshift",
+  "mysql",
+  "mssql",
+  "bigquery",
+]);
+
+const virtualTableAccessSchema = z.enum(["QUERYABLE", "JOINABLE", "OFF"]);
+const virtualTableRelationStatusSchema = z.enum(["VALID", "BROKEN"]);
+
+export const virtualTableColumnAugmentationItemSchema = z
+  .object({
+    sourceName: z.string(),
+    name: z.string(),
+    type: z.string(),
+    nullable: z.boolean().nullable().optional(),
+    selected: z.boolean().optional(),
+    unit: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+  })
+  .strict();
+
+export const virtualTableRelationAugmentationItemSchema = z
+  .object({
+    name: z.string(),
+    targetTable: z.string(),
+    isList: z.boolean(),
+    sourceColumns: z.array(z.string()).min(1),
+    targetColumns: z.array(z.string()).min(1),
+    selected: z.boolean().optional(),
+    status: virtualTableRelationStatusSchema.optional(),
+    errorTag: z.string().nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.sourceColumns.length !== value.targetColumns.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceColumns and targetColumns must have the same length",
+        path: ["sourceColumns"],
+      });
+    }
+  });
+
+export const virtualTableConditionAugmentationSchema = z
+  .object({
+    column: z.string(),
+    userContextFieldKey: z.string(),
+  })
+  .strict();
+
+export const virtualTableAccessPolicyAugmentationSchema = z
+  .object({
+    userContextFieldKey: z.string(),
+  })
+  .strict();
+
+export const virtualTableAugmentationItemSchema = z
+  .object({
+    name: z.string(),
+    dialect: virtualTableDialectSchema,
+    sql: z.string(),
+    selected: z.boolean().optional(),
+    access: virtualTableAccessSchema.optional(),
+    context: z.string().nullable().optional(),
+    columns: z.array(virtualTableColumnAugmentationItemSchema),
+    relations: z.array(virtualTableRelationAugmentationItemSchema),
+    condition: virtualTableConditionAugmentationSchema.nullable().optional(),
+    accessPolicy: virtualTableAccessPolicyAugmentationSchema.nullable().optional(),
+  })
+  .strict();
+
 // Unified augmentation schema - combines all three augmentation types
 // Hash is optional for storage (legacy data may not have it)
 export const unifiedAugmentationSchema = z
@@ -91,6 +164,7 @@ export const unifiedAugmentationSchema = z
     computedColumns: z.array(computedColumnAugmentationItemSchema),
     columnConversions: z.array(columnConversionAugmentationItemSchema),
     columnRenames: z.array(columnRenameAugmentationItemSchema).optional().default([]),
+    virtualTables: z.array(virtualTableAugmentationItemSchema).optional().default([]),
   })
   .strict();
 

@@ -15,6 +15,10 @@ import {
   type QueryExecutionErrorDetails,
   unifiedAugmentationsSyncSchema,
   type UnifiedAugmentationsSync,
+  validateVirtualTableRequestSchema,
+  validateVirtualTableResponseSchema,
+  type ValidateVirtualTableRequest,
+  type ValidateVirtualTableResponse,
 } from "@repo/types";
 
 export class ConnectQueryError extends Error {
@@ -145,6 +149,16 @@ export class UserDatabaseConnector {
     const requestUrl = "/sync/schema";
     const headers = this.generateHeaders("POST", requestUrl, body);
     await this.client.post(requestUrl, body, { headers });
+  }
+
+  public async validateVirtualTable(
+    payload: ValidateVirtualTableRequest,
+  ): Promise<ValidateVirtualTableResponse> {
+    const body = validateVirtualTableRequestSchema.parse(payload);
+    const requestUrl = "/validate/virtual-table";
+    const headers = this.generateHeaders("POST", requestUrl, body);
+    const response = await this.client.post(requestUrl, body, { headers });
+    return validateVirtualTableResponseSchema.parse(response.data);
   }
 }
 

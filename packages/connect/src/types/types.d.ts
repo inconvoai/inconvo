@@ -53,6 +53,14 @@ export interface SchemaTable {
   relations?: SchemaRelation[];
   computedColumns?: SchemaComputedColumn[];
   columnConversions?: SchemaColumnConversion[];
+  virtualTable?: {
+    sql: string;
+    dialect: DatabaseDialect;
+    sourceColumns: Array<{
+      sourceName: string;
+      name: string;
+    }>;
+  };
 }
 
 export interface SchemaResponse {

@@ -2,6 +2,7 @@ import { JoinBuilder } from "kysely";
 import type { JoinPathHop } from "../../types/querySchema";
 import type { SchemaResponse, DatabaseDialect } from "../../types/types";
 import { getTableIdentifier } from "./tableIdentifier";
+import { resolveJoinTargetSource } from "./logicalTableSource";
 
 export type QualifiedColumn = {
   tableName: string;
@@ -65,9 +66,15 @@ export function applyJoinHop(
 
   // Look up the target table's schema for cross-schema joins
   const targetTable = schema?.tables.find((t) => t.name === targetTableName);
-  const targetTableId = schema && dialect
-    ? getTableIdentifier(targetTableName, targetTable?.schema, dialect)
-    : targetTableName;
+  const targetTableId =
+    schema && dialect
+      ? resolveJoinTargetSource({
+          tableName: targetTableName,
+          sqlAlias: targetTableName,
+          schema,
+          dialect,
+        }).source
+      : targetTableName;
 
   // Build column refs with schema-qualified table names
   const getTableId = (tableName: string) => {

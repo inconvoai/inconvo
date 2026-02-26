@@ -5,7 +5,7 @@ import type { DatabaseDialect, OperationContext } from "../types";
 import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { buildJsonObject } from "../utils/jsonBuilderHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
+import { resolveBaseSource } from "../utils/logicalTableSource";
 import assert from "assert";
 import {
   applyJoinHop,
@@ -98,8 +98,13 @@ export async function aggregate(
   }
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
-  let dbQuery = db.selectFrom(tableId);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
+  let dbQuery = db.selectFrom(baseSource as any);
 
   const resolvedJoins =
     (operationParameters.joins ?? []).map((join) =>

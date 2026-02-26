@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { Flex, Box, Text, Center, Stack } from "@mantine/core";
 import { IconTable } from "@tabler/icons-react";
 import type {
@@ -25,6 +25,10 @@ import type {
   ColumnValueEnumUpdatePayload,
   ColumnUnitPayload,
   ComputedColumnUnitPayload,
+  CreateVirtualTablePayload,
+  UpdateVirtualTableSqlPayload,
+  VirtualTableValidationResult,
+  VirtualTableColumnRefreshResult,
 } from "./types";
 import {
   TableList,
@@ -80,6 +84,8 @@ export interface SemanticModelEditorProps {
   selectedConnectionId?: string | null;
   /** Callback when connection changes */
   onConnectionChange?: (connectionId: string | null) => void;
+  /** Optional content to render in the detail pane when no table is selected */
+  emptyStateContent?: ReactNode;
   /** Callback when table is updated */
   onUpdateTable?: (
     tableId: string,
@@ -189,6 +195,30 @@ export interface SemanticModelEditorProps {
     tableId: string,
     payload: ComputedColumnUnitPayload,
   ) => Promise<void>;
+  /** Callback when user requests creating a new virtual table (opens platform-specific UI) */
+  onRequestCreateVirtualTable?: () => void;
+  /** Validate virtual table SQL */
+  onValidateVirtualTableSql?: (payload: {
+    connectionId: string;
+    sql: string;
+    dialect?: CreateVirtualTablePayload["dialect"];
+    previewLimit?: number;
+  }) => Promise<VirtualTableValidationResult>;
+  /** Create a new virtual table */
+  onCreateVirtualTable?: (
+    payload: CreateVirtualTablePayload,
+  ) => Promise<{ tableId: string } | void>;
+  /** Update SQL/config for an existing virtual table */
+  onUpdateVirtualTableSql?: (
+    tableId: string,
+    payload: UpdateVirtualTableSqlPayload,
+  ) => Promise<{ tableId: string } | void>;
+  /** Refresh inferred columns from current SQL */
+  onRefreshVirtualTableColumns?: (
+    tableId: string,
+  ) => Promise<VirtualTableColumnRefreshResult | void>;
+  /** Delete a virtual table */
+  onDeleteVirtualTable?: (tableId: string) => Promise<void>;
 }
 
 export function SemanticModelEditor({
@@ -214,6 +244,7 @@ export function SemanticModelEditor({
   connections,
   selectedConnectionId,
   onConnectionChange,
+  emptyStateContent,
   // Mutation callbacks
   onUpdateTable,
   onUpdateColumn,
@@ -237,6 +268,12 @@ export function SemanticModelEditor({
   onAutoFillColumnValueEnum,
   onAddColumnUnit,
   onUpdateComputedColumnUnit,
+  onRequestCreateVirtualTable,
+  onValidateVirtualTableSql,
+  onCreateVirtualTable,
+  onUpdateVirtualTableSql,
+  onRefreshVirtualTableColumns,
+  onDeleteVirtualTable,
 }: SemanticModelEditorProps) {
   // Internal state for client-side mode (when server-side callbacks not provided)
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
@@ -486,6 +523,8 @@ export function SemanticModelEditor({
           selectedConnectionId={selectedConnectionId}
           onConnectionChange={onConnectionChange}
           userContextStatus={resolvedUserContextStatus}
+          onCreateVirtualTable={onRequestCreateVirtualTable}
+          disableCreateVirtualTable={readOnly}
         />
       </Box>
 
@@ -530,14 +569,21 @@ export function SemanticModelEditor({
             onAutoFillColumnValueEnum={handleAutoFillColumnValueEnum}
             onAddColumnUnit={handleAddColumnUnit}
             onUpdateComputedColumnUnit={handleUpdateComputedColumnUnit}
+            selectedConnectionId={selectedConnectionId}
+            onValidateVirtualTableSql={onValidateVirtualTableSql}
+            onUpdateVirtualTableSql={onUpdateVirtualTableSql}
+            onRefreshVirtualTableColumns={onRefreshVirtualTableColumns}
+            onDeleteVirtualTable={onDeleteVirtualTable}
           />
         ) : (
-          <Center h="100%">
-            <Stack align="center" gap="xs">
-              <IconTable size={48} opacity={0.3} />
-              <Text c="dimmed">Select a table to view details</Text>
-            </Stack>
-          </Center>
+          emptyStateContent ?? (
+            <Center h="100%">
+              <Stack align="center" gap="xs">
+                <IconTable size={48} opacity={0.3} />
+                <Text c="dimmed">Select a table to view details</Text>
+              </Stack>
+            </Center>
+          )
         )}
       </Box>
     </Flex>

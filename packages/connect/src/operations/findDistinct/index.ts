@@ -4,7 +4,7 @@ import { buildWhereConditions } from "../utils/whereConditionBuilder";
 import { getColumnFromTable } from "../utils/computedColumns";
 import { applyLimit } from "../utils/queryHelpers";
 import { getSchemaBoundDb } from "../utils/schemaHelpers";
-import { getTableIdentifier } from "../utils/tableIdentifier";
+import { resolveBaseSource } from "../utils/logicalTableSource";
 import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
 import assert from "assert";
@@ -33,9 +33,14 @@ export async function findDistinct(
   });
 
   // Build query with schema-qualified table name
-  const tableId = getTableIdentifier(table, query.tableSchema, dialect);
+  const { source: baseSource } = resolveBaseSource({
+    tableName: table,
+    tableSchema: query.tableSchema ?? null,
+    schema,
+    dialect,
+  });
   let dbQuery = dbForQuery
-    .selectFrom(tableId)
+    .selectFrom(baseSource as any)
     .select(distinctColumn.as(operationParameters.column))
     .distinct();
 

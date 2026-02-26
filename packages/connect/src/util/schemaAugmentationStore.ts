@@ -63,6 +63,7 @@ export function computeAugmentationsHash(payload: {
   computedColumns: unknown[];
   columnConversions: unknown[];
   columnRenames: unknown[];
+  virtualTables?: unknown[];
 }): string {
   const sorted = {
     relations: [...payload.relations]
@@ -93,6 +94,11 @@ export function computeAugmentationsHash(payload: {
         ),
       )
       .map(normalizeObject),
+    virtualTables: [...(payload.virtualTables ?? [])]
+      .sort((a, b) =>
+        getStringKey(a, "name").localeCompare(getStringKey(b, "name")),
+      )
+      .map(normalizeObject),
   };
   const canonical = JSON.stringify(sorted);
   return crypto.createHash("sha256").update(canonical).digest("hex");
@@ -121,6 +127,7 @@ export async function readUnifiedAugmentation(): Promise<UnifiedAugmentation> {
     computedColumns: [],
     columnConversions: [],
     columnRenames: [],
+    virtualTables: [],
   };
 
   try {

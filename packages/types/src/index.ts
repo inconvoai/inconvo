@@ -422,6 +422,160 @@ export const columnRenamesSyncSchema = z
 
 export type ColumnRenamesSync = z.infer<typeof columnRenamesSyncSchema>;
 
+const databaseDialectSchema = z.enum([
+  "postgresql",
+  "redshift",
+  "mysql",
+  "mssql",
+  "bigquery",
+]);
+
+const tableAccessSyncSchema = z.enum(["QUERYABLE", "JOINABLE", "OFF"]);
+const relationStatusSyncSchema = z.enum(["VALID", "BROKEN"]);
+
+export const virtualTableColumnSyncItemSchema = z
+  .object({
+    sourceName: z.string(),
+    name: z.string(),
+    type: z.string(),
+    nullable: z.boolean().nullable().optional(),
+    selected: z.boolean().optional(),
+    unit: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+  })
+  .strict();
+
+export type VirtualTableColumnSyncItem = z.infer<
+  typeof virtualTableColumnSyncItemSchema
+>;
+
+export const virtualTableRelationSyncItemSchema = z
+  .object({
+    name: z.string(),
+    targetTable: z.string(),
+    isList: z.boolean(),
+    sourceColumns: z.array(z.string()).min(1),
+    targetColumns: z.array(z.string()).min(1),
+    selected: z.boolean().optional(),
+    status: relationStatusSyncSchema.optional(),
+    errorTag: z.string().nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.sourceColumns.length !== value.targetColumns.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sourceColumns and targetColumns must have the same length",
+        path: ["sourceColumns"],
+      });
+    }
+  });
+
+export type VirtualTableRelationSyncItem = z.infer<
+  typeof virtualTableRelationSyncItemSchema
+>;
+
+export const virtualTableContextConditionSyncSchema = z
+  .object({
+    column: z.string(),
+    userContextFieldKey: z.string(),
+  })
+  .strict();
+
+export type VirtualTableContextConditionSync = z.infer<
+  typeof virtualTableContextConditionSyncSchema
+>;
+
+export const virtualTableAccessPolicySyncSchema = z
+  .object({
+    userContextFieldKey: z.string(),
+  })
+  .strict();
+
+export type VirtualTableAccessPolicySync = z.infer<
+  typeof virtualTableAccessPolicySyncSchema
+>;
+
+export const virtualTableSyncItemSchema = z
+  .object({
+    name: z.string(),
+    dialect: databaseDialectSchema,
+    sql: z.string(),
+    selected: z.boolean().optional(),
+    access: tableAccessSyncSchema.optional(),
+    context: z.string().nullable().optional(),
+    columns: z.array(virtualTableColumnSyncItemSchema),
+    relations: z.array(virtualTableRelationSyncItemSchema),
+    condition: virtualTableContextConditionSyncSchema.nullable().optional(),
+    accessPolicy: virtualTableAccessPolicySyncSchema.nullable().optional(),
+  })
+  .strict();
+
+export type VirtualTableSyncItem = z.infer<typeof virtualTableSyncItemSchema>;
+
+export const virtualTablesSyncSchema = z
+  .object({
+    updatedAt: z.string().datetime().optional(),
+    virtualTables: z.array(virtualTableSyncItemSchema),
+  })
+  .strict();
+
+export type VirtualTablesSync = z.infer<typeof virtualTablesSyncSchema>;
+
+export const validateVirtualTableRequestSchema = z
+  .object({
+    sql: z.string().min(1),
+    dialect: databaseDialectSchema.optional(),
+    previewLimit: z.number().int().min(1).max(20).optional(),
+  })
+  .strict();
+
+export type ValidateVirtualTableRequest = z.infer<
+  typeof validateVirtualTableRequestSchema
+>;
+
+export const validateVirtualTableColumnSchema = z
+  .object({
+    sourceName: z.string(),
+    type: z.string(),
+    nullable: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+export type ValidateVirtualTableColumn = z.infer<
+  typeof validateVirtualTableColumnSchema
+>;
+
+export const validateVirtualTableSuccessSchema = z
+  .object({
+    ok: z.literal(true),
+    columns: z.array(validateVirtualTableColumnSchema),
+    previewRows: z.array(z.record(z.string(), z.unknown())).optional(),
+  })
+  .strict();
+
+export const validateVirtualTableErrorSchema = z
+  .object({
+    ok: z.literal(false),
+    error: z.object({
+      message: z.string(),
+      sql: z.string().optional(),
+      code: z.string().optional(),
+      detail: z.string().optional(),
+      hint: z.string().optional(),
+    }),
+  })
+  .strict();
+
+export const validateVirtualTableResponseSchema = z.union([
+  validateVirtualTableSuccessSchema,
+  validateVirtualTableErrorSchema,
+]);
+
+export type ValidateVirtualTableResponse = z.infer<
+  typeof validateVirtualTableResponseSchema
+>;
+
 // Unified augmentations schema - combines all three augmentation types
 export const unifiedAugmentationsSyncSchema = z
   .object({
@@ -431,6 +585,7 @@ export const unifiedAugmentationsSyncSchema = z
     computedColumns: z.array(computedColumnSyncItemSchema),
     columnConversions: z.array(columnConversionSyncItemSchema),
     columnRenames: z.array(columnRenameSyncItemSchema).optional().default([]),
+    virtualTables: z.array(virtualTableSyncItemSchema).optional().default([]),
   })
   .strict();
 

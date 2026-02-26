@@ -345,6 +345,162 @@ export async function buildAugmentedSchema(): Promise<SchemaResponse> {
     });
   }
 
+  const virtualTables = augmentations.virtualTables ?? [];
+  const attachedVirtualTables: Array<{
+    virtualTable: (typeof virtualTables)[number];
+    syntheticTable: SchemaTable;
+  }> = [];
+
+  for (const virtualTable of virtualTables) {
+    if (virtualTable.selected === false) {
+      continue;
+    }
+
+    if (tableMap.has(virtualTable.name)) {
+      logger.warn(
+        { virtualTable: virtualTable.name },
+        "Augmented schema - virtual table name conflicts with existing table",
+      );
+      continue;
+    }
+
+    const selectedColumns = (virtualTable.columns ?? []).filter(
+      (column) => column.selected !== false,
+    );
+    if (selectedColumns.length === 0) {
+      logger.warn(
+        { virtualTable: virtualTable.name },
+        "Augmented schema - virtual table has no selected columns",
+      );
+      continue;
+    }
+
+    const seenColumnNames = new Set<string>();
+    const synthesizedColumns = [];
+    let invalidColumn = false;
+    for (const column of selectedColumns) {
+      if (seenColumnNames.has(column.name)) {
+        logger.warn(
+          { virtualTable: virtualTable.name, column: column.name },
+          "Augmented schema - duplicate virtual table column name",
+        );
+        invalidColumn = true;
+        break;
+      }
+      seenColumnNames.add(column.name);
+      synthesizedColumns.push({
+        name: column.name,
+        type: column.type ?? "unknown",
+        ...(column.nullable !== undefined ? { nullable: column.nullable ?? undefined } : {}),
+      });
+    }
+    if (invalidColumn) {
+      continue;
+    }
+
+    const syntheticTable: SchemaTable = {
+      name: virtualTable.name,
+      columns: synthesizedColumns,
+      relations: [],
+      computedColumns: [],
+      columnConversions: [],
+      virtualTable: {
+        sql: virtualTable.sql,
+        dialect: virtualTable.dialect,
+        sourceColumns: selectedColumns.map((column) => ({
+          sourceName: column.sourceName,
+          name: column.name,
+        })),
+      },
+    };
+
+    tableMap.set(syntheticTable.name, syntheticTable);
+    tables.push(syntheticTable);
+    relationRegistry.set(syntheticTable.name, new Map());
+    attachedVirtualTables.push({ virtualTable, syntheticTable });
+  }
+
+  for (const { virtualTable, syntheticTable } of attachedVirtualTables) {
+    for (const relation of virtualTable.relations ?? []) {
+      if (relation.selected === false) {
+        continue;
+      }
+      if (relation.status && relation.status !== "VALID") {
+        continue;
+      }
+
+      const targetTable = tableMap.get(relation.targetTable);
+      if (!targetTable) {
+        logger.warn(
+          {
+            virtualTable: virtualTable.name,
+            relation: relation.name,
+            targetTable: relation.targetTable,
+          },
+          "Augmented schema - virtual table relation references unknown target table",
+        );
+        continue;
+      }
+
+      const sourceColumnsValid = columnsExist(
+        syntheticTable,
+        relation.sourceColumns,
+        "source",
+      );
+      const targetColumnsValid = columnsExist(
+        targetTable,
+        relation.targetColumns,
+        "target",
+      );
+      if (!sourceColumnsValid || !targetColumnsValid) {
+        continue;
+      }
+
+      const uniqueRelationName = getUniqueRelationName(
+        relationRegistry,
+        syntheticTable.name,
+        relation.name,
+      );
+
+      addRelationToTable(syntheticTable, {
+        name: uniqueRelationName,
+        isList: relation.isList,
+        targetTable: targetTable.name,
+        ...(targetTable.schema ? { targetSchema: targetTable.schema } : {}),
+        sourceColumns: relation.sourceColumns,
+        targetColumns: relation.targetColumns,
+        source: "MANUAL",
+        status: relation.status ?? "VALID",
+        errorTag: relation.errorTag ?? null,
+      });
+
+      const reverseCandidate = pluralize(syntheticTable.name);
+      const reverseRelationName = getUniqueRelationName(
+        relationRegistry,
+        targetTable.name,
+        reverseCandidate,
+      );
+
+      addRelationToTable(targetTable, {
+        name: reverseRelationName,
+        isList: !relation.isList,
+        targetTable: syntheticTable.name,
+        sourceColumns: relation.targetColumns,
+        targetColumns: relation.sourceColumns,
+        source: "MANUAL",
+        status: relation.status ?? "VALID",
+        errorTag: relation.errorTag ?? null,
+      });
+    }
+  }
+
+  if (attachedVirtualTables.length > 0) {
+    logger.debug(
+      { virtualTables: attachedVirtualTables.length },
+      "Augmented schema - virtual tables augmentation merged",
+    );
+  }
+
   const computedColumns = augmentations.computedColumns ?? [];
   let attachedComputedColumns = 0;
 

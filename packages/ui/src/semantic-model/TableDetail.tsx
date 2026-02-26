@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Stack,
   Group,
@@ -12,10 +12,12 @@ import {
   ScrollArea,
   LoadingOverlay,
   Box,
+  Collapse,
   Drawer,
   Badge,
   Textarea,
   ActionIcon,
+  Alert,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -25,6 +27,10 @@ import {
   IconLock,
   IconCheck,
   IconEdit,
+  IconRefresh,
+  IconTrash,
+  IconChevronDown,
+  IconChevronUp,
 } from "@tabler/icons-react";
 import type {
   TableSchema,
@@ -49,6 +55,10 @@ import type {
   ColumnValueEnumUpdatePayload,
   UnitColumnPayload,
   ComputedColumnUnitPayload,
+  VirtualTableValidationResult,
+  UpdateVirtualTableSqlPayload,
+  VirtualTableColumnRefreshResult,
+  VirtualTableDialect,
 } from "./types";
 import { WhereCondition } from "./WhereCondition";
 import { ColumnTable } from "./ColumnTable";
@@ -153,6 +163,26 @@ export interface TableDetailProps {
   onUpdateComputedColumnUnit?: (
     payload: ComputedColumnUnitPayload,
   ) => Promise<void>;
+  /** Currently selected connection ID (required for virtual SQL validation) */
+  selectedConnectionId?: string | null;
+  /** Validate virtual table SQL (virtual tables only) */
+  onValidateVirtualTableSql?: (payload: {
+    connectionId: string;
+    sql: string;
+    dialect?: VirtualTableDialect;
+    previewLimit?: number;
+  }) => Promise<VirtualTableValidationResult>;
+  /** Update virtual table SQL/config (virtual tables only) */
+  onUpdateVirtualTableSql?: (
+    tableId: string,
+    payload: UpdateVirtualTableSqlPayload,
+  ) => Promise<{ tableId: string } | void>;
+  /** Refresh virtual table inferred columns (virtual tables only) */
+  onRefreshVirtualTableColumns?: (
+    tableId: string,
+  ) => Promise<VirtualTableColumnRefreshResult | void>;
+  /** Delete virtual table (virtual tables only) */
+  onDeleteVirtualTable?: (tableId: string) => Promise<void>;
 }
 
 type ModalState =
@@ -196,12 +226,29 @@ export function TableDetail({
   onAutoFillColumnValueEnum,
   onAddColumnUnit,
   onUpdateComputedColumnUnit,
+  onUpdateVirtualTableSql,
+  onRefreshVirtualTableColumns,
+  onDeleteVirtualTable,
 }: TableDetailProps) {
   const [modalState, setModalState] = useState<ModalState>({ type: "none" });
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(table.context ?? "");
+  const [virtualSqlValue, setVirtualSqlValue] = useState(
+    table.virtualTableConfig?.sql ?? "",
+  );
+  const [virtualValidationResult, setVirtualValidationResult] =
+    useState<VirtualTableValidationResult | null>(null);
+  const [virtualMutationError, setVirtualMutationError] = useState<string | null>(
+    null,
+  );
+  const [virtualAction, setVirtualAction] = useState<
+    "save" | "refresh" | "delete" | null
+  >(null);
+  const [isVirtualSqlExpanded, setIsVirtualSqlExpanded] = useState(false);
 
   const isDisabled = readOnly || table.access === "OFF";
+  const isVirtualTable = table.source === "VIRTUAL";
+  const virtualSqlDisabled = readOnly;
   const isContextEnabled = userContextStatus === "ENABLED";
   const canEditAccessConstraints = isContextEnabled && !isDisabled;
   const constraintLabel = table.condition
@@ -214,6 +261,23 @@ export function TableDetail({
       ? "Policy active"
       : "Policy inactive"
     : "Add policy";
+
+  useEffect(() => {
+    setDescriptionValue(table.context ?? "");
+    setVirtualSqlValue(table.virtualTableConfig?.sql ?? "");
+    setVirtualValidationResult(null);
+    setVirtualMutationError(null);
+    setVirtualAction(null);
+  }, [
+    table.id,
+    table.context,
+    table.virtualTableConfig?.id,
+    table.virtualTableConfig?.sql,
+  ]);
+
+  useEffect(() => {
+    setIsVirtualSqlExpanded(false);
+  }, [table.id]);
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -267,6 +331,72 @@ export function TableDetail({
 
   const closeModal = () => setModalState({ type: "none" });
 
+  const handleSaveVirtualSql = async () => {
+    if (!isVirtualTable || !onUpdateVirtualTableSql) return;
+    if (!virtualSqlValue.trim()) {
+      setVirtualMutationError("SQL is required.");
+      return;
+    }
+
+    setVirtualAction("save");
+    setVirtualMutationError(null);
+    try {
+      await onUpdateVirtualTableSql(table.id, {
+        sql: virtualSqlValue,
+      });
+    } catch (error) {
+      setVirtualMutationError(
+        error instanceof Error ? error.message : "Failed to save virtual SQL.",
+      );
+    } finally {
+      setVirtualAction(null);
+    }
+  };
+
+  const handleRefreshVirtualColumns = async () => {
+    if (!isVirtualTable || !onRefreshVirtualTableColumns) return;
+    setVirtualAction("refresh");
+    setVirtualMutationError(null);
+    try {
+      const result = await onRefreshVirtualTableColumns(table.id);
+      if (result) {
+        setVirtualValidationResult({
+          ok: true,
+          columns: [],
+          previewRows: result.previewRows,
+        });
+      }
+    } catch (error) {
+      setVirtualMutationError(
+        error instanceof Error ? error.message : "Failed to refresh columns.",
+      );
+    } finally {
+      setVirtualAction(null);
+    }
+  };
+
+  const handleDeleteVirtualTableClick = async () => {
+    if (!isVirtualTable || !onDeleteVirtualTable) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Delete virtual table "${table.name}"?`)
+    ) {
+      return;
+    }
+
+    setVirtualAction("delete");
+    setVirtualMutationError(null);
+    try {
+      await onDeleteVirtualTable(table.id);
+    } catch (error) {
+      setVirtualMutationError(
+        error instanceof Error ? error.message : "Failed to delete virtual table.",
+      );
+    } finally {
+      setVirtualAction(null);
+    }
+  };
+
   const getModalTitle = (): string => {
     switch (modalState.type) {
       case "columnNotes":
@@ -312,7 +442,40 @@ export function TableDetail({
         <Stack gap="lg">
           {/* Header */}
           <div>
-            <Title order={3}>{table.name}</Title>
+            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Title order={3}>{table.name}</Title>
+                <Group gap="xs" mt={4}>
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color={table.source === "VIRTUAL" ? "violet" : "gray"}
+                  >
+                    {table.source === "VIRTUAL"
+                      ? "Virtual Table"
+                      : "Physical Table"}
+                  </Badge>
+                  {table.access === "OFF" && (
+                    <Badge size="sm" variant="outline" color="gray">
+                      Off
+                    </Badge>
+                  )}
+                </Group>
+              </div>
+              {isVirtualTable && (
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="light"
+                  leftSection={<IconTrash size={14} />}
+                  onClick={handleDeleteVirtualTableClick}
+                  loading={virtualAction === "delete"}
+                  disabled={virtualSqlDisabled}
+                >
+                  Delete
+                </Button>
+              )}
+            </Group>
             {isEditingDescription ? (
               <Stack gap="xs" mt="sm">
                 <Textarea
@@ -359,6 +522,90 @@ export function TableDetail({
               </Group>
             )}
           </div>
+
+          {isVirtualTable && (
+            <Paper p="sm" withBorder radius="sm">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => setIsVirtualSqlExpanded((prev) => !prev)}
+                    rightSection={
+                      isVirtualSqlExpanded ? (
+                        <IconChevronUp size={14} />
+                      ) : (
+                        <IconChevronDown size={14} />
+                      )
+                    }
+                  >
+                    {isVirtualSqlExpanded ? "Hide SQL" : "Show SQL"}
+                  </Button>
+                  <Group gap="xs">
+                    <Badge variant="light" color="violet">
+                      {table.virtualTableConfig?.dialect ?? "unknown"}
+                    </Badge>
+                  </Group>
+                </Group>
+
+                <Collapse in={isVirtualSqlExpanded}>
+                  <Stack gap="sm">
+                    {!table.virtualTableConfig ? (
+                      <Alert color="red">
+                        Virtual table configuration is missing for this table.
+                      </Alert>
+                    ) : (
+                      <>
+                        <Textarea
+                          label="SQL"
+                          placeholder="SELECT ..."
+                          value={virtualSqlValue}
+                          onChange={(e) => {
+                            setVirtualSqlValue(e.currentTarget.value);
+                            setVirtualValidationResult(null);
+                            setVirtualMutationError(null);
+                          }}
+                          autosize
+                          minRows={5}
+                          maxRows={14}
+                          disabled={virtualSqlDisabled}
+                          styles={{ input: { fontFamily: "monospace" } }}
+                        />
+
+                        {virtualMutationError && (
+                          <Alert color="red">{virtualMutationError}</Alert>
+                        )}
+
+                        <Group justify="flex-end" wrap="wrap">
+                          <Group gap="xs">
+                            <Button
+                              size="xs"
+                              leftSection={<IconCheck size={14} />}
+                              onClick={handleSaveVirtualSql}
+                              loading={virtualAction === "save"}
+                              disabled={virtualSqlDisabled}
+                            >
+                              Save SQL
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="light"
+                              leftSection={<IconRefresh size={14} />}
+                              onClick={handleRefreshVirtualColumns}
+                              loading={virtualAction === "refresh"}
+                              disabled={virtualSqlDisabled}
+                            >
+                              Refresh Columns
+                            </Button>
+                          </Group>
+                        </Group>
+                      </>
+                    )}
+                  </Stack>
+                </Collapse>
+              </Stack>
+            </Paper>
+          )}
 
           {/* Where Condition (Access Constraint) */}
           {table.condition && (

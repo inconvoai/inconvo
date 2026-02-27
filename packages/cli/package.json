@@ -33,6 +33,7 @@
   "dependencies": {
     "@clack/prompts": "^1.0.1",
     "@faker-js/faker": "^10.3.0",
+    "@google-cloud/bigquery": "catalog:",
     "commander": "^14.0.3",
     "kysely": "catalog:",
     "mysql2": "^3.17.2",

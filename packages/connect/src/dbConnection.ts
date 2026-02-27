@@ -8,6 +8,10 @@ import {
   BigQueryDialect,
   type BigQueryDialectConfig,
 } from "./dialects/bigquery";
+import {
+  normalizeOptionalString,
+  parseBigQueryCredentialsFromEnv,
+} from "./dialects/bigquery/envParsing";
 
 const globalForDb = globalThis as unknown as {
   __INCONVO_KYSELY_DB__?: Kysely<any>;
@@ -139,16 +143,10 @@ export async function getDb(): Promise<Kysely<any>> {
       log: isDevelopment ? createLogger() : undefined,
     });
   } else if (env.DATABASE_DIALECT === "bigquery") {
-    const credentialsJson = env.INCONVO_BIGQUERY_CREDENTIALS_JSON?.trim();
-    let parsedCredentials: Record<string, unknown> | undefined;
-
-    if (credentialsJson) {
-      try {
-        parsedCredentials = JSON.parse(credentialsJson);
-      } catch {
-        throw new Error("Invalid INCONVO_BIGQUERY_CREDENTIALS_JSON value");
-      }
-    }
+    const parsedCredentials = parseBigQueryCredentialsFromEnv({
+      credentialsJson: env.INCONVO_BIGQUERY_CREDENTIALS_JSON,
+      credentialsBase64: env.INCONVO_BIGQUERY_CREDENTIALS_BASE64,
+    });
 
     const projectId = env.INCONVO_BIGQUERY_PROJECT_ID;
     const dataset = env.INCONVO_BIGQUERY_DATASET;
@@ -164,9 +162,9 @@ export async function getDb(): Promise<Kysely<any>> {
     const dialectConfig: BigQueryDialectConfig = {
       projectId,
       dataset,
-      location: env.INCONVO_BIGQUERY_LOCATION,
+      location: normalizeOptionalString(env.INCONVO_BIGQUERY_LOCATION),
       credentials: parsedCredentials,
-      keyFilename: env.INCONVO_BIGQUERY_KEYFILE,
+      keyFilename: normalizeOptionalString(env.INCONVO_BIGQUERY_KEYFILE),
       maximumBytesBilled: env.INCONVO_BIGQUERY_MAX_BYTES_BILLED,
     };
 

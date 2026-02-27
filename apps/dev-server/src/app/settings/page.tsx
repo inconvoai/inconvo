@@ -49,6 +49,13 @@ export default function SettingsPage() {
               <Code>DATABASE_DIALECT</Code>
               <Code>INCONVO_DATABASE_URL</Code>
               <Code>INCONVO_DATABASE_SCHEMA</Code>
+              <Code>INCONVO_BIGQUERY_PROJECT_ID</Code>
+              <Code>INCONVO_BIGQUERY_DATASET</Code>
+              <Code>INCONVO_BIGQUERY_LOCATION</Code>
+              <Code>INCONVO_BIGQUERY_KEYFILE</Code>
+              <Code>INCONVO_BIGQUERY_CREDENTIALS_JSON</Code>
+              <Code>INCONVO_BIGQUERY_CREDENTIALS_BASE64</Code>
+              <Code>INCONVO_BIGQUERY_MAX_BYTES_BILLED</Code>
               <Code>OPENAI_API_KEY</Code>
             </Stack>
           </Stack>

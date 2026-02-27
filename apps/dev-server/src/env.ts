@@ -6,6 +6,52 @@ import * as path from "path";
 // Load .inconvo.env file
 dotenv.config({ path: path.join(process.cwd(), ".inconvo.env") });
 
+const optionalNonEmptyTrimmedString = z
+  .string()
+  .optional()
+  .transform((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  });
+
+const optionalPositiveIntegerFromString = z
+  .string()
+  .optional()
+  .transform((value, ctx) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    if (!/^\d+$/.test(trimmed)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "INCONVO_BIGQUERY_MAX_BYTES_BILLED must be a positive integer when provided",
+      });
+      return z.NEVER;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "INCONVO_BIGQUERY_MAX_BYTES_BILLED must be a positive integer when provided",
+      });
+      return z.NEVER;
+    }
+
+    return parsed;
+  });
+
 const shouldSkipValidation =
   !!process.env.SKIP_ENV_VALIDATION || process.env.CI === "true";
 
@@ -25,13 +71,13 @@ const loadedEnv = createEnv({
       .transform((val) =>
         val ? val.split(",").map((s) => s.trim()).filter(Boolean) : undefined
       ),
-    INCONVO_BIGQUERY_PROJECT_ID: z.string().optional(),
-    INCONVO_BIGQUERY_DATASET: z.string().optional(),
-    INCONVO_BIGQUERY_LOCATION: z.string().optional(),
-    INCONVO_BIGQUERY_KEYFILE: z.string().optional(),
-    INCONVO_BIGQUERY_CREDENTIALS_JSON: z.string().optional(),
-    INCONVO_BIGQUERY_CREDENTIALS_BASE64: z.string().optional(),
-    INCONVO_BIGQUERY_MAX_BYTES_BILLED: z.coerce.number().optional(),
+    INCONVO_BIGQUERY_PROJECT_ID: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_DATASET: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_LOCATION: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_KEYFILE: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_CREDENTIALS_JSON: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_CREDENTIALS_BASE64: optionalNonEmptyTrimmedString,
+    INCONVO_BIGQUERY_MAX_BYTES_BILLED: optionalPositiveIntegerFromString,
     INCONVO_SANDBOX_BASE_URL: z.string().url(),
     INCONVO_SANDBOX_API_KEY: z.string().min(1),
     OPENAI_API_KEY: z.string().min(1),

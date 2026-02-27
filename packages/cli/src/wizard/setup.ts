@@ -427,10 +427,11 @@ export async function runSetupWizard(): Promise<boolean> {
         message: "Max bytes billed per query (optional, press Enter to skip):",
         placeholder: "1000000000",
         validate: (value) => {
-          if (!value) return undefined;
-          return /^\d+$/.test(value)
+          const trimmed = (value ?? "").trim();
+          if (!trimmed) return undefined;
+          return /^[1-9]\d*$/.test(trimmed)
             ? undefined
-            : "Must be a positive integer";
+            : "Must be an integer greater than 0";
         },
       });
       if (p.isCancel(maxBytesInput)) {
@@ -438,14 +439,15 @@ export async function runSetupWizard(): Promise<boolean> {
         return false;
       }
 
+      const trimmedMaxBytesInput = maxBytesInput.trim();
       databaseConfig = {
         databaseDialect,
         bigQueryProjectId: projectIdInput.trim(),
         bigQueryDataset: datasetInput.trim(),
         bigQueryLocation: locationInput.trim(),
         bigQueryKeyfile: BIGQUERY_CREDENTIALS_CONTAINER_PATH,
-        bigQueryMaxBytesBilled: maxBytesInput
-          ? Number.parseInt(maxBytesInput, 10)
+        bigQueryMaxBytesBilled: trimmedMaxBytesInput
+          ? Number.parseInt(trimmedMaxBytesInput, 10)
           : undefined,
       };
     } else {

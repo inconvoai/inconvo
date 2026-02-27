@@ -1,0 +1,24 @@
+name: inconvo-demo-db
+
+services:
+  demo-db:
+    image: postgres:16-alpine
+    ports:
+      - "26687:5432"
+    environment:
+      - POSTGRES_USER=inconvo
+      - POSTGRES_PASSWORD=inconvo
+      - POSTGRES_DB=demo
+    volumes:
+      - demo-db-data:/var/lib/postgresql/data
+      - ${INCONVO_INIT_SCRIPT:-./demo-db-init.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inconvo -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  demo-db-data:
+    name: inconvo-demo-db-data

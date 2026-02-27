@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -82,9 +83,19 @@ jobs:
               `Download: ${process.env.RUN_URL}`,
             ].join("\n");
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body,
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            } catch (error) {
+              if (error?.status === 403) {
+                core.warning(
+                  "Unable to post PR comment with GITHUB_TOKEN (403). Tarball artifact is still available from this run."
+                );
+                return;
+              }
+              throw error;
+            }

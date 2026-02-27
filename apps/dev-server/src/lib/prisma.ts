@@ -1,18 +1,18 @@
 import path from "path";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { PrismaClient } from "../../prisma/generated/client/client";
 
-// Singleton pattern for Prisma client with better-sqlite3 adapter
+// Singleton pattern for Prisma client with libSQL adapter (local SQLite)
 declare global {
   var prisma: PrismaClient | undefined;
 }
 
 function createPrismaClient(): PrismaClient {
-  // Use INCONVO_LOCAL_DB_PATH if set (Docker), otherwise default to local prisma dir
+  // Use INCONVO_LOCAL_DB_PATH if set, otherwise default to local prisma dir
   const dbPath =
     process.env.INCONVO_LOCAL_DB_PATH ??
     path.join(process.cwd(), "prisma", ".inconvo.db");
-  const adapter = new PrismaBetterSqlite3({ url: dbPath });
+  const adapter = new PrismaLibSql({ url: `file:${dbPath}` });
   return new PrismaClient({ adapter });
 }
 

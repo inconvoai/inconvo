@@ -13,16 +13,17 @@
     "lint": "eslint --color .",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "build:binary": "bun run scripts/build-binary.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
     "@langchain/langgraph": "catalog:",
-    "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
     "@mantine/charts": "catalog:",
     "@mantine/core": "catalog:",
     "@mantine/hooks": "catalog:",
-    "@prisma/adapter-better-sqlite3": "^7.4.0",
+    "@langchain/langgraph-checkpoint": "catalog:",
+    "@prisma/adapter-libsql": "^7.4.1",
     "@prisma/client": "catalog:",
     "@repo/agents": "workspace:*",
     "@repo/connect": "workspace:*",
@@ -31,7 +32,6 @@
     "@repo/ui": "workspace:*",
     "@t3-oss/env-nextjs": "catalog:",
     "@tabler/icons-react": "catalog:",
-    "better-sqlite3": "^12.6.2",
     "clsx": "catalog:",
     "dotenv": "catalog:",
     "kysely": "catalog:",
@@ -52,7 +52,6 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "@types/react": "catalog:",

@@ -245,7 +245,7 @@ function startSandbox(): ChildProcess {
  * Only used in demo mode — non-demo users never need Docker.
  */
 function startDemoDb(env: Record<string, string>): void {
-  spawnSync(
+  const result = spawnSync(
     "docker",
     [
       "compose",
@@ -259,6 +259,15 @@ function startDemoDb(env: Record<string, string>): void {
     ],
     { env, stdio: "inherit" },
   );
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to start demo database (exit code ${result.status ?? "unknown"}).`,
+    );
+  }
 }
 
 /**
@@ -272,6 +281,25 @@ function stopDemoDb(env: Record<string, string>): void {
     });
   } catch {
     // Ignore errors during shutdown
+  }
+}
+
+function runBinaryMigrations(
+  binaryPath: string,
+  env: Record<string, string>,
+): void {
+  const result = spawnSync(binaryPath, ["--migrate-only"], {
+    env,
+    stdio: "inherit",
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Migration command failed with exit code ${result.status ?? "unknown"}.`,
+    );
   }
 }
 
@@ -378,6 +406,18 @@ export const devCommand = new Command("dev")
         "postgresql://inconvo:inconvo@localhost:26687/demo";
     }
 
+    spinner.start("Running local database migrations...");
+    try {
+      runBinaryMigrations(binaryPath, serverEnv);
+      spinner.stop("Local database ready");
+    } catch (error) {
+      spinner.stop("Failed to run local migrations");
+      logError(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      process.exit(1);
+    }
+
     writeSandboxEnv(sandboxApiKey);
 
     const devServerUrl = "http://localhost:26686";
@@ -405,7 +445,14 @@ export const devCommand = new Command("dev")
     // Start demo database if in demo mode
     if (useDemo) {
       logDim("Starting demo database...");
-      startDemoDb(process.env as Record<string, string>);
+      try {
+        startDemoDb(process.env as Record<string, string>);
+      } catch (error) {
+        logError(
+          `Failed to start demo database: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        process.exit(1);
+      }
     }
 
     // Start the dev-server binary directly (no Docker needed)

@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { createRequire } from "node:module";
 import {
   BaseCheckpointSaver,
   type Checkpoint,
@@ -11,6 +11,23 @@ import {
 // RunnableConfig is from @langchain/core/runnables but may not be directly resolvable.
 // Re-use the type via the checkpoint package's re-export in CheckpointTuple.
 type RunnableConfig = NonNullable<CheckpointTuple["config"]>;
+
+type BunSqliteDatabase = {
+  exec(sql: string): void;
+  query<T = unknown, P extends unknown[] = unknown[]>(sql: string): {
+    get(...params: P): T | null;
+    all(...params: P): T[];
+    run(...params: P): void;
+  };
+  prepare<T = unknown, P extends unknown[] = unknown[]>(sql: string): {
+    get(...params: P): T | null;
+    all(...params: P): T[];
+    run(...params: P): void;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transaction<T extends (...args: any[]) => any>(fn: T): T;
+  close(): void;
+};
 
 // SQL statements matching the schema used by @langchain/langgraph-checkpoint-sqlite
 const SETUP_SQL = `
@@ -99,11 +116,15 @@ function copyCheckpoint(checkpoint: Checkpoint): Checkpoint {
 }
 
 export class BunSqliteSaver extends BaseCheckpointSaver {
-  private db: Database;
+  private db: BunSqliteDatabase;
   private isSetup = false;
 
   constructor(dbPath: string) {
     super();
+    const require = createRequire(import.meta.url);
+    const { Database } = require("bun:sqlite") as {
+      Database: new (filename: string) => BunSqliteDatabase;
+    };
     this.db = new Database(dbPath);
   }
 

@@ -3,9 +3,9 @@
  *
  * What this does (replacing the next-bun-compile dependency):
  *  1. Build Next.js standalone output via `next build`
- *  2. Generate SQLite DDL for embedded DB migration
+ *  2. Collect Prisma migration SQL files for embedded DB migration
  *  3. Discover and embed static/public/runtime assets using Bun's `import with { type: "file" }`
- *  4. Generate a server entry point that extracts assets on first run
+ *  4. Generate a server entry point that extracts assets and runs migrations
  *  5. Patch Next.js require hooks for binary compat
  *  6. Run `bun build --compile` for each target platform
  *
@@ -24,7 +24,7 @@ import {
   mkdirSync,
   copyFileSync,
 } from "node:fs";
-import { join, relative, dirname } from "node:path";
+import { join, relative, dirname, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 
@@ -49,6 +49,11 @@ interface FileEntry {
   urlPath: string;
 }
 
+interface EmbeddedMigration {
+  name: string;
+  sql: string;
+}
+
 function walkDir(dir: string, base: string = dir): FileEntry[] {
   const results: FileEntry[] = [];
   if (!existsSync(dir)) return results;
@@ -71,6 +76,36 @@ function toVarName(filePath: string): string {
   const hash = createHash("md5").update(filePath).digest("hex").slice(0, 8);
   const safe = filePath.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 40);
   return `asset_${safe}_${hash}`;
+}
+
+function collectPrismaMigrations(projectDir: string): EmbeddedMigration[] {
+  const migrationsDir = join(projectDir, "prisma", "migrations");
+  if (!existsSync(migrationsDir)) {
+    throw new Error(`Prisma migrations directory not found at ${migrationsDir}`);
+  }
+
+  const migrationDirs = readdirSync(migrationsDir)
+    .map((entry) => join(migrationsDir, entry))
+    .filter((entryPath) => statSync(entryPath).isDirectory())
+    .sort((a, b) => a.localeCompare(b));
+
+  const migrations: EmbeddedMigration[] = [];
+  for (const dir of migrationDirs) {
+    const sqlPath = join(dir, "migration.sql");
+    if (!existsSync(sqlPath)) continue;
+    const sql = readFileSync(sqlPath, "utf-8").trim();
+    if (!sql) continue;
+    migrations.push({
+      name: basename(dir),
+      sql,
+    });
+  }
+
+  if (migrations.length === 0) {
+    throw new Error(`No migration.sql files found under ${migrationsDir}`);
+  }
+
+  return migrations;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,18 +140,26 @@ function findServerDir(standaloneDir: string): string {
 
 function generateStubs(standaloneDir: string): void {
   const nodeModulesDir = join(standaloneDir, "node_modules");
+  const nextRoots = new Set<string>([join(nodeModulesDir, "next")]);
+  const pnpmDir = join(nodeModulesDir, ".pnpm");
+  if (existsSync(pnpmDir)) {
+    for (const entry of readdirSync(pnpmDir)) {
+      const maybeNext = join(pnpmDir, entry, "node_modules", "next");
+      if (existsSync(maybeNext)) nextRoots.add(maybeNext);
+    }
+  }
+
   const stubs = [
-    {
-      path: join(nodeModulesDir, "next/dist/server/dev/next-dev-server.js"),
-      content: "module.exports = { default: null };",
-    },
-    {
-      path: join(
-        nodeModulesDir,
-        "next/dist/server/lib/router-utils/setup-dev-bundler.js"
-      ),
-      content: "module.exports = {};",
-    },
+    ...[...nextRoots].flatMap((nextRoot) => [
+      {
+        path: join(nextRoot, "dist/server/dev/next-dev-server.js"),
+        content: "module.exports = { default: null };",
+      },
+      {
+        path: join(nextRoot, "dist/server/lib/router-utils/setup-dev-bundler.js"),
+        content: "module.exports = {};",
+      },
+    ]),
     {
       path: join(nodeModulesDir, "@opentelemetry/api/index.js"),
       content: "throw new Error('not installed');",
@@ -217,7 +260,10 @@ function collectExternalModules(
 // Generate the entry point and asset map
 // ---------------------------------------------------------------------------
 
-function generateEntryPoint(standaloneDir: string): string {
+function generateEntryPoint(
+  standaloneDir: string,
+  migrations: EmbeddedMigration[]
+): string {
   const serverDir = findServerDir(standaloneDir);
 
   generateStubs(standaloneDir);
@@ -313,6 +359,8 @@ process.env.NODE_ENV = "production";
 
 const nextConfig = ${configMatch[1]};
 process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig);
+const embeddedMigrations = ${JSON.stringify(migrations)};
+const migrationTable = "_inconvo_migrations";
 
 const currentPort = parseInt(process.env.PORT, 10) || 3000;
 const hostname = process.env.HOSTNAME || "0.0.0.0";
@@ -334,7 +382,117 @@ async function extractAssets() {
   if (n > 0) console.log(\`Extracted \${n} assets\`);
 }
 
+function tableExists(db, tableName) {
+  const row = db
+    .query("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get(tableName);
+  return Boolean(row);
+}
+
+function columnExists(db, tableName, columnName) {
+  if (!tableExists(db, tableName)) return false;
+  const rows = db.query(\`PRAGMA table_info("\${tableName}")\`).all();
+  return rows.some((row) => row.name === columnName);
+}
+
+function isLegacySchemaAtLatest(db) {
+  return (
+    tableExists(db, "Conversation") &&
+    tableExists(db, "VirtualTableConfig") &&
+    tableExists(db, "TableAccessPolicy") &&
+    columnExists(db, "Table", "source")
+  );
+}
+
+function markAllMigrationsApplied(db, appliedAt) {
+  const insert = db.prepare(
+    \`INSERT OR IGNORE INTO "\${migrationTable}" (name, applied_at) VALUES (?, ?)\`
+  );
+  const tx = db.transaction(() => {
+    for (const migration of embeddedMigrations) {
+      insert.run(migration.name, appliedAt);
+    }
+  });
+  tx();
+}
+
+function runLocalMigrations() {
+  const { Database } = require("bun:sqlite");
+  const dbPath =
+    process.env.INCONVO_LOCAL_DB_PATH ??
+    path.join(baseDir, "prisma", ".inconvo.db");
+
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+
+  try {
+    db.exec("PRAGMA journal_mode=WAL;");
+    db.exec(
+      \`CREATE TABLE IF NOT EXISTS "\${migrationTable}" (
+        name TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      )\`
+    );
+
+    const appliedRows = db
+      .query(\`SELECT name FROM "\${migrationTable}" ORDER BY name\`)
+      .all();
+    const applied = new Set(appliedRows.map((row) => row.name));
+
+    if (applied.size === 0) {
+      const hasLegacyTables =
+        tableExists(db, "Table") ||
+        tableExists(db, "Conversation") ||
+        tableExists(db, "checkpoints") ||
+        tableExists(db, "writes");
+      if (hasLegacyTables) {
+        if (isLegacySchemaAtLatest(db)) {
+          const now = new Date().toISOString();
+          markAllMigrationsApplied(db, now);
+          console.log(
+            \`Detected legacy SQLite schema at latest version; baselined \${embeddedMigrations.length} migrations.\`
+          );
+          return;
+        }
+        throw new Error(
+          \`Detected legacy untracked SQLite schema at \${dbPath} that cannot be auto-migrated. Back up and remove this file, then re-run 'inconvo dev'.\`
+        );
+      }
+    }
+
+    const insert = db.prepare(
+      \`INSERT INTO "\${migrationTable}" (name, applied_at) VALUES (?, ?)\`
+    );
+    let appliedCount = 0;
+
+    for (const migration of embeddedMigrations) {
+      if (applied.has(migration.name)) continue;
+      const appliedAt = new Date().toISOString();
+      const tx = db.transaction(() => {
+        db.exec(migration.sql);
+        insert.run(migration.name, appliedAt);
+      });
+      tx();
+      appliedCount++;
+    }
+
+    if (appliedCount > 0) {
+      console.log(\`Applied \${appliedCount} local SQLite migration(s)\`);
+    } else {
+      console.log("Local SQLite migrations are up to date");
+    }
+  } finally {
+    db.close();
+  }
+}
+
 extractAssets().then(() => {
+  runLocalMigrations();
+  if (process.argv.includes("--migrate-only")) {
+    console.log("Migration-only mode completed successfully");
+    process.exit(0);
+  }
+
   require("next");
   const { startServer } = require("next/dist/server/lib/start-server");
   return startServer({
@@ -414,16 +572,14 @@ if (!existsSync(STANDALONE_DIR)) {
   process.exit(1);
 }
 
-// Step 2: Generate SQLite DDL for embedded migration
-console.log("\n=== Generating SQLite DDL ===\n");
-execSync(
-  "npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > src/generated-ddl.sql",
-  { cwd: PROJECT_DIR, stdio: "inherit" }
-);
+// Step 2: Collect Prisma migrations for embedded migration runner
+console.log("\n=== Collecting Prisma migrations ===\n");
+const migrations = collectPrismaMigrations(PROJECT_DIR);
+console.log(`Embedded ${migrations.length} Prisma migration(s)`);
 
 // Step 3: Generate entry point and asset map
 console.log("\n=== Generating entry point ===\n");
-const serverDir = generateEntryPoint(STANDALONE_DIR);
+const serverDir = generateEntryPoint(STANDALONE_DIR, migrations);
 
 // Step 4: Compile for each target
 mkdirSync(DIST_DIR, { recursive: true });

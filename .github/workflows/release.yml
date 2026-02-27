@@ -1,4 +1,4 @@
-name: Release Docker CLI
+name: Release
 
 on:
   push:
@@ -62,7 +62,60 @@ jobs:
           echo "Extracted versions:"
           cat $GITHUB_OUTPUT
 
-  # Build dev-server for each architecture natively
+  # Build compiled Bun binaries for each platform
+  build-binary:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - target: bun-darwin-arm64
+            runner: macos-latest
+          - target: bun-darwin-x64
+            runner: macos-13
+          - target: bun-linux-x64
+            runner: ubuntu-latest
+          - target: bun-linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: |
+          pnpm config set node-linker hoisted
+          pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm turbo run build --filter="./packages/*"
+
+      - name: Build binary
+        working-directory: apps/dev-server
+        run: bun run scripts/build-binary.ts ${{ matrix.target }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inconvo-dev-server-${{ matrix.target }}
+          path: apps/dev-server/dist/inconvo-dev-server-${{ matrix.target }}
+
+  # Build Docker images (legacy, kept for backwards compatibility)
   build-dev-server:
     needs: prepare
     strategy:
@@ -108,7 +161,7 @@ jobs:
           cache-from: type=gha,scope=dev-server-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=dev-server-${{ matrix.suffix }}
 
-  # Create multi-arch manifest for dev-server
+  # Create multi-arch manifest for dev-server Docker image
   manifest-dev-server:
     needs: [prepare, build-dev-server]
     if: ${{ !contains(needs.prepare.outputs.version, '-') }}
@@ -145,7 +198,7 @@ jobs:
           docker manifest push ${IMAGE}:latest
 
   publish-cli:
-    needs: [prepare, manifest-dev-server]
+    needs: [prepare, build-binary]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -189,7 +242,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
-    needs: [prepare, manifest-dev-server, publish-cli]
+    needs: [prepare, build-binary, publish-cli]
     if: ${{ !contains(needs.prepare.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
@@ -199,6 +252,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          merge-multiple: true
+
       - name: Create GitHub Release (Draft)
         uses: softprops/action-gh-release@v2
         with:
@@ -207,8 +266,18 @@ jobs:
           generate_release_notes: true
           draft: true
           prerelease: false
+          files: binaries/inconvo-dev-server-*
+          fail_on_unmatched_files: true
           body: |
-            ## Docker Images
+            ## Compiled Binaries
+
+            Compiled dev-server binaries are attached to this release for:
+            - macOS Apple Silicon (`inconvo-dev-server-bun-darwin-arm64`)
+            - macOS Intel (`inconvo-dev-server-bun-darwin-x64`)
+            - Linux x64 (`inconvo-dev-server-bun-linux-x64`)
+            - Linux ARM64 (`inconvo-dev-server-bun-linux-arm64`)
+
+            ## Docker Images (Legacy)
 
             ```bash
             docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}

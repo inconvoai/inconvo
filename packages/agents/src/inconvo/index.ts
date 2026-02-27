@@ -8,7 +8,6 @@ import {
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
   StateGraph,
-  type MemorySaver,
   Annotation,
   END,
   START,
@@ -23,8 +22,7 @@ import {
 } from "@langchain/core/tools";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import type { Schema, DatabaseConnector } from "@repo/types";
 import { getPrompt } from "../utils/getPrompt";
 import { databaseRetrieverAgent } from "../database";
@@ -71,7 +69,7 @@ interface DatabaseConfig {
 
 interface QuestionAgentParams {
   databases: DatabaseConfig[];
-  checkpointer: PostgresSaver | MemorySaver | SqliteSaver;
+  checkpointer: BaseCheckpointSaver;
   conversation: Conversation;
   orgId: string;
   agentId: string;

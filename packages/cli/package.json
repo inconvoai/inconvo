@@ -19,7 +19,7 @@
     "dist",
     "bin",
     "assets",
-    "docker-compose.yml",
+    "demo-db-compose.yml",
     "demo-db-init.sql"
   ],
   "scripts": {

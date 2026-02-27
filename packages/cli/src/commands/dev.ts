@@ -8,25 +8,30 @@ import * as p from "@clack/prompts";
 import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import { logInfo, logError, logDim, COLORS } from "../process/output.js";
 import { seedDemoData } from "../seed/demo-data.js";
+import {
+  ensureBinary,
+  getCliVersion,
+  checkPlatformSupport,
+} from "../binary/manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
-const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
+const DEMO_COMPOSE_FILE = path.join(INCONVO_DIR, "demo-db-compose.yml");
 const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
 const DATA_DIR = path.join(INCONVO_DIR, "data");
 const SANDBOX_DIR = path.join(INCONVO_DIR, "sandbox");
 const SANDBOX_ENV_FILE = path.join(SANDBOX_DIR, ".dev.vars");
 
-const SANDBOX_BASE_URL = "http://host.docker.internal:8787";
+const SANDBOX_BASE_URL = "http://localhost:8787";
 const SANDBOX_PORT = "8787";
 const WRANGLER_VERSION = "4.61.1";
 
 // Bundled files (shipped with npm package)
-const BUNDLED_COMPOSE_FILE = path.join(
+const BUNDLED_DEMO_COMPOSE_FILE = path.join(
   __dirname,
   "..",
   "..",
-  "docker-compose.yml",
+  "demo-db-compose.yml",
 );
 const BUNDLED_INIT_SCRIPT = path.join(
   __dirname,
@@ -62,17 +67,6 @@ function checkDockerComposeAvailable(): boolean {
 
 function generateApiKey(): string {
   return crypto.randomUUID();
-}
-
-/**
- * Rewrite localhost URLs to host.docker.internal for Docker access to host services.
- * This allows users to enter localhost URLs (which the CLI can validate) while
- * Docker containers can still reach host services.
- */
-function rewriteLocalhostForDocker(url: string): string {
-  return url
-    .replace(/localhost/gi, "host.docker.internal")
-    .replace(/127\.0\.0\.1/g, "host.docker.internal");
 }
 
 /**
@@ -120,7 +114,6 @@ async function waitForServer(url: string, maxAttempts = 60): Promise<boolean> {
 async function waitForDemoDbAndSeed(maxAttempts = 60): Promise<void> {
   const connectionString = "postgresql://inconvo:inconvo@localhost:26687/demo";
 
-  // Wait for database to be ready
   for (let i = 0; i < maxAttempts; i++) {
     try {
       await seedDemoData(connectionString);
@@ -137,7 +130,6 @@ async function waitForDemoDbAndSeed(maxAttempts = 60): Promise<void> {
 
 /**
  * Configure the dev-server's SQLite database for demo mode
- * This sets up user context, computed columns, and table conditions
  */
 async function configureDemoDatabase(
   devServerUrl: string,
@@ -169,13 +161,15 @@ async function configureDemoDatabase(
   );
 }
 
-function copyBundledFiles(): void {
-  // Copy the bundled files to ~/.inconvo/
-  // This ensures the file versions match the CLI version
+function copyBundledFiles(useDemo: boolean): void {
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
-  fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
+
+  // Only copy Docker-related files in demo mode
+  if (useDemo) {
+    fs.copyFileSync(BUNDLED_DEMO_COMPOSE_FILE, DEMO_COMPOSE_FILE);
+    fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
+  }
 
   if (!fs.existsSync(BUNDLED_SANDBOX_DIR)) {
     throw new Error(
@@ -190,33 +184,6 @@ function copyBundledFiles(): void {
 function writeSandboxEnv(apiKey: string): void {
   const lines = [`INTERNAL_API_KEY=${apiKey}`, "SKIP_BUCKET_MOUNT=true", ""];
   fs.writeFileSync(SANDBOX_ENV_FILE, lines.join("\n"));
-}
-
-function runCommand(
-  command: string,
-  args: string[],
-  options: {
-    env?: NodeJS.ProcessEnv;
-    cwd?: string;
-    stdio?: "inherit" | "pipe";
-  },
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
-      env: options.env,
-      cwd: options.cwd,
-      stdio: options.stdio ?? "inherit",
-    });
-
-    proc.on("error", (error) => reject(error));
-    proc.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`${command} exited with code ${code ?? "unknown"}`));
-      }
-    });
-  });
 }
 
 function pipeWithPrefix(stream: NodeJS.ReadableStream, prefix: string): void {
@@ -234,22 +201,6 @@ function pipeWithPrefix(stream: NodeJS.ReadableStream, prefix: string): void {
     if (buffer.trim() !== "") {
       console.log(`${prefix} ${buffer}`);
     }
-  });
-}
-
-function startDockerLogs(
-  env: NodeJS.ProcessEnv,
-  useDemo: boolean,
-): ChildProcess {
-  const args = ["compose", "-f", COMPOSE_FILE];
-  if (useDemo) {
-    args.push("--profile", "demo");
-  }
-  args.push("logs", "-f", "--no-color", "dev-server");
-
-  return spawn("docker", args, {
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -289,32 +240,55 @@ function startSandbox(): ChildProcess {
   });
 }
 
+/**
+ * Start the demo PostgreSQL database via Docker Compose.
+ * Only used in demo mode — non-demo users never need Docker.
+ */
+function startDemoDb(env: Record<string, string>): void {
+  spawnSync(
+    "docker",
+    [
+      "compose",
+      "-f",
+      DEMO_COMPOSE_FILE,
+      "up",
+      "--pull",
+      "always",
+      "--remove-orphans",
+      "-d",
+    ],
+    { env, stdio: "inherit" },
+  );
+}
+
+/**
+ * Stop the demo PostgreSQL database.
+ */
+function stopDemoDb(env: Record<string, string>): void {
+  try {
+    spawnSync("docker", ["compose", "-f", DEMO_COMPOSE_FILE, "down"], {
+      stdio: "inherit",
+      env,
+    });
+  } catch {
+    // Ignore errors during shutdown
+  }
+}
+
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
   .option(
-    "--image-version <version>",
-    "Use a specific Docker image version (default: latest)",
+    "--binary-version <version>",
+    "Use a specific dev-server binary version (default: CLI version)",
   )
-  .action(async (options: { imageVersion?: string }) => {
-    const imageVersion = options.imageVersion || "latest";
-
-    // Check Docker is running
-    if (!checkDockerRunning()) {
-      logError(
-        "Docker is not running. Please start Docker Desktop or Docker daemon.",
-      );
+  .action(async (options: { binaryVersion?: string }) => {
+    // Check platform support
+    try {
+      checkPlatformSupport();
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
-
-    // Check docker compose is available
-    if (!checkDockerComposeAvailable()) {
-      logError(
-        "Docker Compose is not available. Please install Docker Desktop or docker-compose.",
-      );
-      process.exit(1);
-    }
-
-    logInfo("Docker is running");
 
     // Check for config, run wizard if missing
     if (!(await envExists())) {
@@ -327,13 +301,31 @@ export const devCommand = new Command("dev")
 
     // Read config from ~/.inconvo/config.env
     const configEnv = await readEnvFile();
+    const useDemo = configEnv.USE_DEMO_DATABASE === "true";
+
+    // Demo mode requires Docker for the PostgreSQL database
+    if (useDemo) {
+      if (!checkDockerRunning()) {
+        logError(
+          "Docker is required for demo mode. Please start Docker Desktop or Docker daemon.",
+        );
+        process.exit(1);
+      }
+      if (!checkDockerComposeAvailable()) {
+        logError(
+          "Docker Compose is required for demo mode. Please install Docker Desktop or docker-compose.",
+        );
+        process.exit(1);
+      }
+      logInfo("Docker is running (required for demo database)");
+    }
 
     // Copy bundled files to ~/.inconvo/
     const spinner = p.spinner();
     spinner.start("Preparing local assets...");
 
     try {
-      copyBundledFiles();
+      copyBundledFiles(useDemo);
       spinner.stop("Local assets ready");
     } catch (error) {
       spinner.stop("Failed to prepare local assets");
@@ -343,37 +335,47 @@ export const devCommand = new Command("dev")
       process.exit(1);
     }
 
+    // Ensure the compiled binary is available
+    const binaryVersion = options.binaryVersion || getCliVersion();
+    spinner.start("Checking dev-server binary...");
+
+    let binaryPath: string;
+    try {
+      binaryPath = await ensureBinary(binaryVersion, (msg) => {
+        spinner.message(msg);
+      });
+      spinner.stop("Dev-server binary ready");
+    } catch (error) {
+      spinner.stop("Failed to get dev-server binary");
+      logError(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      process.exit(1);
+    }
+
     // Generate shared API key for internal communication
     const sandboxApiKey = generateApiKey();
 
-    // Check if demo mode is enabled
-    const useDemo = configEnv.USE_DEMO_DATABASE === "true";
-
-    // Rewrite localhost to host.docker.internal for Docker access to host services
-    // (not needed for demo mode since the database is in the same Docker network)
-    const dockerEnv = { ...configEnv };
-    if (!useDemo && dockerEnv.INCONVO_DATABASE_URL) {
-      dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(
-        dockerEnv.INCONVO_DATABASE_URL,
-      );
-    }
-
-    // Build environment for docker compose
-    const env: Record<string, string> = {
+    // Build environment for the dev-server binary
+    // No need for rewriteLocalhostForDocker — binary runs on host directly
+    const serverEnv: Record<string, string> = {
       ...(process.env as Record<string, string>),
-      ...dockerEnv,
-      INCONVO_VERSION: imageVersion,
+      ...configEnv,
+      INCONVO_LOCAL_DB_PATH: path.join(DATA_DIR, "inconvo.db"),
       INCONVO_SANDBOX_API_KEY: sandboxApiKey,
       INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
-      INCONVO_INIT_SCRIPT: INIT_SCRIPT,
-      INCONVO_DATA_DIR: DATA_DIR,
+      SKIP_ENV_VALIDATION: "true",
+      PORT: "26686",
+      HOSTNAME: "0.0.0.0",
+      NODE_ENV: "production",
     };
 
     // Set demo database URL when demo mode is enabled
+    // Uses localhost since the binary runs on the host (not in Docker)
     if (useDemo) {
-      env.DATABASE_DIALECT = "postgresql";
-      env.INCONVO_DATABASE_URL =
-        "postgresql://inconvo:inconvo@demo-db:5432/demo";
+      serverEnv.DATABASE_DIALECT = "postgresql";
+      serverEnv.INCONVO_DATABASE_URL =
+        "postgresql://inconvo:inconvo@localhost:26687/demo";
     }
 
     writeSandboxEnv(sandboxApiKey);
@@ -400,30 +402,27 @@ export const devCommand = new Command("dev")
     logDim(`  sandbox:    http://localhost:${SANDBOX_PORT}`);
     logDim("  Press Ctrl+C to stop\n");
 
-    logDim("Starting Docker services...");
-    try {
-      const composeArgs = ["compose", "-f", COMPOSE_FILE];
-      if (useDemo) {
-        composeArgs.push("--profile", "demo");
-      }
-      composeArgs.push("up", "--pull", "always", "--remove-orphans", "-d");
-      await runCommand("docker", composeArgs, { env, stdio: "inherit" });
-    } catch (error) {
-      logError(
-        `Failed to start Docker services: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      process.exit(1);
+    // Start demo database if in demo mode
+    if (useDemo) {
+      logDim("Starting demo database...");
+      startDemoDb(process.env as Record<string, string>);
     }
 
-    const dockerLogsProc = startDockerLogs(env, useDemo);
+    // Start the dev-server binary directly (no Docker needed)
+    logDim("Starting dev-server...");
+    const serverProc = spawn(binaryPath, [], {
+      env: serverEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
     const sandboxProc = startSandbox();
 
     pipeWithPrefix(
-      dockerLogsProc.stdout!,
+      serverProc.stdout!,
       `${COLORS.cyan}[dev-server]${COLORS.reset}`,
     );
     pipeWithPrefix(
-      dockerLogsProc.stderr!,
+      serverProc.stderr!,
       `${COLORS.cyan}[dev-server]${COLORS.reset}`,
     );
     pipeWithPrefix(
@@ -443,25 +442,14 @@ export const devCommand = new Command("dev")
 
       console.log(`\n${COLORS.gray}Shutting down...${COLORS.reset}`);
 
+      if (serverProc && !serverProc.killed) {
+        serverProc.kill("SIGTERM");
+      }
       if (sandboxProc && !sandboxProc.killed) {
         sandboxProc.kill("SIGINT");
       }
-      if (dockerLogsProc && !dockerLogsProc.killed) {
-        dockerLogsProc.kill("SIGTERM");
-      }
-
-      try {
-        const downArgs = ["compose", "-f", COMPOSE_FILE];
-        if (useDemo) {
-          downArgs.push("--profile", "demo");
-        }
-        downArgs.push("down");
-        spawnSync("docker", downArgs, {
-          stdio: "inherit",
-          env,
-        });
-      } catch {
-        // Ignore errors during shutdown
+      if (useDemo) {
+        stopDemoDb(process.env as Record<string, string>);
       }
 
       process.exit(code);
@@ -469,6 +457,18 @@ export const devCommand = new Command("dev")
 
     process.on("SIGINT", () => shutdown(0));
     process.on("SIGTERM", () => shutdown(0));
+
+    serverProc.on("error", (error) => {
+      logError(`Failed to start dev-server: ${error.message}`);
+      shutdown(1);
+    });
+
+    serverProc.on("exit", (code) => {
+      if (!shuttingDown) {
+        logError("Dev-server exited unexpectedly.");
+        shutdown(code ?? 1);
+      }
+    });
 
     sandboxProc.on("error", (error) => {
       logError(`Failed to start sandbox: ${error.message}`);
@@ -482,27 +482,12 @@ export const devCommand = new Command("dev")
       }
     });
 
-    dockerLogsProc.on("error", (error) => {
-      logError(`Failed to stream dev-server logs: ${error.message}`);
-      shutdown(1);
-    });
-
-    dockerLogsProc.on("exit", (code) => {
-      if (!shuttingDown) {
-        logError("Dev-server logs stopped unexpectedly.");
-        shutdown(code ?? 1);
-      }
-    });
-
-    // Wait for demo database to be ready, seed it, and configure the dev-server (runs in background)
+    // Wait for services to be ready
     if (useDemo) {
       (async () => {
-        // First seed the demo database
         await waitForDemoDbAndSeed();
-        // Then wait for dev-server to be ready
         const serverReady = await waitForServer(devServerUrl);
         if (serverReady) {
-          // Configure the dev-server's SQLite database for demo mode
           await configureDemoDatabase(devServerUrl);
           logInfo("Opening browser...");
           openBrowser(devServerUrl);
@@ -511,7 +496,6 @@ export const devCommand = new Command("dev")
         // Silently ignore errors
       });
     } else {
-      // Non-demo mode: just wait for server and open browser
       waitForServer(devServerUrl)
         .then((ready) => {
           if (ready) {

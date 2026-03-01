@@ -29,7 +29,7 @@ npx inconvo@latest dev
 ```
 
 Options:
-- `--version <version>` - Use a specific release version
+- `--image-version <version>` - Use a specific Docker image version
 
 ### `inconvo configure`
 
@@ -43,8 +43,20 @@ npx inconvo@latest configure
 
 On first run, the CLI will prompt you for:
 
-- **Database connection** - PostgreSQL, MySQL, or SQL Server
+- **Database connection** - PostgreSQL, Redshift, MySQL, SQL Server, or BigQuery
 - **OpenAI API key** - For the LLM
+
+For BigQuery connections, the setup wizard also asks for:
+- Project ID
+- Dataset
+- Location (for example `US` or `EU`)
+- Service account credentials JSON file path (copied to `~/.inconvo/credentials/` and mounted into Docker)
+- Max bytes billed per query (optional, must be an integer greater than `0`)
+
+BigQuery credentials are resolved in this order when multiple values are set:
+1. `INCONVO_BIGQUERY_CREDENTIALS_JSON`
+2. `INCONVO_BIGQUERY_CREDENTIALS_BASE64`
+3. `INCONVO_BIGQUERY_KEYFILE`
 
 Configuration is stored in `~/.inconvo/config.env`.
 The CLI stores the dev-server SQLite database at `~/.inconvo/data/inconvo.db`.

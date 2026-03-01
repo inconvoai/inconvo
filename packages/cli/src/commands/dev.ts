@@ -14,12 +14,22 @@ const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
 const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
 const DATA_DIR = path.join(INCONVO_DIR, "data");
+const CREDENTIALS_DIR = path.join(INCONVO_DIR, "credentials");
 const SANDBOX_DIR = path.join(INCONVO_DIR, "sandbox");
 const SANDBOX_ENV_FILE = path.join(SANDBOX_DIR, ".dev.vars");
 
 const SANDBOX_BASE_URL = "http://host.docker.internal:8787";
 const SANDBOX_PORT = "8787";
 const WRANGLER_VERSION = "4.61.1";
+const OPTIONAL_BIGQUERY_ENV_KEYS = [
+  "INCONVO_BIGQUERY_PROJECT_ID",
+  "INCONVO_BIGQUERY_DATASET",
+  "INCONVO_BIGQUERY_LOCATION",
+  "INCONVO_BIGQUERY_KEYFILE",
+  "INCONVO_BIGQUERY_CREDENTIALS_JSON",
+  "INCONVO_BIGQUERY_CREDENTIALS_BASE64",
+  "INCONVO_BIGQUERY_MAX_BYTES_BILLED",
+] as const;
 
 // Bundled files (shipped with npm package)
 const BUNDLED_COMPOSE_FILE = path.join(
@@ -73,6 +83,15 @@ function rewriteLocalhostForDocker(url: string): string {
   return url
     .replace(/localhost/gi, "host.docker.internal")
     .replace(/127\.0\.0\.1/g, "host.docker.internal");
+}
+
+function removeBlankOptionalBigQueryEnv(env: Record<string, string>): void {
+  for (const key of OPTIONAL_BIGQUERY_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length === 0) {
+      delete env[key];
+    }
+  }
 }
 
 /**
@@ -174,6 +193,7 @@ function copyBundledFiles(): void {
   // This ensures the file versions match the CLI version
   fs.mkdirSync(INCONVO_DIR, { recursive: true });
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(CREDENTIALS_DIR, { recursive: true });
   fs.copyFileSync(BUNDLED_COMPOSE_FILE, COMPOSE_FILE);
   fs.copyFileSync(BUNDLED_INIT_SCRIPT, INIT_SCRIPT);
 
@@ -352,6 +372,7 @@ export const devCommand = new Command("dev")
     // Rewrite localhost to host.docker.internal for Docker access to host services
     // (not needed for demo mode since the database is in the same Docker network)
     const dockerEnv = { ...configEnv };
+    removeBlankOptionalBigQueryEnv(dockerEnv);
     if (!useDemo && dockerEnv.INCONVO_DATABASE_URL) {
       dockerEnv.INCONVO_DATABASE_URL = rewriteLocalhostForDocker(
         dockerEnv.INCONVO_DATABASE_URL,
@@ -367,6 +388,7 @@ export const devCommand = new Command("dev")
       INCONVO_SANDBOX_BASE_URL: SANDBOX_BASE_URL,
       INCONVO_INIT_SCRIPT: INIT_SCRIPT,
       INCONVO_DATA_DIR: DATA_DIR,
+      INCONVO_CREDENTIALS_DIR: CREDENTIALS_DIR,
     };
 
     // Set demo database URL when demo mode is enabled

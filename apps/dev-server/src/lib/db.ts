@@ -6,6 +6,12 @@ import {
   type LogEvent,
   type LogConfig,
 } from "kysely";
+import {
+  BigQueryDialect,
+  type BigQueryDialectConfig,
+  normalizeOptionalString,
+  parseBigQueryCredentialsFromEnv,
+} from "@repo/connect/dialects";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";
 import { env } from "~/env";
@@ -23,6 +29,13 @@ const createLogger = (): LogConfig => (event: LogEvent) => {
   }
 };
 
+function requireDatabaseUrl(): string {
+  if (!env.INCONVO_DATABASE_URL) {
+    throw new Error("INCONVO_DATABASE_URL is required for SQL dialects");
+  }
+  return env.INCONVO_DATABASE_URL;
+}
+
 export async function getDb(): Promise<Kysely<unknown>> {
   if (globalForDb.__INCONVO_KYSELY_DB__) {
     return globalForDb.__INCONVO_KYSELY_DB__;
@@ -33,7 +46,7 @@ export async function getDb(): Promise<Kysely<unknown>> {
 
   if (env.DATABASE_DIALECT === "mysql") {
     const mysqlPool = createMysqlPool({
-      uri: env.INCONVO_DATABASE_URL,
+      uri: requireDatabaseUrl(),
     });
 
     db = new Kysely({
@@ -42,8 +55,11 @@ export async function getDb(): Promise<Kysely<unknown>> {
       }),
       log: isDevelopment ? createLogger() : undefined,
     });
-  } else if (env.DATABASE_DIALECT === "postgresql") {
-    const connectionString = env.INCONVO_DATABASE_URL;
+  } else if (
+    env.DATABASE_DIALECT === "postgresql" ||
+    env.DATABASE_DIALECT === "redshift"
+  ) {
+    const connectionString = requireDatabaseUrl();
     const poolConfig: ConstructorParameters<typeof Pool>[0] = {
       connectionString,
     };
@@ -56,7 +72,7 @@ export async function getDb(): Promise<Kysely<unknown>> {
     });
   } else if (env.DATABASE_DIALECT === "mssql") {
     // Parse MSSQL connection string
-    const url = new URL(env.INCONVO_DATABASE_URL);
+    const url = new URL(requireDatabaseUrl());
     const [username, password] =
       url.username && url.password
         ? [url.username, url.password]
@@ -114,9 +130,45 @@ export async function getDb(): Promise<Kysely<unknown>> {
       /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
       log: isDevelopment ? createLogger() : undefined,
     });
+  } else if (env.DATABASE_DIALECT === "bigquery") {
+    if (!env.INCONVO_BIGQUERY_PROJECT_ID) {
+      throw new Error("INCONVO_BIGQUERY_PROJECT_ID is required for BigQuery");
+    }
+    if (!env.INCONVO_BIGQUERY_DATASET) {
+      throw new Error("INCONVO_BIGQUERY_DATASET is required for BigQuery");
+    }
+    if (!env.INCONVO_BIGQUERY_LOCATION) {
+      throw new Error("INCONVO_BIGQUERY_LOCATION is required for BigQuery");
+    }
+    if (
+      !env.INCONVO_BIGQUERY_KEYFILE &&
+      !env.INCONVO_BIGQUERY_CREDENTIALS_JSON &&
+      !env.INCONVO_BIGQUERY_CREDENTIALS_BASE64
+    ) {
+      throw new Error(
+        "Provide INCONVO_BIGQUERY_KEYFILE, INCONVO_BIGQUERY_CREDENTIALS_JSON, or INCONVO_BIGQUERY_CREDENTIALS_BASE64 for BigQuery"
+      );
+    }
+
+    const dialectConfig: BigQueryDialectConfig = {
+      projectId: env.INCONVO_BIGQUERY_PROJECT_ID,
+      dataset: env.INCONVO_BIGQUERY_DATASET,
+      location: env.INCONVO_BIGQUERY_LOCATION,
+      keyFilename: normalizeOptionalString(env.INCONVO_BIGQUERY_KEYFILE),
+      credentials: parseBigQueryCredentialsFromEnv({
+        credentialsJson: env.INCONVO_BIGQUERY_CREDENTIALS_JSON,
+        credentialsBase64: env.INCONVO_BIGQUERY_CREDENTIALS_BASE64,
+      }),
+      maximumBytesBilled: env.INCONVO_BIGQUERY_MAX_BYTES_BILLED,
+    };
+
+    db = new Kysely({
+      dialect: new BigQueryDialect(dialectConfig),
+      log: isDevelopment ? createLogger() : undefined,
+    });
   } else {
     throw new Error(
-      "Unsupported database dialect. Must be postgresql, mysql, or mssql",
+      `Unsupported database dialect "${env.DATABASE_DIALECT}" for dev-server local DB helper. Supported dialects are: postgresql, redshift, mysql, mssql, bigquery.`,
     );
   }
 

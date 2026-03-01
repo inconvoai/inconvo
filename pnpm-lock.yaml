@@ -9,6 +9,9 @@ catalogs:
     '@eslint/js':
       specifier: 9.39.2
       version: 9.39.2
+    '@google-cloud/bigquery':
+      specifier: 8.1.1
+      version: 8.1.1
     '@langchain/core':
       specifier: 1.1.26
       version: 1.1.26
@@ -407,6 +410,9 @@ importers:
       '@faker-js/faker':
         specifier: ^10.3.0
         version: 10.3.0
+      '@google-cloud/bigquery':
+        specifier: 'catalog:'
+        version: 8.1.1
       commander:
         specifier: ^14.0.3
         version: 14.0.3

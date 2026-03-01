@@ -56,6 +56,12 @@ export interface StructFieldMetadata {
   dataType: string;
 }
 
+export {
+  normalizeOptionalString,
+  parseBigQueryCredentialsFromEnv,
+  parseOptionalPositiveInteger,
+} from "./envParsing";
+
 export interface BigQueryQuerySchemaField {
   name?: string;
   type?: string;

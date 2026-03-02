@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
 import type { TableWithColumns, VirtualTableDialect } from "./types";
 
@@ -188,7 +188,7 @@ export function useSqlEditor({ dialect, availableTables, onSave }: UseSqlEditorO
     };
   }, []);
 
-  const beforeMount = (monacoInstance: typeof monaco) => {
+  const beforeMount = useCallback((monacoInstance: typeof monaco) => {
     monacoInstance.editor.defineTheme("sqlEditorTheme", SQL_EDITOR_THEME);
 
     // Dispose previous completion provider if any
@@ -201,16 +201,16 @@ export function useSqlEditor({ dialect, availableTables, onSave }: UseSqlEditorO
         "sql",
         buildCompletionProvider(dialect, availableTablesRef, monacoInstance),
       );
-  };
+  }, [dialect]);
 
-  const onMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+  const onMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
     editor.addCommand(
       monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
       () => {
         handleSaveRef.current();
       },
     );
-  };
+  }, []);
 
   return { beforeMount, onMount };
 }

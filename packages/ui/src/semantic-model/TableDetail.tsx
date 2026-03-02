@@ -72,6 +72,13 @@ import { ManualRelationForm } from "./ManualRelationForm";
 import { ComputedColumnForm } from "./ComputedColumnForm";
 import { ColumnConversionForm } from "./ColumnConversionForm";
 import { ColumnValueEnumForm } from "./ColumnValueEnumForm";
+import Editor, { loader } from "@monaco-editor/react";
+import * as monaco from "monaco-editor";
+import { useSqlEditor } from "./useSqlEditor";
+
+if (typeof window !== "undefined") {
+  loader.config({ monaco });
+}
 
 export interface TableDetailProps {
   /** The table to display */
@@ -245,6 +252,7 @@ export function TableDetail({
     "save" | "refresh" | "delete" | null
   >(null);
   const [isVirtualSqlExpanded, setIsVirtualSqlExpanded] = useState(false);
+  const [isMac, setIsMac] = useState(false);
 
   const isDisabled = readOnly || table.access === "OFF";
   const isVirtualTable = table.source === "VIRTUAL";
@@ -278,6 +286,10 @@ export function TableDetail({
   useEffect(() => {
     setIsVirtualSqlExpanded(false);
   }, [table.id]);
+
+  useEffect(() => {
+    setIsMac(/mac/i.test(navigator?.userAgent ?? ""));
+  }, []);
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -352,6 +364,12 @@ export function TableDetail({
       setVirtualAction(null);
     }
   };
+
+  const { beforeMount: handleEditorBeforeMount, onMount: handleEditorMount } = useSqlEditor({
+    dialect: table.virtualTableConfig?.dialect,
+    availableTables,
+    onSave: handleSaveVirtualSql,
+  });
 
   const handleRefreshVirtualColumns = async () => {
     if (!isVirtualTable || !onRefreshVirtualTableColumns) return;
@@ -556,21 +574,50 @@ export function TableDetail({
                       </Alert>
                     ) : (
                       <>
-                        <Textarea
-                          label="SQL"
-                          placeholder="SELECT ..."
-                          value={virtualSqlValue}
-                          onChange={(e) => {
-                            setVirtualSqlValue(e.currentTarget.value);
-                            setVirtualValidationResult(null);
-                            setVirtualMutationError(null);
-                          }}
-                          autosize
-                          minRows={5}
-                          maxRows={14}
-                          disabled={virtualSqlDisabled}
-                          styles={{ input: { fontFamily: "monospace" } }}
-                        />
+                        <Stack gap={4}>
+                          <Text size="sm" fw={500}>
+                            SQL
+                          </Text>
+                          <Box
+                            style={{
+                              border: "1px solid var(--mantine-color-default-border)",
+                              borderRadius: "var(--mantine-radius-sm)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <Editor
+                              height="200px"
+                              defaultLanguage="sql"
+                              theme="sqlEditorTheme"
+                              beforeMount={handleEditorBeforeMount}
+                              onMount={handleEditorMount}
+                              value={virtualSqlValue}
+                              onChange={(value) => {
+                                setVirtualSqlValue(value ?? "");
+                                setVirtualValidationResult(null);
+                                setVirtualMutationError(null);
+                              }}
+                              options={{
+                                minimap: { enabled: false },
+                                fontSize: 14,
+                                scrollBeyondLastLine: false,
+                                wordWrap: "on",
+                                lineNumbers: "on",
+                                glyphMargin: false,
+                                folding: false,
+                                lineDecorationsWidth: 8,
+                                lineNumbersMinChars: 3,
+                                renderLineHighlight: "none",
+                                scrollbar: {
+                                  vertical: "auto",
+                                  horizontal: "hidden",
+                                },
+                                readOnly: virtualSqlDisabled,
+                                padding: { top: 8, bottom: 8 },
+                              }}
+                            />
+                          </Box>
+                        </Stack>
 
                         {virtualMutationError && (
                           <Alert color="red">{virtualMutationError}</Alert>
@@ -585,7 +632,10 @@ export function TableDetail({
                               loading={virtualAction === "save"}
                               disabled={virtualSqlDisabled}
                             >
-                              Save SQL
+                              Save SQL{" "}
+                              <Text span size="xs" c="dimmed" ml={4}>
+                                {isMac ? "⌘↵" : "Ctrl+↵"}
+                              </Text>
                             </Button>
                             <Button
                               size="xs"

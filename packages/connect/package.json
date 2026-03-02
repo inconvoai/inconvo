@@ -28,7 +28,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/bigquery": "^8.1.1",
+    "@google-cloud/bigquery": "catalog:",
     "@repo/types": "workspace:*",
     "hono": "catalog:",
     "@t3-oss/env-core": "^0.13.10",

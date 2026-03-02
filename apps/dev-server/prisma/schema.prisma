@@ -11,7 +11,7 @@ model Table {
   id                String              @id @default(uuid())
   name              String              @unique
   schema            String?             // Database schema name (e.g., 'public', 'sales')
-  source            String              @default("PHYSICAL")
+  source            TableSource         @default(PHYSICAL)
   access            String              @default("OFF")
   context           String?
   createdAt         DateTime            @default(now())
@@ -166,6 +166,8 @@ model TableAccessPolicy {
   userContextFieldId String
   userContextField   UserContextField @relation(fields: [userContextFieldId], references: [id], onDelete: Cascade)
   table              Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([userContextFieldId])
 }
 
 model UserContextConfig {
@@ -177,6 +179,11 @@ enum UserContextStatus {
   UNSET
   ENABLED
   DISABLED
+}
+
+enum TableSource {
+  PHYSICAL
+  VIRTUAL
 }
 
 enum ColumnAugmentationKind {

@@ -23,6 +23,7 @@ import type {
   TableSummary,
   TableSchema,
   TableAccess,
+  TableSource,
   Column,
   ColumnValueEnumCreatePayload,
   ColumnValueEnumEntryInput,
@@ -58,6 +59,7 @@ interface ApiTableId {
   id: string;
   name: string;
   access: string;
+  source: TableSource;
   hasCondition: boolean;
   hasAccessPolicy: boolean;
 }
@@ -1190,6 +1192,7 @@ function SchemaPageContent() {
           return {
             id: t.id,
             name: t.name,
+            source: t.source,
             columns: (detailData.table?.columns ?? []).map((c) => ({
               id: c.id,
               name: c.name,

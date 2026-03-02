@@ -6,50 +6,15 @@ import { Kysely, PostgresDialect, MysqlDialect, MssqlDialect } from "kysely";
 import { Pool } from "pg";
 import { createPool as createMysqlPool } from "mysql2";
 
-type SqlDialect = "postgresql" | "redshift" | "mysql" | "mssql";
-export type DatabaseDialect = SqlDialect | "bigquery";
+export type DatabaseDialect = "postgresql" | "mysql" | "mssql";
 
-interface SqlDatabaseConfig {
-  databaseDialect: SqlDialect;
-  databaseUrl: string;
-  databaseSchemas?: string[];
-}
-
-interface BigQueryDatabaseConfig {
-  databaseDialect: "bigquery";
-  bigQueryProjectId: string;
-  bigQueryDataset: string;
-  bigQueryLocation: string;
-  bigQueryKeyfile: string;
-  bigQueryMaxBytesBilled?: number;
-}
-
-type DatabaseConfig = SqlDatabaseConfig | BigQueryDatabaseConfig;
-
-type SetupConfig = DatabaseConfig & {
-  openaiApiKey: string;
-  useDemo: boolean;
-};
-
-const BIGQUERY_CREDENTIALS_FILENAME = "bigquery-service-account.json";
-const BIGQUERY_CREDENTIALS_CONTAINER_PATH =
-  `/inconvo/credentials/${BIGQUERY_CREDENTIALS_FILENAME}`;
-
-function getBigQueryCredentialsDir(): string {
-  return path.join(getInconvoDir(), "credentials");
-}
-
-function getBigQueryCredentialsHostPath(): string {
-  return path.join(getBigQueryCredentialsDir(), BIGQUERY_CREDENTIALS_FILENAME);
-}
-
-async function testSqlDatabaseConnection(
-  dialect: SqlDialect,
+async function testDatabaseConnection(
+  dialect: DatabaseDialect,
   connectionUrl: string
 ): Promise<void> {
   let db: Kysely<unknown>;
 
-  if (dialect === "postgresql" || dialect === "redshift") {
+  if (dialect === "postgresql") {
     db = new Kysely({
       dialect: new PostgresDialect({
         pool: new Pool({ connectionString: connectionUrl }),
@@ -131,61 +96,12 @@ async function testSqlDatabaseConnection(
   }
 }
 
-async function testBigQueryConnection(
-  config: BigQueryDatabaseConfig
-): Promise<void> {
-  const { BigQuery } = await import("@google-cloud/bigquery");
-  const client = new BigQuery({
-    projectId: config.bigQueryProjectId,
-    keyFilename: getBigQueryCredentialsHostPath(),
-  });
-
-  const datasetPath = `\`${config.bigQueryProjectId}.${config.bigQueryDataset}\``;
-
-  await client.query({
-    query: `SELECT table_name FROM ${datasetPath}.INFORMATION_SCHEMA.TABLES LIMIT 1`,
-    useLegacySql: false,
-    location: config.bigQueryLocation,
-  });
-}
-
-async function testDatabaseConnection(config: DatabaseConfig): Promise<void> {
-  if (config.databaseDialect === "bigquery") {
-    await testBigQueryConnection(config);
-    return;
-  }
-
-  await testSqlDatabaseConnection(config.databaseDialect, config.databaseUrl);
-}
-
-async function persistBigQueryCredentialsFile(sourcePath: string): Promise<void> {
-  let raw: string;
-
-  try {
-    raw = await fs.readFile(sourcePath, "utf-8");
-  } catch {
-    throw new Error("Could not read the service account JSON file");
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("Service account file is not valid JSON");
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Service account file must be a JSON object");
-  }
-
-  await fs.mkdir(getBigQueryCredentialsDir(), { recursive: true });
-  const destinationPath = getBigQueryCredentialsHostPath();
-  await fs.writeFile(destinationPath, JSON.stringify(parsed), { mode: 0o600 });
-  try {
-    await fs.chmod(destinationPath, 0o600);
-  } catch {
-    // chmod may fail on some filesystems/platforms; ignore.
-  }
+interface SetupConfig {
+  databaseDialect: DatabaseDialect;
+  databaseUrl: string;
+  databaseSchemas?: string[];
+  openaiApiKey: string;
+  useDemo: boolean;
 }
 
 async function writeEnvFile(
@@ -200,23 +116,11 @@ async function writeEnvFile(
     "",
     "# Database Configuration",
     `DATABASE_DIALECT=${config.databaseDialect}`,
+    `INCONVO_DATABASE_URL=${config.databaseUrl}`,
   ];
 
-  if (config.databaseDialect === "bigquery") {
-    lines.push(`INCONVO_BIGQUERY_PROJECT_ID=${config.bigQueryProjectId}`);
-    lines.push(`INCONVO_BIGQUERY_DATASET=${config.bigQueryDataset}`);
-    lines.push(`INCONVO_BIGQUERY_LOCATION=${config.bigQueryLocation}`);
-    lines.push(`INCONVO_BIGQUERY_KEYFILE=${config.bigQueryKeyfile}`);
-    if (config.bigQueryMaxBytesBilled !== undefined) {
-      lines.push(
-        `INCONVO_BIGQUERY_MAX_BYTES_BILLED=${config.bigQueryMaxBytesBilled}`
-      );
-    }
-  } else {
-    lines.push(`INCONVO_DATABASE_URL=${config.databaseUrl}`);
-    if (config.databaseSchemas?.length) {
-      lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchemas.join(",")}`);
-    }
+  if (config.databaseSchemas?.length) {
+    lines.push(`INCONVO_DATABASE_SCHEMA=${config.databaseSchemas.join(",")}`);
   }
 
   lines.push(
@@ -330,15 +234,15 @@ export async function runSetupWizard(): Promise<boolean> {
   }
 
   const useDemo = databaseSource === "demo";
-  let databaseConfig: DatabaseConfig;
+  let databaseDialect: DatabaseDialect;
+  let databaseUrl: string;
+  let databaseSchemas: string[] | undefined;
 
   if (useDemo) {
     // Demo database configuration - uses Docker container
-    databaseConfig = {
-      databaseDialect: "postgresql",
-      databaseUrl: "postgresql://inconvo:inconvo@demo-db:5432/demo",
-      databaseSchemas: ["public"],
-    };
+    databaseDialect = "postgresql";
+    databaseUrl = "postgresql://inconvo:inconvo@demo-db:5432/demo";
+    databaseSchemas = ["public"];
     p.log.info("Demo database will be started in a Docker container.");
   } else {
     // User's own database
@@ -346,10 +250,8 @@ export async function runSetupWizard(): Promise<boolean> {
       message: "Select your database type:",
       options: [
         { value: "postgresql", label: "PostgreSQL", hint: "recommended" },
-        { value: "mssql", label: "Microsoft SQL Server" },
         { value: "mysql", label: "MySQL" },
-        { value: "redshift", label: "Amazon Redshift" },
-        { value: "bigquery", label: "Google BigQuery" },
+        { value: "mssql", label: "Microsoft SQL Server" },
       ],
     });
 
@@ -358,158 +260,57 @@ export async function runSetupWizard(): Promise<boolean> {
       return false;
     }
 
-    const databaseDialect = dialectChoice as DatabaseDialect;
+    databaseDialect = dialectChoice as DatabaseDialect;
 
-    if (databaseDialect === "bigquery") {
-      const projectIdInput = await p.text({
-        message: "BigQuery project ID:",
-        placeholder: "my-gcp-project",
-        validate: (value) => (value ? undefined : "Project ID is required"),
-      });
-      if (p.isCancel(projectIdInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
+    // Connection string
+    const placeholders: Record<DatabaseDialect, string> = {
+      postgresql: "postgresql://user:password@localhost:5432/database",
+      mysql: "mysql://user:password@localhost:3306/database",
+      mssql: "mssql://user:password@localhost:1433/database",
+    };
 
-      const datasetInput = await p.text({
-        message: "BigQuery dataset:",
-        placeholder: "analytics",
-        validate: (value) => (value ? undefined : "Dataset is required"),
-      });
-      if (p.isCancel(datasetInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      const locationInput = await p.text({
-        message: "BigQuery location (for example US or EU):",
-        placeholder: "US",
-        validate: (value) => (value ? undefined : "Location is required"),
-      });
-      if (p.isCancel(locationInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      while (true) {
-        const credentialsPath = await p.text({
-          message: "Path to service account JSON key file:",
-          placeholder: "/Users/you/keys/bigquery-service-account.json",
-          validate: (value) => (value ? undefined : "Path is required"),
-        });
-        if (p.isCancel(credentialsPath)) {
-          p.cancel("Setup cancelled.");
-          return false;
-        }
-
+    const urlInput = await p.text({
+      message: "Enter your database connection string:",
+      placeholder: placeholders[databaseDialect],
+      validate: (value) => {
+        if (!value) return "Connection string is required";
         try {
-          await persistBigQueryCredentialsFile(credentialsPath.trim());
-          p.log.info(
-            `Credentials copied to ${getBigQueryCredentialsHostPath()}`
-          );
-          break;
-        } catch (error) {
-          p.log.error(
-            error instanceof Error ? error.message : "Invalid credentials file"
-          );
-          const retryFile = await p.confirm({
-            message: "Try a different file path?",
-            initialValue: true,
-          });
-          if (p.isCancel(retryFile) || !retryFile) {
-            p.cancel("Setup cancelled.");
-            return false;
-          }
+          new URL(value);
+          return undefined;
+        } catch {
+          return "Please enter a valid connection URL";
         }
-      }
+      },
+    });
 
-      const maxBytesInput = await p.text({
-        message: "Max bytes billed per query (optional, press Enter to skip):",
-        placeholder: "1000000000",
-        validate: (value) => {
-          const trimmed = (value ?? "").trim();
-          if (!trimmed) return undefined;
-          return /^[1-9]\d*$/.test(trimmed)
-            ? undefined
-            : "Must be an integer greater than 0";
-        },
-      });
-      if (p.isCancel(maxBytesInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      const trimmedMaxBytesInput = maxBytesInput.trim();
-      databaseConfig = {
-        databaseDialect,
-        bigQueryProjectId: projectIdInput.trim(),
-        bigQueryDataset: datasetInput.trim(),
-        bigQueryLocation: locationInput.trim(),
-        bigQueryKeyfile: BIGQUERY_CREDENTIALS_CONTAINER_PATH,
-        bigQueryMaxBytesBilled: trimmedMaxBytesInput
-          ? Number.parseInt(trimmedMaxBytesInput, 10)
-          : undefined,
-      };
-    } else {
-      // Connection string
-      const placeholders: Record<SqlDialect, string> = {
-        postgresql: "postgresql://user:password@localhost:5432/database",
-        redshift:
-          "postgresql://user:password@cluster.region.redshift.amazonaws.com:5439/database?sslmode=require",
-        mysql: "mysql://user:password@localhost:3306/database",
-        mssql:
-          "mssql://user:password@localhost:1433/database?encrypt=true&trustServerCertificate=true",
-      };
-
-      const urlInput = await p.text({
-        message: "Enter your database connection string:",
-        placeholder: placeholders[databaseDialect],
-        validate: (value) => {
-          if (!value) return "Connection string is required";
-          try {
-            new URL(value);
-            return undefined;
-          } catch {
-            return "Please enter a valid connection URL";
-          }
-        },
-      });
-
-      if (p.isCancel(urlInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      // Database schemas (optional, comma-separated)
-      const schemaInput = await p.text({
-        message:
-          "Database schemas (optional, comma-separated, press Enter to skip):",
-        placeholder:
-          databaseDialect === "postgresql" || databaseDialect === "redshift"
-            ? "public, sales"
-            : "",
-      });
-
-      if (p.isCancel(schemaInput)) {
-        p.cancel("Setup cancelled.");
-        return false;
-      }
-
-      databaseConfig = {
-        databaseDialect,
-        databaseUrl: urlInput,
-        databaseSchemas: schemaInput
-          ? schemaInput.split(",").map((s) => s.trim()).filter(Boolean)
-          : undefined,
-      };
+    if (p.isCancel(urlInput)) {
+      p.cancel("Setup cancelled.");
+      return false;
     }
+
+    databaseUrl = urlInput;
+
+    // Database schemas (optional, comma-separated)
+    const schemaInput = await p.text({
+      message: "Database schemas (optional, comma-separated, press Enter to skip):",
+      placeholder: databaseDialect === "postgresql" ? "public, sales" : "",
+    });
+
+    if (p.isCancel(schemaInput)) {
+      p.cancel("Setup cancelled.");
+      return false;
+    }
+
+    databaseSchemas = schemaInput
+      ? schemaInput.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
 
     // Test database connection
     const spinner = p.spinner();
     spinner.start("Testing database connection...");
 
     try {
-      await testDatabaseConnection(databaseConfig);
+      await testDatabaseConnection(databaseDialect, databaseUrl);
       spinner.stop("Database connection successful!");
     } catch (error) {
       spinner.stop("Database connection failed");
@@ -518,7 +319,7 @@ export async function runSetupWizard(): Promise<boolean> {
       );
 
       const retry = await p.confirm({
-        message: "Would you like to try setup again?",
+        message: "Would you like to enter a different connection string?",
         initialValue: true,
       });
 
@@ -556,7 +357,9 @@ export async function runSetupWizard(): Promise<boolean> {
   try {
     await writeEnvFile(
       {
-        ...databaseConfig,
+        databaseDialect,
+        databaseUrl,
+        databaseSchemas,
         openaiApiKey: openaiApiKeyValue,
         useDemo,
       },

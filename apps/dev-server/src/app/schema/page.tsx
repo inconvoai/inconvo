@@ -37,7 +37,20 @@ import type {
   VirtualTableDialect,
   VirtualTableColumnRefreshResult,
 } from "@repo/ui/semantic-model";
-import { CreateVirtualTableForm } from "@repo/ui/semantic-model";
+const CreateVirtualTableForm = dynamic(
+  () =>
+    import("@repo/ui/semantic-model").then(
+      (mod) => mod.CreateVirtualTableForm,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <Center h="100%">
+        <Loader size="lg" />
+      </Center>
+    ),
+  },
+);
 import { normalizeColumnValueEnum } from "@repo/types";
 import posthog from "posthog-js";
 import { trackFeatureUsageClient } from "~/lib/telemetry";

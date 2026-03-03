@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { execSync, spawn, spawnSync, type ChildProcess } from "child_process";
+import { createRequire } from "module";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -9,7 +10,11 @@ import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
 import { logInfo, logError, logDim, COLORS } from "../process/output.js";
 import { seedDemoData } from "../seed/demo-data.js";
 
+const require = createRequire(import.meta.url);
+const pkg = require("../../package.json") as { version: string };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_IMAGE_VERSION = `v${pkg.version}`;
 const INCONVO_DIR = path.join(os.homedir(), ".inconvo");
 const COMPOSE_FILE = path.join(INCONVO_DIR, "docker-compose.yml");
 const INIT_SCRIPT = path.join(INCONVO_DIR, "demo-db-init.sql");
@@ -313,10 +318,10 @@ export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
   .option(
     "--image-version <version>",
-    "Use a specific Docker image version (default: latest)",
+    `Use a specific Docker image version (default: ${DEFAULT_IMAGE_VERSION})`,
   )
   .action(async (options: { imageVersion?: string }) => {
-    const imageVersion = options.imageVersion || "latest";
+    const imageVersion = options.imageVersion || DEFAULT_IMAGE_VERSION;
 
     // Check Docker is running
     if (!checkDockerRunning()) {

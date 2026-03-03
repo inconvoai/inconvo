@@ -12,6 +12,11 @@ import {
   Loader,
   Center,
   Alert,
+  Stack,
+  Text,
+  TextInput,
+  Select,
+  Textarea,
 } from "@mantine/core";
 import {
   IconDatabaseEdit,
@@ -33,6 +38,9 @@ import type {
   UserContextField,
   TableWithColumns,
   FilterValue,
+  VirtualTableValidationResult,
+  VirtualTableDialect,
+  VirtualTableColumnRefreshResult,
 } from "@repo/ui/semantic-model";
 import { normalizeColumnValueEnum } from "@repo/types";
 import posthog from "posthog-js";
@@ -117,8 +125,16 @@ interface ApiRelation {
 interface ApiTableDetail {
   id: string;
   name: string;
+  source: TableSource;
   access: string;
   context: string | null;
+  virtualTableConfig: {
+    id: string;
+    dialect: VirtualTableDialect;
+    sql: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   columns: ApiColumn[];
   computedColumns: ApiComputedColumn[];
   outwardRelations: ApiRelation[];
@@ -197,9 +213,18 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
   return {
     id: api.id,
     name: api.name,
-    source: "PHYSICAL",
+    source: api.source,
     access: api.access as TableAccess,
     context: api.context,
+    virtualTableConfig: api.virtualTableConfig
+      ? {
+          id: api.virtualTableConfig.id,
+          dialect: api.virtualTableConfig.dialect,
+          sql: api.virtualTableConfig.sql,
+          createdAt: api.virtualTableConfig.createdAt,
+          updatedAt: api.virtualTableConfig.updatedAt,
+        }
+      : null,
     columns: api.columns.map(transformColumn),
     computedColumns: api.computedColumns.map(transformComputedColumn),
     relations: api.outwardRelations.map(transformRelation),
@@ -262,6 +287,138 @@ function filterToAccessParam(filter: FilterValue): string {
   }
 }
 
+const ACCESS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "QUERYABLE", label: "Queryable" },
+  { value: "JOINABLE", label: "Joinable" },
+  { value: "OFF", label: "Off" },
+];
+
+interface CreateVirtualTablePaneProps {
+  onClose: () => void;
+  onCreate: (payload: {
+    name: string;
+    sql: string;
+    access: TableAccess;
+  }) => Promise<void>;
+  onValidate: (payload: {
+    sql: string;
+    dialect?: VirtualTableDialect;
+    previewLimit?: number;
+  }) => Promise<VirtualTableValidationResult>;
+}
+
+function CreateVirtualTablePane({
+  onClose,
+  onCreate,
+  onValidate,
+}: CreateVirtualTablePaneProps) {
+  const [name, setName] = useState("");
+  const [sql, setSql] = useState("");
+  const [access, setAccess] = useState<TableAccess>("OFF");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canCreate = name.trim().length > 0 && sql.trim().length > 0 && !creating;
+
+  const handleCreate = useCallback(async () => {
+    if (!canCreate) {
+      return;
+    }
+
+    setCreating(true);
+    setError(null);
+    try {
+      const validation = await onValidate({
+        sql,
+        previewLimit: 5,
+      });
+      if (!validation.ok) {
+        setError(validation.error.message);
+        return;
+      }
+      if (validation.columns.length === 0) {
+        setError(
+          "Validation returned no inferred columns. Ensure the query returns at least one row.",
+        );
+        return;
+      }
+      await onCreate({
+        name: name.trim(),
+        sql,
+        access,
+      });
+    } catch (validationError) {
+      setError(
+        validationError instanceof Error
+          ? validationError.message
+          : "Failed to create virtual table.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }, [access, canCreate, name, onCreate, onValidate, sql]);
+
+  return (
+    <Stack p="md" gap="md">
+      <Group justify="space-between" align="center">
+        <div>
+          <Text fw={600}>Create Virtual Table</Text>
+          <Text size="sm" c="dimmed">
+            Define a read-only SQL query and expose it as a semantic-model table.
+          </Text>
+        </div>
+        <Button variant="subtle" size="xs" onClick={onClose} disabled={creating}>
+          Cancel
+        </Button>
+      </Group>
+
+      <Group grow align="flex-start">
+        <TextInput
+          label="Name"
+          placeholder="orders_with_org"
+          value={name}
+          onChange={(event) => {
+            setName(event.currentTarget.value);
+            setError(null);
+          }}
+          disabled={creating}
+        />
+        <Select
+          label="Access"
+          data={ACCESS_OPTIONS}
+          value={access}
+          onChange={(value) => {
+            setAccess((value as TableAccess) ?? "OFF");
+            setError(null);
+          }}
+          disabled={creating}
+        />
+      </Group>
+
+      <Textarea
+        label="SQL"
+        placeholder="SELECT ..."
+        value={sql}
+        onChange={(event) => {
+          setSql(event.currentTarget.value);
+          setError(null);
+        }}
+        minRows={10}
+        autosize
+        disabled={creating}
+      />
+
+      {error ? <Alert color="red">{error}</Alert> : null}
+
+      <Group justify="flex-end">
+        <Button onClick={() => void handleCreate()} disabled={!canCreate} loading={creating}>
+          Create Virtual Table
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
 function SchemaPageContent() {
   const router = useRouter();
   const pathname = usePathname();
@@ -280,6 +437,7 @@ function SchemaPageContent() {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<TableSchema | null>(null);
+  const [isCreateVirtualModalOpen, setIsCreateVirtualModalOpen] = useState(false);
   const [userContextFields, setUserContextFields] = useState<
     UserContextField[]
   >([]);
@@ -334,7 +492,7 @@ function SchemaPageContent() {
       const transformed: TableSummary[] = (data.tables ?? []).map((table) => ({
         id: table.id,
         name: table.name,
-        source: "PHYSICAL" as const,
+        source: table.source,
         access: table.access as TableAccess,
         columnCount: 0,
         selectedColumnCount: 0,
@@ -489,6 +647,7 @@ function SchemaPageContent() {
 
   // Callbacks for SemanticModelEditor
   const onTableSelect = useCallback((tableId: string) => {
+    setIsCreateVirtualModalOpen(false);
     setSelectedTableId(tableId);
 
     // Track table selection
@@ -1213,6 +1372,275 @@ function SchemaPageContent() {
     void fetchAvailableTables();
   }, [fetchAvailableTables]);
 
+  const onRequestCreateVirtualTable = useCallback(() => {
+    setSelectedTableId(null);
+    setSelectedTable(null);
+    setIsCreateVirtualModalOpen(true);
+  }, []);
+
+  const onValidateVirtualTableSql = useCallback(
+    async (payload: {
+      connectionId: string;
+      sql: string;
+      dialect?: VirtualTableDialect;
+      previewLimit?: number;
+    }): Promise<VirtualTableValidationResult> => {
+      const res = await fetch("/api/schema/virtual-tables/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sql: payload.sql,
+          ...(payload.dialect ? { dialect: payload.dialect } : {}),
+          ...(payload.previewLimit ? { previewLimit: payload.previewLimit } : {}),
+        }),
+      });
+      const data = (await res.json()) as
+        | VirtualTableValidationResult
+        | { error?: string };
+
+      if ("ok" in data) {
+        return data;
+      }
+
+      throw new Error(data.error ?? "Failed to validate virtual table SQL.");
+    },
+    [],
+  );
+
+  const handleCreateVirtualTable = useCallback(
+    async (payload: {
+      name: string;
+      sql: string;
+      access: TableAccess;
+    }) => {
+      const res = await fetch("/api/schema/virtual-tables", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: payload.name,
+          sql: payload.sql,
+          access: payload.access,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        table?: { id: string; name: string };
+      };
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if (!data.table) {
+        throw new Error("Virtual table creation returned no table.");
+      }
+
+      const currentFilterAllowsOff = accessFilter === "all" || accessFilter === "off";
+      if (payload.access === "OFF" && !currentFilterAllowsOff) {
+        updateQueryParams({
+          access: filterToAccessParam("all"),
+          page: "1",
+        });
+      }
+
+      await Promise.all([fetchTables(), fetchAvailableTables()]);
+      setIsCreateVirtualModalOpen(false);
+      setSelectedTableId(data.table.id);
+      await fetchTableDetail(data.table.name);
+    },
+    [
+      accessFilter,
+      fetchAvailableTables,
+      fetchTableDetail,
+      fetchTables,
+      updateQueryParams,
+    ],
+  );
+
+  const onUpdateVirtualTableSql = useCallback(
+    async (
+      tableId: string,
+      payload: { sql: string; dialect?: VirtualTableDialect },
+    ) => {
+      const table = selectedTable?.id === tableId ? selectedTable : null;
+      if (table?.source !== "VIRTUAL") {
+        throw new Error("Select a virtual table before updating SQL.");
+      }
+
+      const validation = await onValidateVirtualTableSql({
+        connectionId: "default",
+        sql: payload.sql,
+        dialect: payload.dialect,
+        previewLimit: 5,
+      });
+      if (!validation.ok) {
+        throw new Error(validation.error.message);
+      }
+
+      const existingBySourceName = new Map(
+        table.columns.map((column) => [column.name, column] as const),
+      );
+      const nextColumns = validation.columns.map((column) => {
+        const existing = existingBySourceName.get(column.sourceName);
+        return {
+          sourceName: column.sourceName,
+          name: existing?.rename ?? column.sourceName,
+          type: column.type,
+          selected: existing?.selected ?? true,
+          unit: existing?.unit ?? null,
+          notes: existing?.notes ?? null,
+        };
+      });
+
+      const res = await fetch(`/api/schema/virtual-tables/${tableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sql: payload.sql,
+          ...(payload.dialect ? { dialect: payload.dialect } : {}),
+          columns: nextColumns,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        table?: { name: string };
+      };
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      await Promise.all([fetchTables(), fetchAvailableTables()]);
+      if (data.table?.name) {
+        await fetchTableDetail(data.table.name);
+      }
+
+      return { tableId };
+    },
+    [
+      fetchAvailableTables,
+      fetchTableDetail,
+      fetchTables,
+      onValidateVirtualTableSql,
+      selectedTable,
+    ],
+  );
+
+  const onRefreshVirtualTableColumns = useCallback(
+    async (tableId: string): Promise<VirtualTableColumnRefreshResult> => {
+      const table = selectedTable?.id === tableId ? selectedTable : null;
+      if (table?.source !== "VIRTUAL") {
+        throw new Error("Select a virtual table before refreshing columns.");
+      }
+      if (!table.virtualTableConfig?.sql) {
+        throw new Error("Virtual table SQL configuration is missing.");
+      }
+
+      const validation = await onValidateVirtualTableSql({
+        connectionId: "default",
+        sql: table.virtualTableConfig.sql,
+        dialect: table.virtualTableConfig.dialect,
+        previewLimit: 5,
+      });
+      if (!validation.ok) {
+        throw new Error(validation.error.message);
+      }
+
+      const existingBySourceName = new Map(
+        table.columns.map((column) => [column.name, column] as const),
+      );
+      const nextColumns = validation.columns.map((column) => {
+        const existing = existingBySourceName.get(column.sourceName);
+        return {
+          sourceName: column.sourceName,
+          name: existing?.rename ?? column.sourceName,
+          type: column.type,
+          selected: existing?.selected ?? true,
+          unit: existing?.unit ?? null,
+          notes: existing?.notes ?? null,
+        };
+      });
+
+      const previousNames = new Set(table.columns.map((column) => column.name));
+      const nextNames = new Set(validation.columns.map((column) => column.sourceName));
+      const removedColumns = table.columns
+        .map((column) => column.name)
+        .filter((name) => !nextNames.has(name));
+      const createdColumns = [...nextNames].filter(
+        (name) => !previousNames.has(name),
+      ).length;
+      const updatedColumns = validation.columns.filter((column) => {
+        const existing = existingBySourceName.get(column.sourceName);
+        return existing !== undefined && existing.type !== column.type;
+      }).length;
+
+      const res = await fetch(`/api/schema/virtual-tables/${tableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          columns: nextColumns,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        table?: { name: string };
+      };
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      await Promise.all([fetchTables(), fetchAvailableTables()]);
+      if (data.table?.name) {
+        await fetchTableDetail(data.table.name);
+      }
+
+      return {
+        tableId,
+        previewRows: validation.previewRows ?? [],
+        createdColumns,
+        updatedColumns,
+        removedColumns,
+      };
+    },
+    [
+      fetchAvailableTables,
+      fetchTableDetail,
+      fetchTables,
+      onValidateVirtualTableSql,
+      selectedTable,
+    ],
+  );
+
+  const onDeleteVirtualTable = useCallback(
+    async (tableId: string) => {
+      const res = await fetch(`/api/schema/virtual-tables/${tableId}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (selectedTableId === tableId) {
+        setSelectedTableId(null);
+        setSelectedTable(null);
+      }
+
+      await Promise.all([fetchTables(), fetchAvailableTables()]);
+    },
+    [fetchAvailableTables, fetchTables, selectedTableId],
+  );
+
+  const createVirtualTableDetailPane = isCreateVirtualModalOpen ? (
+    <CreateVirtualTablePane
+      onClose={() => setIsCreateVirtualModalOpen(false)}
+      onCreate={handleCreateVirtualTable}
+      onValidate={(payload) =>
+        onValidateVirtualTableSql({
+          connectionId: "default",
+          ...payload,
+        })
+      }
+    />
+  ) : undefined;
+
   if (loading) {
     return (
       <Center h="100%">
@@ -1297,6 +1725,7 @@ function SchemaPageContent() {
           currentPage={currentPage}
           onPageChange={handlePageChange}
           perPage={PER_PAGE}
+          emptyStateContent={createVirtualTableDetailPane}
           // Mutation callbacks
           onUpdateTable={onUpdateTable}
           onUpdateColumn={onUpdateColumn}
@@ -1322,6 +1751,11 @@ function SchemaPageContent() {
           onUpdateColumnValueEnum={onUpdateColumnValueEnum}
           onDeleteColumnValueEnum={onDeleteColumnValueEnum}
           onAutoFillColumnValueEnum={onAutoFillColumnValueEnum}
+          onRequestCreateVirtualTable={onRequestCreateVirtualTable}
+          onValidateVirtualTableSql={onValidateVirtualTableSql}
+          onUpdateVirtualTableSql={onUpdateVirtualTableSql}
+          onRefreshVirtualTableColumns={onRefreshVirtualTableColumns}
+          onDeleteVirtualTable={onDeleteVirtualTable}
         />
       </Box>
     </Box>

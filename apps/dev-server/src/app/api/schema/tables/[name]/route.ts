@@ -17,6 +17,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const table = await prisma.table.findUnique({
       where: { name },
       include: {
+        virtualTableConfig: true,
         columns: {
           include: {
             augmentation: {

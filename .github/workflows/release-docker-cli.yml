@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g., 0.1.0)"
+        description: "Version to release (e.g., 0.1.0 or 0.1.0-rc.1)"
         required: true
         default: "0.1.0"
 
@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      npm_tag: ${{ steps.version.outputs.npm_tag }}
+      docker_channel_tag: ${{ steps.version.outputs.docker_channel_tag }}
       prisma_version: ${{ steps.catalog.outputs.prisma }}
 
     steps:
@@ -42,12 +45,22 @@ jobs:
           fi
 
           RAW_VERSION="${RAW_VERSION#v}"
-          if ! printf '%s' "$RAW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Invalid version '$RAW_VERSION'. Use stable SemVer like 1.2.3 (no prerelease suffix)." >&2
+          if ! printf '%s' "$RAW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'; then
+            echo "Invalid version '$RAW_VERSION'. Use SemVer like 1.2.3 or 1.2.3-rc.1." >&2
             exit 1
           fi
 
           echo "version=v${RAW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          if printf '%s' "$RAW_VERSION" | grep -q -- '-'; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "npm_tag=next" >> "$GITHUB_OUTPUT"
+            echo "docker_channel_tag=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
+            echo "docker_channel_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Extract catalog versions
         id: catalog
@@ -111,7 +124,6 @@ jobs:
   # Create multi-arch manifest for dev-server
   manifest-dev-server:
     needs: [prepare, build-dev-server]
-    if: ${{ !contains(needs.prepare.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,6 +141,8 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server"
+          CHANNEL_TAG="${{ needs.prepare.outputs.docker_channel_tag }}"
+          IS_PRERELEASE="${{ needs.prepare.outputs.is_prerelease }}"
 
           # Create manifest for versioned tag
           docker manifest create ${IMAGE}:${VERSION} \
@@ -137,12 +151,18 @@ jobs:
 
           docker manifest push ${IMAGE}:${VERSION}
 
-          # Create manifest for latest tag
-          docker manifest create ${IMAGE}:latest \
+          # Create channel tag: latest for stable, next for previews
+          docker manifest create ${IMAGE}:${CHANNEL_TAG} \
             ${IMAGE}:${VERSION}-amd64 \
             ${IMAGE}:${VERSION}-arm64
 
-          docker manifest push ${IMAGE}:latest
+          docker manifest push ${IMAGE}:${CHANNEL_TAG}
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "Published preview Docker tags: ${VERSION}, ${CHANNEL_TAG}"
+          else
+            echo "Published stable Docker tags: ${VERSION}, ${CHANNEL_TAG}"
+          fi
 
   publish-cli:
     needs: [prepare, manifest-dev-server]
@@ -184,13 +204,12 @@ jobs:
 
       - name: Publish CLI to npmjs
         working-directory: packages/cli
-        run: npm publish --access public
+        run: npm publish --access public --tag "${{ needs.prepare.outputs.npm_tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
     needs: [prepare, manifest-dev-server, publish-cli]
-    if: ${{ !contains(needs.prepare.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -199,14 +218,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create GitHub Release (Draft)
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
-          name: ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.is_prerelease == 'true' && format('{0} (preview)', needs.prepare.outputs.version) || needs.prepare.outputs.version }}
           generate_release_notes: true
-          draft: true
-          prerelease: false
+          draft: ${{ needs.prepare.outputs.is_prerelease == 'false' }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
           body: |
             ## Docker Images
 
@@ -214,6 +233,12 @@ jobs:
             docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
             ```
 
+            Channel tag:
+
+            ```bash
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.docker_channel_tag }}
+            ```
+
             ## CLI
 
-            Published to npmjs.
+            Published to npmjs dist-tag `${{ needs.prepare.outputs.npm_tag }}`.

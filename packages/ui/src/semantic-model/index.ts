@@ -32,6 +32,8 @@ export type { ColumnValueEnumFormProps } from "./ColumnValueEnumForm";
 export { ComputedColumnForm } from "./ComputedColumnForm";
 export type { ComputedColumnFormProps } from "./ComputedColumnForm";
 
+export { CreateVirtualTableForm } from "./CreateVirtualTableForm";
+
 // Display Components
 export { AccessControl } from "./AccessControl";
 export type { AccessControlProps } from "./AccessControl";

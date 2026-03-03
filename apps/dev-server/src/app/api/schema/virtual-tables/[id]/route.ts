@@ -1,6 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "~/lib/prisma";
 import { syncAugmentationsToFile } from "~/lib/schema";
+import {
+  getDatabaseDialectErrorMessage,
+  isDatabaseDialect,
+  validateVirtualTableSql,
+} from "~/lib/virtualTableValidation";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -73,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = (await request.json()) as {
       sql?: string;
       dialect?: string;
-      access?: string;
+      access?: "QUERYABLE" | "JOINABLE" | "OFF";
       context?: string | null;
       columns?: Array<{
         sourceName: string;
@@ -87,7 +92,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const existing = await prisma.table.findUnique({
       where: { id, source: "VIRTUAL" },
-      include: { virtualTableConfig: true },
+      include: {
+        virtualTableConfig: true,
+        columns: {
+          orderBy: { name: "asc" },
+        },
+      },
     });
 
     if (!existing) {
@@ -96,48 +106,129 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { status: 404 },
       );
     }
+    if (!existing.virtualTableConfig) {
+      return NextResponse.json(
+        { error: "Virtual table configuration is missing." },
+        { status: 400 },
+      );
+    }
 
     const { sql, dialect, access, context, columns } = body;
+    const validAccess = ["QUERYABLE", "JOINABLE", "OFF"] as const;
+    if (dialect && !isDatabaseDialect(dialect)) {
+      return NextResponse.json(
+        { error: getDatabaseDialectErrorMessage() },
+        { status: 400 },
+      );
+    }
+    if (access && !validAccess.includes(access)) {
+      return NextResponse.json(
+        { error: `access must be one of: ${validAccess.join(", ")}` },
+        { status: 400 },
+      );
+    }
 
-    // Update table-level fields
-    await prisma.table.update({
-      where: { id },
-      data: {
-        ...(access !== undefined && { access }),
-        ...(context !== undefined && { context }),
-      },
-    });
+    let nextDialect = existing.virtualTableConfig?.dialect;
+    let inferredColumns:
+      | Array<{
+          sourceName: string;
+          name?: string;
+          type: string;
+          selected?: boolean;
+          unit?: string | null;
+          notes?: string | null;
+        }>
+      | undefined;
 
-    // Update virtual table config if sql or dialect changed
-    if (sql !== undefined || dialect !== undefined) {
-      if (existing.virtualTableConfig) {
-        await prisma.virtualTableConfig.update({
-          where: { tableId: id },
-          data: {
-            ...(sql !== undefined && { sql }),
-            ...(dialect !== undefined && { dialect }),
+    const shouldValidateSql = sql !== undefined || dialect !== undefined;
+    if (shouldValidateSql) {
+      const sqlToValidate = sql ?? existing.virtualTableConfig.sql;
+      if (!sqlToValidate) {
+        return NextResponse.json(
+          { error: "Virtual table SQL configuration is missing." },
+          { status: 400 },
+        );
+      }
+
+      const { dialect: validatedDialect, result } = await validateVirtualTableSql({
+        sql: sqlToValidate,
+        requestDialect: dialect,
+        previewLimit: 5,
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error.message }, { status: 400 });
+      }
+      if (result.columns.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Validation returned no columns. The query may have produced zero preview rows; add a filter/limit for validation or use data that returns at least one row.",
           },
-        });
+          { status: 400 },
+        );
       }
+
+      nextDialect = validatedDialect;
+
+      const existingBySourceName = new Map(
+        existing.columns.map((column) => [column.name, column] as const),
+      );
+      inferredColumns = result.columns.map((column) => {
+        const existingColumn = existingBySourceName.get(column.sourceName);
+        return {
+          sourceName: column.sourceName,
+          name: existingColumn?.rename ?? column.sourceName,
+          type: column.type,
+          selected: existingColumn?.selected ?? true,
+          unit: existingColumn?.unit ?? null,
+          notes: existingColumn?.notes ?? null,
+        };
+      });
     }
 
-    // Replace columns if provided
-    if (columns !== undefined) {
-      await prisma.column.deleteMany({ where: { tableId: id } });
-      if (columns.length > 0) {
-        await prisma.column.createMany({
-          data: columns.map((col) => ({
-            tableId: id,
-            name: col.sourceName,
-            rename: col.name !== col.sourceName ? col.name : null,
-            type: col.type,
-            selected: col.selected ?? true,
-            unit: col.unit ?? null,
-            notes: col.notes ?? null,
-          })),
-        });
+    const nextColumns = shouldValidateSql ? inferredColumns : columns;
+
+    await prisma.$transaction(async (tx) => {
+      // Update table-level fields
+      await tx.table.update({
+        where: { id },
+        data: {
+          ...(access !== undefined && { access }),
+          ...(context !== undefined && { context }),
+        },
+      });
+
+      // Update virtual table config if sql or dialect changed
+      if (sql !== undefined || dialect !== undefined) {
+        if (existing.virtualTableConfig) {
+          await tx.virtualTableConfig.update({
+            where: { tableId: id },
+            data: {
+              ...(sql !== undefined && { sql }),
+              ...(nextDialect !== undefined && { dialect: nextDialect }),
+            },
+          });
+        }
       }
-    }
+
+      // Replace columns if provided
+      if (nextColumns !== undefined) {
+        await tx.column.deleteMany({ where: { tableId: id } });
+        if (nextColumns.length > 0) {
+          await tx.column.createMany({
+            data: nextColumns.map((col) => ({
+              tableId: id,
+              name: col.sourceName,
+              rename: col.name !== col.sourceName ? col.name : null,
+              type: col.type,
+              selected: col.selected ?? true,
+              unit: col.unit ?? null,
+              notes: col.notes ?? null,
+            })),
+          });
+        }
+      }
+    });
 
     const updated = await prisma.table.findUnique({
       where: { id },

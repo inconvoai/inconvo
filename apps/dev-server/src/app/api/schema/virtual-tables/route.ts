@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "~/lib/prisma";
 import { syncAugmentationsToFile } from "~/lib/schema";
+import {
+  getDatabaseDialectErrorMessage,
+  isDatabaseDialect,
+  validateVirtualTableSql,
+} from "~/lib/virtualTableValidation";
 
 /**
  * GET /api/schema/virtual-tables
@@ -54,7 +59,7 @@ export async function GET() {
  * POST /api/schema/virtual-tables
  * Create a new virtual table.
  *
- * Body: { name, sql, dialect, columns: [{ sourceName, name, type, selected?, unit?, notes? }] }
+ * Body: { name, sql, dialect?, access? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -62,35 +67,28 @@ export async function POST(request: NextRequest) {
       name?: string;
       sql?: string;
       dialect?: string;
-      columns?: Array<{
-        sourceName: string;
-        name?: string;
-        type: string;
-        selected?: boolean;
-        unit?: string | null;
-        notes?: string | null;
-      }>;
+      access?: "QUERYABLE" | "JOINABLE" | "OFF";
     };
 
-    const { name, sql, dialect, columns } = body;
+    const { name, sql, dialect, access } = body;
 
-    if (!name || !sql || !dialect) {
+    if (!name || !sql) {
       return NextResponse.json(
-        { error: "name, sql, and dialect are required" },
+        { error: "name and sql are required" },
         { status: 400 },
       );
     }
 
-    const validDialects = [
-      "postgresql",
-      "redshift",
-      "mysql",
-      "mssql",
-      "bigquery",
-    ];
-    if (!validDialects.includes(dialect)) {
+    const validAccess = ["QUERYABLE", "JOINABLE", "OFF"] as const;
+    if (dialect && !isDatabaseDialect(dialect)) {
       return NextResponse.json(
-        { error: `dialect must be one of: ${validDialects.join(", ")}` },
+        { error: getDatabaseDialectErrorMessage() },
+        { status: 400 },
+      );
+    }
+    if (access && !validAccess.includes(access)) {
+      return NextResponse.json(
+        { error: `access must be one of: ${validAccess.join(", ")}` },
         { status: 400 },
       );
     }
@@ -104,29 +102,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const table = await prisma.table.create({
-      data: {
-        name,
-        source: "VIRTUAL",
-        access: "QUERYABLE",
-        virtualTableConfig: {
-          create: { dialect, sql },
+    const { dialect: validatedDialect, result } = await validateVirtualTableSql({
+      sql,
+      requestDialect: dialect,
+      previewLimit: 5,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error.message }, { status: 400 });
+    }
+    if (result.columns.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Validation returned no columns. The query may have produced zero preview rows; add a filter/limit for validation or use data that returns at least one row.",
         },
-        columns: {
-          create: (columns ?? []).map((col) => ({
-            name: col.sourceName,
-            rename: col.name !== col.sourceName ? col.name : null,
-            type: col.type,
-            selected: col.selected ?? true,
-            unit: col.unit ?? null,
-            notes: col.notes ?? null,
-          })),
+        { status: 400 },
+      );
+    }
+
+    const table = await prisma.$transaction(async (tx) => {
+      return await tx.table.create({
+        data: {
+          name,
+          source: "VIRTUAL",
+          access: access ?? "OFF",
+          virtualTableConfig: {
+            create: { dialect: validatedDialect, sql },
+          },
+          columns: {
+            create: result.columns.map((column) => ({
+              name: column.sourceName,
+              rename: null,
+              type: column.type,
+              selected: true,
+              unit: null,
+              notes: null,
+            })),
+          },
         },
-      },
-      include: {
-        virtualTableConfig: true,
-        columns: { orderBy: { name: "asc" } },
-      },
+        include: {
+          virtualTableConfig: true,
+          columns: { orderBy: { name: "asc" } },
+        },
+      });
     });
 
     await syncAugmentationsToFile();

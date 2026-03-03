@@ -1,4 +1,4 @@
-name: Release Docker CLI
+name: Release
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g., 0.1.0 or 0.1.0-rc.1)"
+        description: "Version to release (e.g., 0.1.0)"
         required: true
         default: "0.1.0"
 
@@ -26,9 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
-      npm_tag: ${{ steps.version.outputs.npm_tag }}
-      docker_channel_tag: ${{ steps.version.outputs.docker_channel_tag }}
       prisma_version: ${{ steps.catalog.outputs.prisma }}
 
     steps:
@@ -45,22 +42,12 @@ jobs:
           fi
 
           RAW_VERSION="${RAW_VERSION#v}"
-          if ! printf '%s' "$RAW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'; then
-            echo "Invalid version '$RAW_VERSION'. Use SemVer like 1.2.3 or 1.2.3-rc.1." >&2
+          if ! printf '%s' "$RAW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Invalid version '$RAW_VERSION'. Use stable SemVer like 1.2.3 (no prerelease suffix)." >&2
             exit 1
           fi
 
           echo "version=v${RAW_VERSION}" >> "$GITHUB_OUTPUT"
-
-          if printf '%s' "$RAW_VERSION" | grep -q -- '-'; then
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=next" >> "$GITHUB_OUTPUT"
-            echo "docker_channel_tag=next" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
-            echo "docker_channel_tag=latest" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Extract catalog versions
         id: catalog
@@ -75,7 +62,60 @@ jobs:
           echo "Extracted versions:"
           cat $GITHUB_OUTPUT
 
-  # Build dev-server for each architecture natively
+  # Build compiled Bun binaries for each platform
+  build-binary:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - target: bun-darwin-arm64
+            runner: macos-latest
+          - target: bun-darwin-x64
+            runner: macos-13
+          - target: bun-linux-x64
+            runner: ubuntu-latest
+          - target: bun-linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: |
+          pnpm config set node-linker hoisted
+          pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm turbo run build --filter="./packages/*"
+
+      - name: Build binary
+        working-directory: apps/dev-server
+        run: bun run scripts/build-binary.ts ${{ matrix.target }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inconvo-dev-server-${{ matrix.target }}
+          path: apps/dev-server/dist/inconvo-dev-server-${{ matrix.target }}
+
+  # Build Docker images (legacy, kept for backwards compatibility)
   build-dev-server:
     needs: prepare
     strategy:
@@ -121,9 +161,10 @@ jobs:
           cache-from: type=gha,scope=dev-server-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=dev-server-${{ matrix.suffix }}
 
-  # Create multi-arch manifest for dev-server
+  # Create multi-arch manifest for dev-server Docker image
   manifest-dev-server:
     needs: [prepare, build-dev-server]
+    if: ${{ !contains(needs.prepare.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -141,8 +182,6 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/dev-server"
-          CHANNEL_TAG="${{ needs.prepare.outputs.docker_channel_tag }}"
-          IS_PRERELEASE="${{ needs.prepare.outputs.is_prerelease }}"
 
           # Create manifest for versioned tag
           docker manifest create ${IMAGE}:${VERSION} \
@@ -151,21 +190,15 @@ jobs:
 
           docker manifest push ${IMAGE}:${VERSION}
 
-          # Create channel tag: latest for stable, next for previews
-          docker manifest create ${IMAGE}:${CHANNEL_TAG} \
+          # Create manifest for latest tag
+          docker manifest create ${IMAGE}:latest \
             ${IMAGE}:${VERSION}-amd64 \
             ${IMAGE}:${VERSION}-arm64
 
-          docker manifest push ${IMAGE}:${CHANNEL_TAG}
-
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            echo "Published preview Docker tags: ${VERSION}, ${CHANNEL_TAG}"
-          else
-            echo "Published stable Docker tags: ${VERSION}, ${CHANNEL_TAG}"
-          fi
+          docker manifest push ${IMAGE}:latest
 
   publish-cli:
-    needs: [prepare, manifest-dev-server]
+    needs: [prepare, build-binary]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -204,12 +237,13 @@ jobs:
 
       - name: Publish CLI to npmjs
         working-directory: packages/cli
-        run: npm publish --access public --tag "${{ needs.prepare.outputs.npm_tag }}"
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
-    needs: [prepare, manifest-dev-server, publish-cli]
+    needs: [prepare, build-binary, publish-cli]
+    if: ${{ !contains(needs.prepare.outputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -218,76 +252,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create GitHub Release
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: Create GitHub Release (Draft)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
-          name: ${{ needs.prepare.outputs.is_prerelease == 'true' && format('{0} (preview)', needs.prepare.outputs.version) || needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.version }}
           generate_release_notes: true
-          draft: ${{ needs.prepare.outputs.is_prerelease == 'false' }}
-          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          draft: true
+          prerelease: false
+          files: binaries/inconvo-dev-server-*
+          fail_on_unmatched_files: true
           body: |
-            ## Docker Images
+            ## Compiled Binaries
+
+            Compiled dev-server binaries are attached to this release for:
+            - macOS Apple Silicon (`inconvo-dev-server-bun-darwin-arm64`)
+            - macOS Intel (`inconvo-dev-server-bun-darwin-x64`)
+            - Linux x64 (`inconvo-dev-server-bun-linux-x64`)
+            - Linux ARM64 (`inconvo-dev-server-bun-linux-arm64`)
+
+            ## Docker Images (Legacy)
 
             ```bash
             docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.version }}
             ```
 
-            Channel tag:
-
-            ```bash
-            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}/dev-server:${{ needs.prepare.outputs.docker_channel_tag }}
-            ```
-
             ## CLI
 
-            Published to npmjs dist-tag `${{ needs.prepare.outputs.npm_tag }}`.
-
-  sync-cli-version:
-    needs: [prepare, create-release]
-    if: ${{ needs.prepare.outputs.is_prerelease == 'false' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout default branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Sync CLI version in package.json
-        id: sync
-        working-directory: packages/cli
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION="${VERSION#v}"
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-
-          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "CLI package.json is already at $VERSION"
-            exit 0
-          fi
-
-          npm version "$VERSION" --no-git-tag-version
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Create PR for version sync
-        if: ${{ steps.sync.outputs.changed == 'true' }}
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore(cli): sync version to ${{ needs.prepare.outputs.version }}"
-          title: "chore(cli): sync cli version to ${{ needs.prepare.outputs.version }}"
-          body: "Sync `packages/cli/package.json` version to match release `${{ needs.prepare.outputs.version }}`."
-          branch: "chore/sync-cli-version-${{ needs.prepare.outputs.version }}"
-          base: ${{ github.event.repository.default_branch }}
-          add-paths: |
-            packages/cli/package.json
+            Published to npmjs.

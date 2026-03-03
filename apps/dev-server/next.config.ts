@@ -21,8 +21,6 @@ const config: NextConfig = {
     "thread-stream",
     "pg",
     "pg-types",
-    "better-sqlite3",
-    "@prisma/adapter-better-sqlite3",
   ],
   // PostHog reverse proxy configuration
   async rewrites() {

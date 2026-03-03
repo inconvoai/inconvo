@@ -18,8 +18,8 @@
   "dependencies": {
     "@langchain/core": "catalog:",
     "@langchain/langgraph": "catalog:",
+    "@langchain/langgraph-checkpoint": "catalog:",
     "@langchain/langgraph-checkpoint-postgres": "catalog:",
-    "@langchain/langgraph-checkpoint-sqlite": "^1.0.1",
     "@langchain/openai": "catalog:",
     "@repo/connect": "workspace:*",
     "@repo/types": "workspace:*",

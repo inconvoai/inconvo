@@ -657,6 +657,7 @@ export async function getTableIds(params: {
       id: true,
       name: true,
       access: true,
+      source: true,
       condition: {
         select: {
           id: true,
@@ -677,6 +678,7 @@ export async function getTableIds(params: {
     id: table.id,
     name: table.name,
     access: table.access,
+    source: table.source,
     hasCondition: !!table.condition,
     hasAccessPolicy: !!table.accessPolicy,
   }));

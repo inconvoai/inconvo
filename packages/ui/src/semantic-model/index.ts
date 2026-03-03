@@ -57,3 +57,5 @@ export type {
   SemanticModelEditorProps,
   FilterValue,
 } from "./SemanticModelEditor";
+
+export { useSqlEditor } from "./useSqlEditor";

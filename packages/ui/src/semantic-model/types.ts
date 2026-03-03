@@ -228,6 +228,7 @@ export interface UserContextField {
 export interface TableWithColumns {
   id: string;
   name: string;
+  source: TableSource;
   columns: Array<{ id: string; name: string; type?: string }>;
 }
 

@@ -12,11 +12,6 @@ import {
   Loader,
   Center,
   Alert,
-  Stack,
-  Text,
-  TextInput,
-  Select,
-  Textarea,
 } from "@mantine/core";
 import {
   IconDatabaseEdit,
@@ -42,6 +37,7 @@ import type {
   VirtualTableDialect,
   VirtualTableColumnRefreshResult,
 } from "@repo/ui/semantic-model";
+import { CreateVirtualTableForm } from "@repo/ui/semantic-model";
 import { normalizeColumnValueEnum } from "@repo/types";
 import posthog from "posthog-js";
 import { trackFeatureUsageClient } from "~/lib/telemetry";
@@ -285,138 +281,6 @@ function filterToAccessParam(filter: FilterValue): string {
     default:
       return "QUERYABLE,JOINABLE";
   }
-}
-
-const ACCESS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "QUERYABLE", label: "Queryable" },
-  { value: "JOINABLE", label: "Joinable" },
-  { value: "OFF", label: "Off" },
-];
-
-interface CreateVirtualTablePaneProps {
-  onClose: () => void;
-  onCreate: (payload: {
-    name: string;
-    sql: string;
-    access: TableAccess;
-  }) => Promise<void>;
-  onValidate: (payload: {
-    sql: string;
-    dialect?: VirtualTableDialect;
-    previewLimit?: number;
-  }) => Promise<VirtualTableValidationResult>;
-}
-
-function CreateVirtualTablePane({
-  onClose,
-  onCreate,
-  onValidate,
-}: CreateVirtualTablePaneProps) {
-  const [name, setName] = useState("");
-  const [sql, setSql] = useState("");
-  const [access, setAccess] = useState<TableAccess>("OFF");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const canCreate = name.trim().length > 0 && sql.trim().length > 0 && !creating;
-
-  const handleCreate = useCallback(async () => {
-    if (!canCreate) {
-      return;
-    }
-
-    setCreating(true);
-    setError(null);
-    try {
-      const validation = await onValidate({
-        sql,
-        previewLimit: 5,
-      });
-      if (!validation.ok) {
-        setError(validation.error.message);
-        return;
-      }
-      if (validation.columns.length === 0) {
-        setError(
-          "Validation returned no inferred columns. Ensure the query returns at least one row.",
-        );
-        return;
-      }
-      await onCreate({
-        name: name.trim(),
-        sql,
-        access,
-      });
-    } catch (validationError) {
-      setError(
-        validationError instanceof Error
-          ? validationError.message
-          : "Failed to create virtual table.",
-      );
-    } finally {
-      setCreating(false);
-    }
-  }, [access, canCreate, name, onCreate, onValidate, sql]);
-
-  return (
-    <Stack p="md" gap="md">
-      <Group justify="space-between" align="center">
-        <div>
-          <Text fw={600}>Create Virtual Table</Text>
-          <Text size="sm" c="dimmed">
-            Define a read-only SQL query and expose it as a semantic-model table.
-          </Text>
-        </div>
-        <Button variant="subtle" size="xs" onClick={onClose} disabled={creating}>
-          Cancel
-        </Button>
-      </Group>
-
-      <Group grow align="flex-start">
-        <TextInput
-          label="Name"
-          placeholder="orders_with_org"
-          value={name}
-          onChange={(event) => {
-            setName(event.currentTarget.value);
-            setError(null);
-          }}
-          disabled={creating}
-        />
-        <Select
-          label="Access"
-          data={ACCESS_OPTIONS}
-          value={access}
-          onChange={(value) => {
-            setAccess((value as TableAccess) ?? "OFF");
-            setError(null);
-          }}
-          disabled={creating}
-        />
-      </Group>
-
-      <Textarea
-        label="SQL"
-        placeholder="SELECT ..."
-        value={sql}
-        onChange={(event) => {
-          setSql(event.currentTarget.value);
-          setError(null);
-        }}
-        minRows={10}
-        autosize
-        disabled={creating}
-      />
-
-      {error ? <Alert color="red">{error}</Alert> : null}
-
-      <Group justify="flex-end">
-        <Button onClick={() => void handleCreate()} disabled={!canCreate} loading={creating}>
-          Create Virtual Table
-        </Button>
-      </Group>
-    </Stack>
-  );
 }
 
 function SchemaPageContent() {
@@ -1629,13 +1493,19 @@ function SchemaPageContent() {
   );
 
   const createVirtualTableDetailPane = isCreateVirtualModalOpen ? (
-    <CreateVirtualTablePane
+    <CreateVirtualTableForm
+      connectionId="default"
+      connectionName="Dev Server"
+      availableTables={availableTables}
       onClose={() => setIsCreateVirtualModalOpen(false)}
-      onCreate={handleCreateVirtualTable}
-      onValidate={(payload) =>
+      onCreate={async ({ name, sql, access }) =>
+        handleCreateVirtualTable({ name, sql, access })
+      }
+      onValidateSql={({ sql, previewLimit }) =>
         onValidateVirtualTableSql({
           connectionId: "default",
-          ...payload,
+          sql,
+          previewLimit,
         })
       }
     />

@@ -211,20 +211,50 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      // Replace columns if provided
+      // Sync columns if provided, preserving IDs for unchanged source names.
       if (nextColumns !== undefined) {
-        await tx.column.deleteMany({ where: { tableId: id } });
-        if (nextColumns.length > 0) {
-          await tx.column.createMany({
-            data: nextColumns.map((col) => ({
+        const existingBySourceName = new Map(
+          existing.columns.map((column) => [column.name, column] as const),
+        );
+        const nextSourceNames = new Set(
+          nextColumns.map((column) => column.sourceName),
+        );
+
+        const removedColumnIds = existing.columns
+          .filter((column) => !nextSourceNames.has(column.name))
+          .map((column) => column.id);
+
+        if (removedColumnIds.length > 0) {
+          await tx.column.deleteMany({
+            where: { id: { in: removedColumnIds } },
+          });
+        }
+
+        for (const column of nextColumns) {
+          const columnData = {
+            rename:
+              column.name !== column.sourceName ? column.name : null,
+            type: column.type,
+            selected: column.selected ?? true,
+            unit: column.unit ?? null,
+            notes: column.notes ?? null,
+          };
+          const existingColumn = existingBySourceName.get(column.sourceName);
+
+          if (existingColumn) {
+            await tx.column.update({
+              where: { id: existingColumn.id },
+              data: columnData,
+            });
+            continue;
+          }
+
+          await tx.column.create({
+            data: {
               tableId: id,
-              name: col.sourceName,
-              rename: col.name !== col.sourceName ? col.name : null,
-              type: col.type,
-              selected: col.selected ?? true,
-              unit: col.unit ?? null,
-              notes: col.notes ?? null,
-            })),
+              name: column.sourceName,
+              ...columnData,
+            },
           });
         }
       }

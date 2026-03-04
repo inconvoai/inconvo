@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Flex, Box, Text, Center, Stack } from "@mantine/core";
 import { IconTable } from "@tabler/icons-react";
 import type {
@@ -38,6 +45,23 @@ import {
 import { TableDetail } from "./TableDetail";
 
 export type { FilterValue };
+
+const DEFAULT_SIDEBAR_WIDTH = 300;
+const MIN_SIDEBAR_WIDTH = 260;
+const MAX_SIDEBAR_WIDTH = 560;
+const RESIZE_HANDLE_WIDTH = 8;
+
+function clampSidebarWidth(width: number): number {
+  const viewportBound =
+    typeof window === "undefined"
+      ? MAX_SIDEBAR_WIDTH
+      : Math.floor(window.innerWidth * 0.6);
+  const maxWidth = Math.max(
+    MIN_SIDEBAR_WIDTH,
+    Math.min(MAX_SIDEBAR_WIDTH, viewportBound),
+  );
+  return Math.min(maxWidth, Math.max(MIN_SIDEBAR_WIDTH, width));
+}
 
 export interface SemanticModelEditorProps {
   /** List of table summaries for the left panel */
@@ -279,6 +303,9 @@ export function SemanticModelEditor({
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
   const [internalAccessFilter, setInternalAccessFilter] =
     useState<FilterValue>("active");
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const sidebarResizeRef = useRef<{ startX: number; startWidth: number }>(null);
 
   // Use controlled or internal state
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
@@ -492,17 +519,71 @@ export function SemanticModelEditor({
 
   const resolvedUserContextStatus = userContextStatus ?? "UNSET";
 
+  const handleSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      sidebarResizeRef.current = {
+        startX: event.clientX,
+        startWidth: sidebarWidth,
+      };
+      setIsResizingSidebar(true);
+    },
+    [sidebarWidth],
+  );
+
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const dragState = sidebarResizeRef.current;
+      if (!dragState) return;
+
+      const delta = event.clientX - dragState.startX;
+      setSidebarWidth(clampSidebarWidth(dragState.startWidth + delta));
+    };
+
+    const handlePointerUp = () => {
+      sidebarResizeRef.current = null;
+      setIsResizingSidebar(false);
+    };
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizingSidebar]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setSidebarWidth((prevWidth) => clampSidebarWidth(prevWidth));
+    };
+
+    handleWindowResize();
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
   return (
     <Flex h="100%" gap={0}>
       {/* Left Sidebar - Table List */}
       <Box
-        w={300}
+        w={sidebarWidth}
         bg="gray.0"
         style={{
-          borderRight: "1px solid var(--mantine-color-gray-3)",
           display: "flex",
           flexDirection: "column",
           height: "100%",
+          minWidth: MIN_SIDEBAR_WIDTH,
+          maxWidth: MAX_SIDEBAR_WIDTH,
         }}
       >
         <TableList
@@ -526,6 +607,36 @@ export function SemanticModelEditor({
           onCreateVirtualTable={onRequestCreateVirtualTable}
           disableCreateVirtualTable={readOnly}
         />
+      </Box>
+      <Box
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize table list panel"
+        onPointerDown={handleSidebarResizeStart}
+        style={{
+          width: RESIZE_HANDLE_WIDTH,
+          minWidth: RESIZE_HANDLE_WIDTH,
+          height: "100%",
+          cursor: "col-resize",
+          backgroundColor: isResizingSidebar
+            ? "var(--mantine-color-gray-2)"
+            : "var(--mantine-color-gray-0)",
+          borderRight: "1px solid var(--mantine-color-gray-3)",
+          touchAction: "none",
+        }}
+      >
+        <Center h="100%" style={{ pointerEvents: "none" }}>
+          <Box
+            h={36}
+            w={3}
+            style={{
+              borderRadius: 999,
+              backgroundColor: isResizingSidebar
+                ? "var(--mantine-color-gray-5)"
+                : "var(--mantine-color-gray-4)",
+            }}
+          />
+        </Center>
       </Box>
 
       {/* Right Panel - Table Details */}

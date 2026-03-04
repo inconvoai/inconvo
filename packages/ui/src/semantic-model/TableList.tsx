@@ -324,16 +324,22 @@ export function TableList({
                     }
                   }}
                 >
-                  <Group justify="space-between" wrap="nowrap">
+                  <Group
+                    justify="space-between"
+                    wrap="nowrap"
+                    gap="xs"
+                    style={{ minWidth: 0 }}
+                  >
                     <Group
                       gap="xs"
                       wrap="nowrap"
-                      style={{ overflow: "hidden" }}
+                      style={{ overflow: "hidden", flex: 1, minWidth: 0 }}
                     >
                       <Text
                         fw={selectedTableId === table.id ? 600 : 400}
                         size="sm"
                         truncate
+                        style={{ minWidth: 0, flex: 1 }}
                       >
                         {table.name}
                       </Text>
@@ -373,25 +379,27 @@ export function TableList({
                         )
                       )}
                     </Group>
-                    {onTableAccessChange ? (
-                      <AccessControl
-                        value={table.access}
-                        onChange={(access) =>
-                          onTableAccessChange(table.id, access)
-                        }
-                        size="xs"
-                        showLabels={false}
-                      />
-                    ) : (
-                      <Badge
-                        size="xs"
-                        color={getAccessColor(table.access)}
-                        variant="light"
-                        leftSection={getAccessIcon(table.access)}
-                      >
-                        {table.access.charAt(0)}
-                      </Badge>
-                    )}
+                    <Box style={{ flexShrink: 0 }}>
+                      {onTableAccessChange ? (
+                        <AccessControl
+                          value={table.access}
+                          onChange={(access) =>
+                            onTableAccessChange(table.id, access)
+                          }
+                          size="xs"
+                          showLabels={false}
+                        />
+                      ) : (
+                        <Badge
+                          size="xs"
+                          color={getAccessColor(table.access)}
+                          variant="light"
+                          leftSection={getAccessIcon(table.access)}
+                        >
+                          {table.access.charAt(0)}
+                        </Badge>
+                      )}
+                    </Box>
                   </Group>
                 </Box>
               );

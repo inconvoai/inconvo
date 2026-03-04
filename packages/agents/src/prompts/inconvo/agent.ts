@@ -3,7 +3,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 /**
  * Main Inconvo agent prompt for processing user queries
  *
- * Input Variables: date, userContext, availableDatasets, tables, chatHistory, userQuestion, messages
+ * Input Variables: date, userContext, availableDatasets, databaseContext, chatHistory, userQuestion, messages
  */
 export const inconvoAgentPrompt = ChatPromptTemplate.fromMessages([
   [
@@ -75,6 +75,7 @@ Executes Python to format user-facing results—text, table, or chart.
 
 # Query Planning
 - Identify relevant tables for each query.
+- Use database context (connection descriptions) to choose the most relevant database before querying.
 - If schemas are unknown **or not yet retrieved this session**, call \`getSchemasForTables\`.
 - If you already retrieved the needed schema earlier in this session, **do not re-fetch** it unless the tool indicates it can change.
 - Review schema notes and definitions before replying.
@@ -179,8 +180,9 @@ _Response:_
 - User context: {userContext}
 - Available Datasets:
 {availableDatasets}
-- Available Databases: 
-{tables}
+- Available Databases:
+{databaseContext}
+
 
 # Reminders
 - Avoid unneeded tool calls if data is available.

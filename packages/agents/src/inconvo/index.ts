@@ -428,12 +428,18 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     )
     .join("\n");
 
-  // Build database context for system prompt
+  // Build database context for system prompt.
+  // Includes database description and table listings.
   const databaseContext = params.databases
     .map((db) => {
-      const tableNames = db.schema.map((t) => t.name).join(", ");
-      const contextInfo = db.context ? ` - ${db.context}` : "";
-      return `- **${db.friendlyName}**${contextInfo}\n  Tables: ${tableNames}`;
+      const descriptionLine = db.context
+        ? `  Description: ${db.context}`
+        : "  Description: (none)";
+      const tableList =
+        db.schema.length > 0
+          ? db.schema.map((table) => `    - ${table.name}`).join("\n")
+          : "    - (none)";
+      return `- **${db.friendlyName}**\n${descriptionLine}\n  Tables:\n${tableList}`;
     })
     .join("\n");
 
@@ -997,16 +1003,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   async function callModel(state: typeof AgentState.State) {
     const prompt = await getPrompt("inconvo_agent");
 
-    // Format tables as a markdown list grouped by database
-    const tables = params.databases
-      .map((db) => {
-        const tableList = db.schema
-          .map((table) => `  - ${table.name}`)
-          .join("\n");
-        return `- ${db.friendlyName}\n${tableList}`;
-      })
-      .join("\n");
-
     // Format available datasets for agent context
     const availableDatasets = (() => {
       if (!params.availableDatasets || params.availableDatasets.length === 0) {
@@ -1064,7 +1060,6 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     })();
 
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
-      tables,
       tableContext: tableContext,
       databaseContext: databaseContext,
       chatHistory: state.chatHistory,

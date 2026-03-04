@@ -53,7 +53,7 @@ interface RequestParams {
 }
 
 export async function questionWhereConditionAgent(params: RequestParams) {
-  const llm = getAIModel(params.provider, "gpt-5.1", {
+  const llm = getAIModel(params.provider, "gpt-5.2", {
     promptCacheKey: buildPromptCacheKey({
       agentId: params.agentId,
       userIdentifier: params.userIdentifier,
@@ -180,8 +180,9 @@ export async function questionWhereConditionAgent(params: RequestParams) {
       if (!ToolMessage.isInstance(m) || m.name !== "applyFilterTool") {
         return false;
       }
-      const artifact = (m as ToolMessage & { artifact?: WhereConditionArtifact })
-        .artifact as WhereConditionArtifact | undefined;
+      const artifact = (
+        m as ToolMessage & { artifact?: WhereConditionArtifact }
+      ).artifact as WhereConditionArtifact | undefined;
       return artifact?.status === "valid";
     });
     if (!hasValidFilter) {
@@ -199,9 +200,11 @@ export async function questionWhereConditionAgent(params: RequestParams) {
     ) {
       return "message_filter_agent";
     }
-    const whereConditionArtifact = (last as ToolMessage & {
-      artifact?: WhereConditionArtifact;
-    }).artifact as WhereConditionArtifact | undefined;
+    const whereConditionArtifact = (
+      last as ToolMessage & {
+        artifact?: WhereConditionArtifact;
+      }
+    ).artifact as WhereConditionArtifact | undefined;
     if (whereConditionArtifact?.status === "valid") {
       return END;
     }

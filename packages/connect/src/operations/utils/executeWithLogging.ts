@@ -1,6 +1,7 @@
 import type { CompiledQuery } from "kysely";
 import { logger } from "../../util/logger";
 import { QueryExecutionError } from "../../util/queryErrors";
+import { fallbackMessage } from "../../util/errorMessage";
 import type { QueryExecutionErrorDetails } from "@repo/types";
 
 /**
@@ -56,7 +57,10 @@ export async function executeWithLogging<T>(
       },
       "Query execution failed",
     );
-    const message = error instanceof Error ? error.message : String(error);
+    const message = fallbackMessage(
+      error instanceof Error ? error.message : String(error),
+      "Query execution failed.",
+    );
     const details: QueryExecutionErrorDetails = {
       type: "query_execution",
       message,

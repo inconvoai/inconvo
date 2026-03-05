@@ -25,6 +25,7 @@
   "scripts": {
     "build": "node scripts/build-sandbox-bundle.js && tsc",
     "dev:local": "tsx src/index.ts dev",
+    "test": "tsx --test src/**/*.test.ts",
     "lint": "eslint --color .",
     "check-types": "tsc --noEmit",
     "prepublishOnly": "node scripts/resolve-catalog.js && pnpm build",
@@ -51,7 +52,7 @@
     "typescript": "catalog:"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org"

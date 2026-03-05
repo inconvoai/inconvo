@@ -7,7 +7,9 @@ async function updateTelemetrySetting(enabled: boolean): Promise<void> {
   const envPath = getEnvPath();
 
   if (!(await envExists())) {
-    throw new Error("Configuration not found. Run 'inconvo configure' first.");
+    throw new Error(
+      "Configuration not found. Run 'inconvo dev configure' first.",
+    );
   }
 
   const content = await fs.readFile(envPath, "utf-8");
@@ -54,7 +56,7 @@ export const telemetryCommand = new Command("telemetry")
       // Show current status
       if (!(await envExists())) {
         logGray("Telemetry: enabled (default)");
-        logGray("Run 'inconvo configure' to set up Inconvo.");
+        logGray("Run 'inconvo dev configure' to set up Inconvo.");
         return;
       }
 

@@ -314,8 +314,15 @@ function startSandbox(): ChildProcess {
   });
 }
 
+const devConfigureCommand = new Command("configure")
+  .description("Configure Inconvo settings interactively")
+  .action(async () => {
+    await runSetupWizard();
+  });
+
 export const devCommand = new Command("dev")
   .description("Start the Inconvo dev server and sandbox")
+  .addCommand(devConfigureCommand)
   .option(
     "--image-version <version>",
     `Use a specific Docker image version (default: ${DEFAULT_IMAGE_VERSION})`,

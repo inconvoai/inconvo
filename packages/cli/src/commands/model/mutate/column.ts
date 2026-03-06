@@ -9,7 +9,9 @@ import {
   runMutation,
 } from "./_shared.js";
 
-const columnCommand = new Command("column").description("Column-level mutations");
+const columnCommand = new Command("column").description(
+  "Column-level mutations",
+);
 
 addCommonOptions(
   columnCommand
@@ -299,11 +301,14 @@ addCommonOptions(
     .description("Update enum augmentation")
     .requiredOption("--table <table>", "Table id or name")
     .requiredOption("--column <column>", "Column id or name")
-    .requiredOption("--mode <mode>", "STATIC|DYNAMIC")
+    .option("--mode <mode>", "Expected current mode (STATIC|DYNAMIC)")
     .option("--entries <json>", "JSON array of enum entries")
     .option("--selected <bool>", "Selected state", parseBooleanArg)
     .action((options) =>
       runCliAction(async () => {
+        if (options.entries === undefined && options.selected === undefined) {
+          throw new Error("Provide at least one of --entries or --selected.");
+        }
         await runMutation({
           options,
           action: "column.enum.update",
@@ -312,9 +317,36 @@ addCommonOptions(
             const snapshot = await loadSnapshot(context);
             const table = resolveTable(snapshot.tables, options.table);
             const column = resolveColumn(table, options.column);
+            const columnRecord = table.columns.find(
+              (candidate) =>
+                typeof candidate?.id === "string" && candidate.id === column.id,
+            ) as { enumMode?: unknown } | undefined;
+            const currentMode = columnRecord?.enumMode;
+            if (currentMode !== "STATIC" && currentMode !== "DYNAMIC") {
+              throw new Error(
+                "Column does not have an enum augmentation. Use create-static or create-dynamic first.",
+              );
+            }
+            if (
+              options.mode !== undefined &&
+              options.mode !== "STATIC" &&
+              options.mode !== "DYNAMIC"
+            ) {
+              throw new Error("--mode must be STATIC or DYNAMIC.");
+            }
+            if (options.mode !== undefined && options.mode !== currentMode) {
+              throw new Error(
+                "Changing enum mode in-place is not supported. Delete and recreate the augmentation instead.",
+              );
+            }
+            if (options.entries !== undefined && currentMode !== "STATIC") {
+              throw new Error(
+                "Dynamic enums do not accept --entries. Delete and recreate the augmentation to switch modes.",
+              );
+            }
             return {
               columnId: column.id,
-              mode: options.mode,
+              mode: currentMode,
               ...(options.entries !== undefined
                 ? { entries: parseJsonOption(options.entries, "--entries") }
                 : {}),

@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { runCliAction } from "../../_shared/command-runtime.js";
-import { resolveComputedColumn, resolveTable } from "../../../model/resolution.js";
+import {
+  resolveComputedColumn,
+  resolveTable,
+} from "../../../model/resolution.js";
 import { parseBooleanArg, parseJsonOption } from "../mutate-args.js";
 import { addCommonOptions, loadSnapshot, runMutation } from "./_shared.js";
 
@@ -46,6 +49,7 @@ addCommonOptions(
     .description("Update computed column fields")
     .requiredOption("--table <table>", "Table id or name")
     .requiredOption("--computed <computed>", "Computed column id or name")
+    .option("--ast <json>", "Computed column AST JSON")
     .option("--name <name>", "New name")
     .option("--selected <bool>", "Selected state", parseBooleanArg)
     .option("--notes <notes>", "Notes value")
@@ -55,6 +59,7 @@ addCommonOptions(
     .action((options) =>
       runCliAction(async () => {
         if (
+          options.ast === undefined &&
           options.name === undefined &&
           options.selected === undefined &&
           options.notes === undefined &&
@@ -63,7 +68,7 @@ addCommonOptions(
           options.clearUnit !== true
         ) {
           throw new Error(
-            "Provide at least one of --name, --selected, --notes, --clear-notes, --unit, --clear-unit.",
+            "Provide at least one of --ast, --name, --selected, --notes, --clear-notes, --unit, --clear-unit.",
           );
         }
         await runMutation({
@@ -76,6 +81,9 @@ addCommonOptions(
             const computed = resolveComputedColumn(table, options.computed);
             return {
               computedColumnId: computed.id,
+              ...(options.ast !== undefined
+                ? { ast: parseJsonOption(options.ast, "--ast") }
+                : {}),
               ...(options.name !== undefined ? { name: options.name } : {}),
               ...(options.selected !== undefined
                 ? { selected: options.selected }

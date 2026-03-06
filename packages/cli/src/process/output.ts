@@ -15,6 +15,10 @@ export function logInfo(message: string): void {
   console.log(`${COLORS.cyan}[inconvo]${COLORS.reset} ${message}`);
 }
 
+export function logWarning(message: string): void {
+  console.warn(`${COLORS.yellow}[inconvo]${COLORS.reset} ${message}`);
+}
+
 export function logError(message: string): void {
   console.error(`${COLORS.red}[inconvo]${COLORS.reset} ${message}`);
 }

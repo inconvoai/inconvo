@@ -464,15 +464,11 @@ export function TableDetail({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Title order={3}>{table.name}</Title>
                 <Group gap="xs" mt={4}>
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color={table.source === "VIRTUAL" ? "violet" : "gray"}
-                  >
-                    {table.source === "VIRTUAL"
-                      ? "Virtual Table"
-                      : "Physical Table"}
-                  </Badge>
+                  {table.source === "VIRTUAL" && (
+                    <Badge size="sm" variant="light" color="violet">
+                      Virtual Table
+                    </Badge>
+                  )}
                   {table.access === "OFF" && (
                     <Badge size="sm" variant="outline" color="gray">
                       Off

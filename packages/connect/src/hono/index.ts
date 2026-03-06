@@ -21,6 +21,7 @@ import type { SchemaTable, SchemaResponse } from "../types/types";
 import type { DatabaseDialect, OperationContext } from "../operations/types";
 import { QueryExecutionError } from "../util/queryErrors";
 import { validateVirtualTableCore } from "../util/validateVirtualTableCore";
+import { errorMessageWithFallback } from "../util/errorMessage";
 
 /**
  * Logger interface for structured logging.
@@ -415,12 +416,16 @@ export function createApp(deps: LambdaDeps) {
       }
 
       if (error instanceof QueryExecutionError) {
+        const message = errorMessageWithFallback(
+          error,
+          "Query execution failed during virtual table validation.",
+        );
         return c.body(
           safeJsonStringify(
             validateVirtualTableResponseSchema.parse({
               ok: false,
               error: {
-                message: error.details.message,
+                message,
                 sql: error.details.sql,
                 code: error.details.code,
                 detail: error.details.detail,
@@ -433,7 +438,10 @@ export function createApp(deps: LambdaDeps) {
         );
       }
 
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = errorMessageWithFallback(
+        error,
+        "Virtual table validation failed.",
+      );
       return c.body(
         safeJsonStringify(
           validateVirtualTableResponseSchema.parse({

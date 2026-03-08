@@ -8,6 +8,11 @@ import {
   type JoinPathHop,
 } from "@repo/types";
 import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
+import {
+  buildJoinDescriptorDescription,
+  buildJoinPathMismatchMessage,
+  buildJoinTableMismatchMessage,
+} from "../utils/joinGuidance";
 
 export interface AggregateGroupsJoinOption {
   name: string;
@@ -262,6 +267,14 @@ export function buildAggregateGroupsZodSchema(
 ) {
   const buildEnum = (values: string[]) =>
     values.length ? stringArrayToZodEnum(values) : null;
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors required when referencing related-table columns.",
+    ctx.joinOptions,
+    {
+      emptyStateMessage:
+        "Array of join descriptors (no joins available from this table).",
+    },
+  );
 
   const allColumnsEnum = buildEnum(ctx.allColumns);
   const numericalColumnsEnum = buildEnum(ctx.numericalColumns);
@@ -379,7 +392,7 @@ export function buildAggregateGroupsZodSchema(
     .optional();
 
   return z.object({
-    joins: z.array(joinSchema).nullable().optional(),
+    joins: z.array(joinSchema).nullable().optional().describe(joinDescription),
     groupBy: z.array(groupByKeySchema).min(1),
     having: havingSchema,
     aggregates: z
@@ -577,10 +590,7 @@ export function validateAggregateGroupsCandidate(
 
       if (isDateColumn) {
         // For date columns with min/max aggregates, validate the value is an ISO date
-        if (
-          condition.function === "min" ||
-          condition.function === "max"
-        ) {
+        if (condition.function === "min" || condition.function === "max") {
           const valueValidation = validateDateAggregateHavingValue(
             condition.value,
             condition.operator,
@@ -750,7 +760,7 @@ function validateJoins(
       if (!option) {
         issues.push({
           path: `joins.${index}.path`,
-          message: "Join path does not match any available relation path.",
+          message: buildJoinPathMismatchMessage(join, ctx.joinOptions),
           code: "invalid_join_path",
         });
         return null;
@@ -759,7 +769,11 @@ function validateJoins(
       if (join.table !== option.table) {
         issues.push({
           path: `joins.${index}.table`,
-          message: `Join table must be ${option.table} for the selected path.`,
+          message: buildJoinTableMismatchMessage(
+            join,
+            option,
+            "the selected path",
+          ),
           code: "mismatched_join_table",
         });
         return null;

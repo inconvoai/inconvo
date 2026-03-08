@@ -189,6 +189,94 @@ describe("groupBy validator", () => {
     }
   });
 
+  it("explains the exact path when a likely join path is almost right", () => {
+    const candidate = {
+      joins: [
+        {
+          table: "users.orders",
+          name: "orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+            {
+              source: ["users.name"],
+              target: ["orders.total"],
+            },
+          ],
+        },
+      ],
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "aggregate" as const,
+        function: "count" as const,
+        column: "users.id",
+        direction: "asc" as const,
+      },
+      limit: 5,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "invalid_join_path",
+          message:
+            "Join path does not match the available relation path for users.orders (orders). Use path=[users.id] -> [orders.user_id] exactly.",
+        }),
+      );
+    }
+  });
+
+  it("explains when the join alias was passed in the table field", () => {
+    const candidate = {
+      joins: [
+        {
+          table: "users.orders",
+          name: "users.orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+          ],
+        },
+      ],
+      groupBy: [{ type: "column", column: "users.id" }],
+      count: ["users.id"],
+      countDistinct: null,
+      sum: null,
+      min: null,
+      max: null,
+      avg: null,
+      orderBy: {
+        type: "aggregate" as const,
+        function: "count" as const,
+        column: "users.id",
+        direction: "asc" as const,
+      },
+      limit: 5,
+    };
+    const result = validateGroupByCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "mismatched_join_table",
+          message:
+            'Join table must be orders for the selected path. You passed the join name in `table`; use `table: "orders"` and `name: "users.orders"` instead.',
+        }),
+      );
+    }
+  });
+
   it("valid component grouping uses alias defaults", () => {
     const candidate = {
       joins: null,

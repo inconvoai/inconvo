@@ -184,4 +184,36 @@ describe("countRelations validator", () => {
       ).toBe(true);
     }
   });
+
+  it("uses the selected relation name when explaining a bad join path", () => {
+    const candidate = {
+      columns: ["id"],
+      relationsToCount: [{ name: "orders", distinct: null }],
+      joins: [
+        {
+          table: "sessions",
+          name: "orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["sessions.userId"],
+            },
+          ],
+        },
+      ],
+      orderBy: null,
+      limit: 10,
+    };
+    const result = validateCountRelationsCandidate(candidate, ctx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "invalid_join_path",
+          message:
+            "Join path does not match the available relation path for orders (orders). Use path=[users.id] -> [orders.userId] exactly.",
+        }),
+      );
+    }
+  });
 });

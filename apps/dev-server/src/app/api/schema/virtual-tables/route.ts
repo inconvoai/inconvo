@@ -105,7 +105,6 @@ export async function POST(request: NextRequest) {
     const { dialect: validatedDialect, result } = await validateVirtualTableSql({
       sql,
       requestDialect: dialect,
-      previewLimit: 5,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Validation returned no columns. The query may have produced zero preview rows; add a filter/limit for validation or use data that returns at least one row.",
+            "Validation returned no columns. The query may have produced zero rows during validation; add a filter/limit for validation or use data that returns at least one row.",
         },
         { status: 400 },
       );

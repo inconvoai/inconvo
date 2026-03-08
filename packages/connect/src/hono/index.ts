@@ -68,6 +68,7 @@ export interface LambdaDeps {
     schema: SchemaResponse;
     db: Kysely<unknown>;
     dialect: DatabaseDialect;
+    pgConnectionString?: string;
   }>;
 
   /**
@@ -387,17 +388,18 @@ export function createApp(deps: LambdaDeps) {
 
     try {
       const parsed = validateVirtualTableRequestSchema.parse(body);
-      const { db, dialect } = await deps.loadSchemaAndAugmentations(connectionId);
+      const { db, dialect, pgConnectionString } =
+        await deps.loadSchemaAndAugmentations(connectionId);
       const response = await validateVirtualTableCore({
         sql: parsed.sql,
         dialect,
         requestDialect: parsed.dialect,
         previewLimit: parsed.previewLimit ?? 1,
         db,
+        pgConnectionString,
       });
 
       logger.timing("Validated SQL virtual table", Date.now() - startTime, {
-        previewRows: response.ok ? (response.previewRows?.length ?? 0) : 0,
         columns: response.ok ? response.columns.length : 0,
       });
 

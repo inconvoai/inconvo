@@ -37,8 +37,9 @@ export async function validateVirtualTableSql(params: {
       sql: params.sql,
       dialect: env.DATABASE_DIALECT,
       requestDialect,
-      previewLimit: params.previewLimit ?? 5,
+      previewLimit: params.previewLimit ?? 1,
       db,
+      pgConnectionString: env.INCONVO_DATABASE_URL,
     });
 
     return { dialect: env.DATABASE_DIALECT, result };

@@ -243,8 +243,6 @@ export function TableDetail({
   const [virtualSqlValue, setVirtualSqlValue] = useState(
     table.virtualTableConfig?.sql ?? "",
   );
-  const [virtualValidationResult, setVirtualValidationResult] =
-    useState<VirtualTableValidationResult | null>(null);
   const [virtualMutationError, setVirtualMutationError] = useState<string | null>(
     null,
   );
@@ -273,7 +271,6 @@ export function TableDetail({
   useEffect(() => {
     setDescriptionValue(table.context ?? "");
     setVirtualSqlValue(table.virtualTableConfig?.sql ?? "");
-    setVirtualValidationResult(null);
     setVirtualMutationError(null);
     setVirtualAction(null);
   }, [
@@ -376,14 +373,7 @@ export function TableDetail({
     setVirtualAction("refresh");
     setVirtualMutationError(null);
     try {
-      const result = await onRefreshVirtualTableColumns(table.id);
-      if (result) {
-        setVirtualValidationResult({
-          ok: true,
-          columns: [],
-          previewRows: result.previewRows,
-        });
-      }
+      await onRefreshVirtualTableColumns(table.id);
     } catch (error) {
       setVirtualMutationError(
         error instanceof Error ? error.message : "Failed to refresh columns.",
@@ -590,7 +580,6 @@ export function TableDetail({
                               value={virtualSqlValue}
                               onChange={(value) => {
                                 setVirtualSqlValue(value ?? "");
-                                setVirtualValidationResult(null);
                                 setVirtualMutationError(null);
                               }}
                               options={{

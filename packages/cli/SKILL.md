@@ -14,8 +14,9 @@ from code context. This repository uses a CLI-only mutation workflow.
 2. Never use local YAML as mutation input.
 3. Perform every remote change via `inconvo model <group> <command>`.
 4. Let the CLI auto-sync snapshots after successful mutations.
-5. Use `--dry-run` on mutation commands when planning changes.
-6. Use `inconvo model pull` only for explicit refresh or recovery.
+5. Use `--dry-run` to verify entity resolution (which table/column gets targeted), not to validate payload format — the API may still reject a payload the dry-run accepted.
+6. Always use `--json` for automation/agent workflows.
+7. Use `inconvo model pull` after DB schema changes or to recover sync.
 
 ## Authentication
 
@@ -25,267 +26,254 @@ The CLI resolves credentials in this priority order (highest first):
 2. `INCONVO_API_KEY` / `INCONVO_API_BASE_URL` environment variables
 3. `.inconvo/config.yaml` in the repo root (gitignored, never committed)
 
-Set up local credentials once with:
-
 ```bash
 npx inconvo@latest config set
 # or non-interactively:
 npx inconvo@latest config set --api-key <key> --api-base-url <url>
-```
-
-View current stored credentials (key is masked):
-
-```bash
 npx inconvo@latest config view
 ```
 
-The config file lives at `.inconvo/config.yaml` and is automatically excluded from git. Do not commit it.
-
 ## Required Inputs
 
-- `agentId` for all mutations (`--agent`).
-- `connectionId` for schema mutations (`--connection`).
-- Target identifiers from code context (prefer IDs, then exact names).
+- `agentId` for all mutations (`--agent`). Read from `.inconvo/agents/<slug>/agent.yaml`.
+- `connectionId` for schema mutations (`--connection`). Read from `.inconvo/connections/<slug>/connection.yaml`.
+- Target identifiers: prefer IDs for stability, names work when unambiguous.
 
-## Snapshot Layout (Canonical)
-
-After pull/sync, snapshots are deduplicated by connection and referenced from
-agents:
+## Snapshot Layout
 
 ```text
 .inconvo/
   agents/
     .slug-map.yaml
     <agent-slug>/
-      agent.yaml
-      user-context.yaml
+      agent.yaml                  # contains agentId
+      user-context.yaml           # fields + status
       shareable-connections.yaml
       connections/
         <connection-slug>/
-          connection.yaml      # contains snapshotPath: .inconvo/connections/<connection-slug>
+          connection.yaml         # reference only — snapshotPath points to .inconvo/connections/
   connections/
     .slug-map.yaml
     <connection-slug>/
-      connection.yaml
+      connection.yaml             # contains connectionId
       tables/
         .slug-map.yaml
-        <table-slug>.yaml
+        <table-slug>.yaml         # full table snapshot: columns, relations, computed, condition, policy
 ```
 
-Notes:
-- `agents/*/connections/*/connection.yaml` is a reference, not a duplicate table snapshot.
-- Slug maps (`.slug-map.yaml`) keep stable, readable folder/file names without requiring IDs in paths.
-- All files under `.inconvo/` are auto-generated — never edit them directly.
+All files are auto-generated. Read them for IDs and current state; never edit directly.
 
 ## Standard Workflow
 
-1. Read code context to identify the intended mutation.
-2. Map the mutation to the corresponding CLI command.
-3. Optional: run with `--dry-run` first to inspect payload.
-4. Execute one CLI mutation command per logical change.
-5. Prefer `--json` for automation/agent workflows.
-6. Verify generated files under `.inconvo/` changed as expected.
-7. If needed, run `inconvo model pull --agent <agentId>` to recover sync.
-
-## Command Prefix
-
-- Prefer `npx inconvo@latest` in docs, automation, and agent workflows.
-- For local development, use `pnpm --dir oss/packages/cli exec tsx src/index.ts`.
+1. Read `.inconvo/` YAML files to understand current state and collect IDs.
+2. Read code context (schema, routes, UI) to understand intended semantics.
+3. Plan all mutations, group independent ones for parallel execution.
+4. Run mutations — use `--dry-run --json` first when targeting is uncertain.
+5. Verify the synced YAML files reflect expected changes.
+6. If sync fails, run `inconvo model pull --agent <agentId>`.
 
 ## Command Discovery
 
 ```bash
-npx inconvo@latest config --help
 npx inconvo@latest model --help
-npx inconvo@latest model agent list --json
 npx inconvo@latest model <group> --help
-npx inconvo@latest model action schema --json
+npx inconvo@latest model action schema --json   # lists all valid action names
 npx inconvo@latest connection --help
 ```
 
-## Mutation Mapping (Code -> CLI)
+## Full Mutation Reference
 
-Use this mapping when code references schema/user-context procedures.
+| What you want to do                | CLI Command                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Enable/disable a table             | `model table set-access --access QUERYABLE\|JOINABLE\|OFF`                           |
+| Set table description              | `model table set-context --context "..."`                                            |
+| Rename / add notes / hide a column | `model column update --rename --notes --selected`                                    |
+| Set a column unit                  | `model column set-unit --unit USD`                                                   |
+| Create a computed column           | `model computed create --name --ast <json> --unit`                                   |
+| Update a computed column           | `model computed update` / `model computed set-unit`                                  |
+| Delete a computed column           | `model computed delete`                                                              |
+| Toggle an FK relation on/off       | `model relation toggle --selected true\|false`                                       |
+| Create a manual relation           | `model relation manual create --source-table --target-table --name --is-list --pair` |
+| Delete a manual relation           | `model relation manual delete --source-table --relation`                             |
+| Set row-level condition            | `model condition set --table --column --field`                                       |
+| Clear row-level condition          | `model condition clear --table`                                                      |
+| Set table access policy            | `model policy set --table --field`                                                   |
+| Clear table access policy          | `model policy clear --table`                                                         |
+| Create static enum                 | `model column enum create-static`                                                    |
+| Create dynamic enum                | `model column enum create-dynamic`                                                   |
+| Add user-context field             | `model user-context add-field --key --type STRING\|NUMBER\|BOOLEAN`                  |
+| Delete user-context field          | `model user-context delete-field --key`                                              |
+| Enable user-context                | `model user-context set-status --status ENABLED`                                     |
+| Pull latest snapshot               | `model pull --agent <agentId> [--connection <connectionId>]`                         |
+| Trigger DB resync                  | `connection sync --agent <agentId> --connection <connectionId>`                      |
 
-| Code Mutation Surface | CLI Command Group |
-|---|---|
-| `schema.updateTable` | `model table set-access` |
-| `schema.updateTableContext` | `model table set-context` |
-| `schema.updateColumn` | `model column update` |
-| `schema.createColumnUnit` | `model column set-unit` |
-| `schema.createColumnAugmentation` (conversion) | `model column conversion create` |
-| `schema.updateColumnAugmentation` (conversion) | `model column conversion update` |
-| `schema.deleteColumnAugmentation` (conversion) | `model column conversion delete` |
-| `schema.createColumnAugmentation` (static enum) | `model column enum create-static` |
-| `schema.createColumnAugmentation` (dynamic enum) | `model column enum create-dynamic` |
-| `schema.updateColumnAugmentation` (enum) | `model column enum update` |
-| `schema.deleteColumnAugmentation` (enum) | `model column enum delete` |
-| `schema.getColumnDistinctValues` | `model column enum autofill` |
-| `schema.createComputedColumn` | `model computed create` |
-| `schema.updateComputedColumn` | `model computed update`, `model computed set-unit` |
-| `schema.deleteComputedColumn` | `model computed delete` |
-| `schema.updateRelation` | `model relation toggle` |
-| `schema.createManualRelation` | `model relation manual create` |
-| `schema.updateManualRelation` | `model relation manual update` |
-| `schema.deleteManualRelation` | `model relation manual delete` |
-| `schema.upsertCondition` | `model condition set` |
-| `schema.deleteCondition` | `model condition clear` |
-| `schema.upsertTableAccessPolicy` | `model policy set` |
-| `schema.deleteTableAccessPolicy` | `model policy clear` |
-| `schema.validateVirtualTableSql` | `model virtual validate-sql` |
-| `schema.createVirtualTable` | `model virtual create` |
-| `schema.updateVirtualTableSql` | `model virtual update-sql` |
-| `schema.refreshVirtualTableColumns` | `model virtual refresh-columns` |
-| `schema.deleteVirtualTable` | `model virtual delete` |
-| `userContext.addField` | `model user-context add-field` |
-| `userContext.deleteField` | `model user-context delete-field` |
-| `userContext.setStatus` | `model user-context set-status` |
+## Computed Column AST Format
 
-## State Semantics (Important)
+The `--ast` flag takes a JSON string. Node types and their shapes:
 
-### Table access states
+```json
+{ "type": "column",    "name": "<columnName>" }
+{ "type": "value",     "value": 42 }
+{ "type": "function",  "name": "ABS", "arguments": [<node>] }
+{ "type": "operation", "operator": "+"|"-"|"*"|"/"|"%", "operands": [<node>, <node>] }
+{ "type": "brackets",  "expression": <node> }
+```
 
-- `QUERYABLE`: Table can be selected as a primary query target. Use for tables you want users/agents to ask about directly.
-- `JOINABLE`: Table cannot be a primary target, but can be traversed through relations from reachable tables.
-- `OFF`: Table is excluded from query planning and traversal.
+Example — `(subtotal - discount) + tax`:
 
-### Reachability rule
+```bash
+npx inconvo@latest model computed create \
+  --agent <agentId> --connection <connectionId> \
+  --table orders --name "total" \
+  --ast '{"type":"operation","operator":"+","operands":[{"type":"brackets","expression":{"type":"operation","operator":"-","operands":[{"type":"column","name":"subtotal"},{"type":"column","name":"discount"}]}},{"type":"column","name":"tax"}]}' \
+  --unit USD --json
+```
 
-- `JOINABLE` only helps if there is at least one reachable path from a `QUERYABLE` table (possibly through other `JOINABLE` tables).
-- If all incoming paths come only from `OFF` tables, the `JOINABLE` table is effectively unreachable.
-- Practical check: after changing access, confirm at least one `QUERYABLE -> ... -> JOINABLE` path exists for intended queries.
+> **Note:** `--dry-run` does NOT validate the AST schema — it only resolves the target entity and shows what would be sent. The API validates the AST and returns a detailed Zod error listing valid node shapes if it's wrong.
 
-### User-context state
+## Relations Workflow
 
-- `ENABLED`: table/user-context conditions and policies are enforced during query planning.
-- `DISABLED`/`UNSET`: user-context-driven filtering/policies are not reliably enforced; conditions may exist but not behave as intended.
-- If a table should be tenant-scoped, ensure:
-  1. user-context status is `ENABLED`,
-  2. required field exists (for example `organisationId`),
-  3. table condition/policy is set to that field.
+FK relations defined in the database schema are **auto-introspected** by the platform and should appear in table YAML under `outwardRelations` with `source: FK` on the first pull. No manual steps should be required.
 
-## Semantic Model Feature Guide (When / Why)
+**Only create manual relations** when no FK constraint exists in the DB (e.g. soft references, denormalised keys, or cross-database joins).
 
-| Feature | When to use | Key constraints |
-|---|---|---|
-| **Table access** (`QUERYABLE`/`JOINABLE`/`OFF`) | `QUERYABLE` for primary query targets; `JOINABLE` for traversal-only helpers; `OFF` to hide entirely. | `JOINABLE` is unreachable unless a path from a `QUERYABLE` table exists. `OFF` tables are detail-read-only in UI — set to `JOINABLE`/`QUERYABLE` first if you need to edit, then revert. |
-| **Table context** | Business definitions, synonyms, caveats, rules. | Improves model interpretation quality when domain language is explicit. |
-| **Column selection / rename / notes** | Hide sensitive columns (`selected=false`), use business names, add interpretation hints. | Reduces prompt/schema noise. |
-| **Column conversions** | When a string column should behave as numeric (cast/coalesce). | Supported only on string columns. |
-| **Enums (static vs dynamic)** | Static for curated vocabularies; dynamic for evolving low-cardinality columns. | Enums supported on string/numeric columns only. Dynamic enum falls back when distinct value count is too high. |
-| **Units** | Numeric columns/computed columns where unit is meaningful (`USD`, `%`, `kg`). | Disambiguates metric meaning in generated explanations. |
-| **Computed columns** | Reusable derived metrics from existing numeric fields. | Expressions reference numeric-compatible columns; operator/function surface is intentionally narrow. |
-| **Relations** | Toggle existing FK relations; create manual relations when FKs are missing or semantically wrong. | Broken relations cannot be enabled. Relations to `OFF` tables are effectively disabled for traversal. |
-| **Condition vs policy** | Condition (`table.column == userContext.field`) for row-level filtering; policy (`userContext.boolField == true`) for table-level gating. | Both require user-context `ENABLED`. Policy requires a BOOLEAN field. Inherited-only fields cannot be assigned to local conditions/policies. |
-| **Virtual tables** | Durable SQL projections/aggregations without changing source schema. | Validate SQL before save. Deletion blocked if active manual inbound relations exist. MySQL not supported in UI. |
-| **Demo/read-only agents** | N/A — read only. | Many mutation families are blocked on demo agents and read-only connections. |
+Check current relation state:
+
+```bash
+grep -E "source: MANUAL|source: FK|^  - id: relation_|^    name:" \
+  .inconvo/connections/<slug>/tables/<table>.yaml
+```
+
+### If FK relations are missing after a pull
+
+Before creating manual relations, ask the user to confirm:
+
+1. **Do the FK constraints actually exist in the database?** Check with the user or inspect the schema — if there are no FK constraints, that explains the absence.
+2. **Does the Inconvo DB user have access to `information_schema`?** FK introspection requires read access to `information_schema.key_column_usage` and `information_schema.referential_constraints`. If this permission is missing, run a `connection sync` after granting it and then pull again.
+
+Only fall back to manual relations if FKs genuinely don't exist in the schema.
+
+## Semantic Model Content Guidelines
+
+Keeping each layer focused prevents duplication and improves model quality:
+
+| Layer                     | What belongs here                                                                                                                                  | What does NOT belong here                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Table context**         | What the table represents, business domain meaning, important distinctions (e.g. "accounts vs customers"), which questions to direct at this table | Column-specific formulas, thresholds, or FK details                         |
+| **Column notes**          | What a specific column means, valid ranges, formulas for derived values, business rules for that field                                             | Repeating the table description; FK details already expressed as a relation |
+| **Computed columns**      | The single authoritative place for a derived metric formula (e.g. `total = subtotal - discount + tax`)                                             | Don't repeat the formula in the notes of input columns                      |
+| **Column rename**         | Business-friendly display name when the DB column name is unclear (`ean` → `EAN (barcode)`)                                                        | —                                                                           |
+| **Column selected=false** | Sensitive columns that must never be exposed (passwords, tokens, internal flags)                                                                   | —                                                                           |
+
+## Multi-Tenancy Pattern
+
+For apps that scope all data by a tenant/organisation ID:
+
+```bash
+# 1. Add the tenant field to user-context
+npx inconvo@latest model user-context add-field \
+  --agent <agentId> --key organisationId --type NUMBER --json
+
+# 2. Enable user-context
+npx inconvo@latest model user-context set-status \
+  --agent <agentId> --status ENABLED --json
+
+# 3. Set condition on every tenant-scoped table (run in parallel)
+npx inconvo@latest model condition set \
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --column organisation_id --field organisationId --json
+```
+
+Conditions require user-context to be `ENABLED` to take effect. The order of add-field / set-status / condition set does not matter as long as status is ENABLED before queries run.
+
+## Table Access Decision Guide
+
+| Table role                                                                      | Access level |
+| ------------------------------------------------------------------------------- | ------------ |
+| Users ask about it directly (orders, products, users, reviews)                  | `QUERYABLE`  |
+| Reference/lookup table only traversed via relations (organisations, categories) | `JOINABLE`   |
+| Internal, sensitive, or irrelevant to the agent                                 | `OFF`        |
+
+`JOINABLE` is only useful when there is at least one `QUERYABLE` table with a relation path to it. A `JOINABLE` table with no reachable path is effectively `OFF`.
 
 ## High-Confidence Patterns
 
-### Table and column changes
+### Bulk table setup (run in parallel)
 
 ```bash
 npx inconvo@latest model table set-access \
-  --agent <agentId> --connection <connectionId> --table <tableIdOrName> \
-  --access QUERYABLE
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --access QUERYABLE --json
 
+npx inconvo@latest model table set-context \
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --context "What this table is and when to use it." --json
+```
+
+### Column updates
+
+```bash
+# Rename + notes in one command
 npx inconvo@latest model column update \
-  --agent <agentId> --connection <connectionId> --table <tableIdOrName> \
-  --column <columnIdOrName> --rename <newName>
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --column <column> \
+  --rename "display name" --notes "What this column means." --json
+
+# Hide sensitive column
+npx inconvo@latest model column update \
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --column password --selected false --json
+
+# Set currency unit
+npx inconvo@latest model column set-unit \
+  --agent <agentId> --connection <connectionId> \
+  --table <table> --column price --unit USD --json
 ```
 
-### User-context changes
+### Manual relation (fallback when no FK)
 
 ```bash
-npx inconvo@latest model user-context add-field \
-  --agent <agentId> --key <fieldKey> --type STRING
-
-npx inconvo@latest model user-context set-status \
-  --agent <agentId> --status ENABLED
+npx inconvo@latest model relation manual create \
+  --agent <agentId> --connection <connectionId> \
+  --source-table <table> --target-table <table> \
+  --name "relationName" --is-list false \
+  --pair "source_col:target_col" --json
 ```
 
-### Dry-run and JSON-first automation
+### Pull for a specific connection
 
 ```bash
-npx inconvo@latest model table set-access \
-  --agent <agentId> --connection <connectionId> --table <tableIdOrName> \
-  --access QUERYABLE --dry-run --json
+npx inconvo@latest model pull \
+  --agent <agentId> --connection <connectionId> --json
 ```
-
-### Generic model actions
-
-```bash
-npx inconvo@latest model action schema --json
-
-npx inconvo@latest model action run \
-  --agent <agentId> \
-  --connection <connectionId> \
-  --action table.setAccess \
-  --payload '{"tableId":"table_123","access":"QUERYABLE"}' \
-  --json
-```
-
-### Linked connection workflows
-
-```bash
-npx inconvo@latest connection list --agent <agentId> --json
-npx inconvo@latest connection list-shareable --agent <agentId> --json
-npx inconvo@latest connection link --agent <agentId> --connection <connectionId> --json
-npx inconvo@latest connection unlink --agent <agentId> --connection <connectionId> --json
-```
-
-### Trigger a database resync
-
-```bash
-npx inconvo@latest connection sync --agent <agentId> --connection <connectionId>
-```
-
-After the platform sync completes, the CLI automatically pulls an updated local snapshot.
 
 ## Resolution Rules
 
-The CLI resolver follows this order for table/column/relation/field lookups:
+The CLI resolves `--table`, `--column`, `--relation`, `--field` in this order:
 
-1. Exact ID
-2. Exact name
-3. Case-insensitive unique name
+1. Exact ID match
+2. Exact name match
+3. Case-insensitive unique name match
 
-If ambiguous or missing, fail fast and pass explicit IDs.
-
-## Pull Behavior
-
-- Non-interactive mode requires one of:
-  - `--agent <id>` (repeatable), or
-  - `--all-agents`.
-- `--connection` requires exactly one `--agent`.
-- Interactive pull prompts for target selection (one/many/all).
+If ambiguous (multiple matches) or not found — fail fast and use the explicit ID from the YAML file.
 
 ## Error Recovery
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Mutation succeeds but CLI warns sync failed | Network issue or transient API error after the remote write | `inconvo model pull --agent <agentId>` |
-| `--table` / `--column` not found | Name mismatch or ambiguous (multiple matches) | Pass the exact ID instead of name |
-| `UNAUTHORIZED` | Missing or expired API key | Re-run `inconvo config set` or check `INCONVO_API_KEY` |
-| `BAD_REQUEST` from user-context mutation | Key already exists in effective context, or trying to disable while inherited fields exist | Check existing fields with `model agent list --json` and inspect `user-context.yaml` |
-| Snapshot looks stale after a DB schema change | Platform hasn't re-introspected the live DB | Run `inconvo connection sync --agent <agentId> --connection <connectionId>` first, then pull |
-
-## Output and Automation Notes
-
-- Add `--json` for machine-readable output (`model pull`, mutations, `model action`, and `connection` list/link/sync commands).
-- Add `--dry-run` for mutation commands and `model action run`.
-- The CLI automatically warns when a mutation succeeds but local sync fails.
-- On sync failure, recover with:
-
-```bash
-npx inconvo@latest model pull --agent <agentId>
-```
-
-- In CI/CD, set `INCONVO_API_KEY` as an environment secret rather than using `.inconvo/config.yaml`.
+| Symptom                                               | Likely cause                                                                            | Fix                                                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Mutation succeeds but sync warning                    | Transient network error after remote write                                              | `model pull --agent <agentId>`                                                                                                |
+| `--table` / `--column` not found                      | Name mismatch or ambiguous                                                              | Use exact ID from YAML                                                                                                        |
+| `UNAUTHORIZED`                                        | Missing or expired API key                                                              | Re-run `inconvo config set`                                                                                                   |
+| `BAD_REQUEST` with Zod errors on `computedColumn.ast` | Wrong AST node shape                                                                    | Check the AST Format section above; every node requires a `type` discriminator                                                |
+| `BAD_REQUEST` from user-context mutation              | Field key already exists                                                                | Check `user-context.yaml` fields list                                                                                         |
+| FK relations missing after pull                       | Inconvo DB user lacks `information_schema` access, or no FK constraints exist in the DB | Confirm FK constraints exist and that the DB user has `information_schema` read access, then `connection sync` + `model pull` |
+| Manual relation delete returns "not found"            | Already absorbed into a FK relation after pull                                          | Check `source:` in YAML — if `FK`, it was absorbed; nothing to delete                                                         |
 
 ## Done Criteria
 
-- Remote mutation executed through CLI command.
-- Local `.inconvo/` snapshot auto-synced.
+- All remote mutations executed via CLI.
+- Local `.inconvo/` snapshot auto-synced after each mutation.
 - No manual edits to generated YAML files.
-- For linked connections, only one canonical connection snapshot exists under `.inconvo/connections/`.
+- Table contexts describe purpose only — no column-level details.
+- Column notes describe the specific column only — no table-level details.
+- Derived metrics live in computed columns; not repeated in input column notes.

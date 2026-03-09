@@ -1,10 +1,12 @@
 import { sql, type Kysely } from "kysely";
+import { Client, type FieldDef } from "pg";
 import type { DatabaseDialect } from "../operations/types";
 import type { BigQueryQuerySchemaField } from "../dialects/bigquery";
 import type {
   ValidateVirtualTableResponse,
   ValidateVirtualTableColumn,
 } from "@repo/types";
+import { QueryExecutionError } from "./queryErrors";
 import {
   buildVirtualTableProbeSql,
   executeVirtualTableProbeQuery,
@@ -19,6 +21,7 @@ export interface ValidateVirtualTableCoreInput {
   requestDialect?: string;
   previewLimit: number;
   db: Kysely<unknown>;
+  pgConnectionString?: string;
 }
 
 export type VirtualTableProbeQueryResult = {
@@ -40,6 +43,43 @@ export type InferColumnsFromDbResult =
       kind: "error";
       error: VirtualTableInferenceError;
     };
+
+const COMMON_PG_TYPE_NAMES_BY_OID = new Map<number, string>([
+  [16, "bool"],
+  [17, "bytea"],
+  [20, "int8"],
+  [21, "int2"],
+  [23, "int4"],
+  [25, "text"],
+  [114, "json"],
+  [700, "float4"],
+  [701, "float8"],
+  [1000, "bool[]"],
+  [1005, "int2[]"],
+  [1007, "int4[]"],
+  [1009, "text[]"],
+  [1015, "varchar[]"],
+  [1016, "int8[]"],
+  [1021, "float4[]"],
+  [1022, "float8[]"],
+  [1042, "bpchar"],
+  [1043, "varchar"],
+  [1082, "date"],
+  [1083, "time"],
+  [1114, "timestamp"],
+  [1115, "timestamp[]"],
+  [1182, "date[]"],
+  [1183, "time[]"],
+  [1184, "timestamptz"],
+  [1185, "timestamptz[]"],
+  [1231, "numeric[]"],
+  [1700, "numeric"],
+  [199, "json[]"],
+  [2950, "uuid"],
+  [2951, "uuid[]"],
+  [3802, "jsonb"],
+  [3807, "jsonb[]"],
+]);
 
 /**
  * Map a raw SQL type name (from information_schema or catalog) to our simplified
@@ -124,7 +164,7 @@ function inferColumnsViaBigQuerySchemaFields(
 
 function dbTypeInferenceFailureMessage(dialect: DatabaseDialect): string {
   if (dialect === "postgresql" || dialect === "redshift") {
-    return `Could not infer virtual-table column types from ${dialect} metadata. This can happen when the validation preview returns zero rows (no column names are available for pg_typeof). Try validating with a query/filter that returns at least one row.`;
+    return `Could not infer virtual-table column types from ${dialect} metadata.`;
   }
 
   if (dialect === "mssql") {
@@ -181,6 +221,23 @@ function getErrorCode(error: unknown): string | null {
   return null;
 }
 
+function extractDbErrorDetails(error: unknown): {
+  code?: string;
+  detail?: string;
+  hint?: string;
+} {
+  if (!error || typeof error !== "object") {
+    return {};
+  }
+
+  const record = error as Record<string, unknown>;
+  return {
+    code: typeof record.code === "string" ? record.code : undefined,
+    detail: typeof record.detail === "string" ? record.detail : undefined,
+    hint: typeof record.hint === "string" ? record.hint : undefined,
+  };
+}
+
 function extractAmbiguousColumnName(message: string): string | null {
   const quotedMatch = message.match(/column reference "([^"]+)" is ambiguous/iu);
   if (quotedMatch?.[1]) return quotedMatch[1];
@@ -209,6 +266,119 @@ export function classifyVirtualTableInferenceError(
   }
 
   return null;
+}
+
+function buildVirtualTableMetadataSql(userSql: string): string {
+  const normalized = normalizeVirtualTableSql(userSql);
+  return `SELECT * FROM (${normalized}) AS __inconvo_vt_metadata_probe LIMIT 0`;
+}
+
+function getPgFieldTypeName(
+  field: FieldDef,
+  typeNameByOid: Map<number, string>,
+): string {
+  if (
+    typeof field.dataTypeID === "number" &&
+    Number.isFinite(field.dataTypeID)
+  ) {
+    return typeNameByOid.get(field.dataTypeID) ?? "";
+  }
+
+  return "";
+}
+
+async function loadPgTypeNamesForFields(
+  client: Client,
+  fields: FieldDef[],
+): Promise<Map<number, string>> {
+  const typeNameByOid = new Map(COMMON_PG_TYPE_NAMES_BY_OID);
+  const unresolvedOids = Array.from(
+    new Set(
+      fields
+        .map((field) =>
+          typeof field.dataTypeID === "number" && Number.isFinite(field.dataTypeID)
+            ? field.dataTypeID
+            : null,
+        )
+        .filter((oid): oid is number => oid !== null && !typeNameByOid.has(oid)),
+    ),
+  );
+
+  if (unresolvedOids.length === 0) {
+    return typeNameByOid;
+  }
+
+  try {
+    const typeRows = await client.query<{ oid: number; typname: string }>(
+      `SELECT oid::int AS oid, typname
+       FROM pg_catalog.pg_type
+       WHERE oid = ANY($1::oid[])`,
+      [unresolvedOids],
+    );
+
+    for (const row of typeRows.rows) {
+      typeNameByOid.set(Number(row.oid), row.typname);
+    }
+  } catch {
+    // Fall back to the built-in OID map when catalog access is restricted or incomplete.
+  }
+
+  return typeNameByOid;
+}
+
+async function inferColumnsViaPgResultMetadata(
+  userSql: string,
+  connectionString: string,
+): Promise<InferColumnsFromDbResult> {
+  const metadataSql = buildVirtualTableMetadataSql(userSql);
+  const client = new Client({ connectionString });
+
+  try {
+    await client.connect();
+    const result = await client.query({
+      text: metadataSql,
+      rowMode: "array",
+    });
+    const fields = result.fields ?? [];
+    if (fields.length === 0) {
+      return { kind: "columns", columns: null };
+    }
+
+    const typeNameByOid = await loadPgTypeNamesForFields(client, fields);
+
+    return {
+      kind: "columns",
+      columns: fields.map((field) => ({
+        sourceName: field.name,
+        type: mapSqlTypeToSimpleType(getPgFieldTypeName(field, typeNameByOid)),
+        nullable: null,
+      })),
+    };
+  } catch (error) {
+    const inferredError = classifyVirtualTableInferenceError(error);
+    if (inferredError) {
+      return {
+        kind: "error",
+        error: inferredError,
+      };
+    }
+
+    throw new QueryExecutionError(
+      {
+        type: "query_execution",
+        message:
+          getErrorMessage(error) ||
+          "Query execution failed during virtual table validation.",
+        sql: metadataSql,
+        params: [],
+        operation: "validateVirtualTable",
+        ...extractDbErrorDetails(error),
+      },
+      error,
+    );
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
 
 /**
@@ -331,6 +501,11 @@ async function inferColumnsFromDb(
 }
 
 export interface ValidateVirtualTableCoreDeps {
+  inferColumnsFromValidationMetadata: (params: {
+    dialect: DatabaseDialect;
+    userSql: string;
+    pgConnectionString?: string;
+  }) => Promise<InferColumnsFromDbResult | null>;
   executeProbeQuery: (
     db: Kysely<unknown>,
     dialect: DatabaseDialect,
@@ -346,6 +521,20 @@ export interface ValidateVirtualTableCoreDeps {
 }
 
 const defaultValidateVirtualTableCoreDeps: ValidateVirtualTableCoreDeps = {
+  inferColumnsFromValidationMetadata: async ({
+    dialect,
+    userSql,
+    pgConnectionString,
+  }) => {
+    if (
+      (dialect === "postgresql" || dialect === "redshift") &&
+      pgConnectionString
+    ) {
+      return await inferColumnsViaPgResultMetadata(userSql, pgConnectionString);
+    }
+
+    return null;
+  },
   executeProbeQuery: async (db, dialect, probeSql) => {
     return (await executeVirtualTableProbeQuery(
       db,
@@ -365,7 +554,14 @@ export async function validateVirtualTableCore(
   input: ValidateVirtualTableCoreInput,
   deps: ValidateVirtualTableCoreDeps = defaultValidateVirtualTableCoreDeps,
 ): Promise<ValidateVirtualTableResponse> {
-  const { sql: userSql, dialect, requestDialect, previewLimit, db } = input;
+  const {
+    sql: userSql,
+    dialect,
+    requestDialect,
+    previewLimit,
+    db,
+    pgConnectionString,
+  } = input;
 
   const staticError = validateVirtualTableSqlStatic(userSql, dialect);
   if (staticError) {
@@ -381,17 +577,47 @@ export async function validateVirtualTableCore(
     };
   }
 
+  const metadataInferResult = await deps.inferColumnsFromValidationMetadata({
+    dialect,
+    userSql,
+    pgConnectionString,
+  });
+  if (metadataInferResult) {
+    if (metadataInferResult.kind === "error") {
+      return {
+        ok: false,
+        error: {
+          message: ambiguousColumnReferenceMessage(
+            metadataInferResult.error.columnName,
+          ),
+        },
+      };
+    }
+
+    const metadataColumns = metadataInferResult.columns;
+    if (!metadataColumns) {
+      return {
+        ok: false,
+        error: {
+          message: dbTypeInferenceFailureMessage(dialect),
+        },
+      };
+    }
+
+    return validateInferredColumns(metadataColumns);
+  }
+
   const probeSql = buildVirtualTableProbeSql(userSql, dialect, previewLimit);
   const result = await deps.executeProbeQuery(
     db,
     dialect,
     probeSql,
   );
-  const previewRows = (result.rows ?? []) as Record<string, unknown>[];
+  const probeRows = (result.rows ?? []) as Record<string, unknown>[];
 
   // Primary: ask the database for real column types.
   // Each dialect uses its best introspection mechanism.
-  const firstRow = previewRows[0];
+  const firstRow = probeRows[0];
   const columnNames = firstRow ? Object.keys(firstRow) : [];
   const inferResult = await deps.inferColumnsFromDb(
     db,
@@ -419,6 +645,12 @@ export async function validateVirtualTableCore(
     };
   }
 
+  return validateInferredColumns(columns);
+}
+
+function validateInferredColumns(
+  columns: ValidateVirtualTableColumn[],
+): ValidateVirtualTableResponse {
   // Check for duplicate column names (e.g. from SELECT * with JOINs)
   const seenNames = new Set<string>();
   for (const col of columns) {
@@ -443,5 +675,5 @@ export async function validateVirtualTableCore(
     };
   }
 
-  return { ok: true, columns, previewRows };
+  return { ok: true, columns };
 }

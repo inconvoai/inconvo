@@ -344,8 +344,13 @@ export function TableList({
                         {table.name}
                       </Text>
                       {table.source === "VIRTUAL" && (
-                        <Badge size="xs" variant="light" color="violet">
-                          Virtual
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color="violet"
+                          title="Virtual table"
+                        >
+                          V
                         </Badge>
                       )}
                       {userContextStatus === "ENABLED" ? (

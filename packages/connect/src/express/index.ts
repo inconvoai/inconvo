@@ -191,6 +191,7 @@ export async function inconvo(): Promise<Router> {
         requestDialect: parsed.dialect,
         previewLimit: parsed.previewLimit ?? 1,
         db,
+        pgConnectionString: env.INCONVO_DATABASE_URL,
       });
       return res
         .status(200)

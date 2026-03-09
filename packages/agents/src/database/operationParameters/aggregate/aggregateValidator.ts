@@ -5,6 +5,11 @@ import {
   type JoinPathHop,
 } from "@repo/types";
 import type { GeneratedJoinOption } from "../../utils/tableRelations";
+import {
+  buildJoinDescriptorDescription,
+  buildJoinPathMismatchMessage,
+  buildJoinTableMismatchMessage,
+} from "../utils/joinGuidance";
 
 const aggregateJoinSchema = joinDescriptorSchema.strip();
 
@@ -49,23 +54,14 @@ export type AggregateValidationResult =
 
 export function buildAggregateToolZodSchema(ctx: AggregateValidatorContext) {
   const aliasReferenceDescription = buildAliasReferenceDescription(ctx);
-  const joinDescription =
-    ctx.joinOptions.length > 0
-      ? [
-          "Array of join descriptors required when referencing related-table columns.",
-          "Join descriptor rules:",
-          "- `path` must match one of the available join paths exactly.",
-          "- `table` must be the terminal table shown in parentheses for that path.",
-          "- `name` should use the join alias shown before parentheses.",
-          "Available joins:",
-          ...ctx.joinOptions.map(
-            (option) =>
-              `${option.name} (${option.table}) path=${formatJoinPath(
-                option.path,
-              )}`,
-          ),
-        ].join("\n")
-      : "Array of join descriptors (no joins available from this table).";
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors required when referencing related-table columns.",
+    ctx.joinOptions,
+    {
+      emptyStateMessage:
+        "Array of join descriptors (no joins available from this table).",
+    },
+  );
 
   return z.object({
     joins: z.array(aggregateJoinSchema).nullable().describe(joinDescription),
@@ -254,7 +250,9 @@ function buildAggregateArraySchema(description: string) {
   return z.array(z.string().min(1)).min(1).nullable().describe(description);
 }
 
-function buildAliasReferenceDescription(ctx: AggregateValidatorContext): string {
+function buildAliasReferenceDescription(
+  ctx: AggregateValidatorContext,
+): string {
   if (ctx.joinOptions.length === 0) {
     return `Base alias is ${ctx.baseTable}. No joined aliases are available.`;
   }
@@ -359,7 +357,7 @@ function validateJoins(
       if (!option) {
         issues.push({
           path: `joins.${index}.path`,
-          message: "Join path does not match any available relation path.",
+          message: buildJoinPathMismatchMessage(join, ctx.joinOptions),
           code: "invalid_join_path",
         });
         return null;
@@ -381,7 +379,7 @@ function validateJoins(
       if (join.table !== option.table) {
         issues.push({
           path: `joins.${index}.table`,
-          message: `Join table must be ${option.table} for this path.`,
+          message: buildJoinTableMismatchMessage(join, option, "this path"),
           code: "invalid_join_table",
         });
         return null;
@@ -408,10 +406,4 @@ function joinPathKey(path: JoinPathHop[]) {
   return path
     .map((hop) => `${hop.source.join(",")}=>${hop.target.join(",")}`)
     .join("|");
-}
-
-function formatJoinPath(path: JoinPathHop[]) {
-  return path
-    .map((hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`)
-    .join(" | ");
 }

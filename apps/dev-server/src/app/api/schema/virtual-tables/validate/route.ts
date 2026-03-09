@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       requestDialect: parsed.dialect,
       previewLimit: parsed.previewLimit ?? 1,
       db,
+      pgConnectionString: env.INCONVO_DATABASE_URL,
     });
 
     return new NextResponse(safeJsonStringify(response), {

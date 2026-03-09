@@ -1346,7 +1346,6 @@ function SchemaPageContent() {
         connectionId: "default",
         sql: payload.sql,
         dialect: payload.dialect,
-        previewLimit: 5,
       });
       if (!validation.ok) {
         throw new Error(validation.error.message);
@@ -1414,7 +1413,6 @@ function SchemaPageContent() {
         connectionId: "default",
         sql: table.virtualTableConfig.sql,
         dialect: table.virtualTableConfig.dialect,
-        previewLimit: 5,
       });
       if (!validation.ok) {
         throw new Error(validation.error.message);
@@ -1470,7 +1468,6 @@ function SchemaPageContent() {
 
       return {
         tableId,
-        previewRows: validation.previewRows ?? [],
         createdColumns,
         updatedColumns,
         removedColumns,

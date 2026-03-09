@@ -102,7 +102,6 @@ export function CreateVirtualTableForm({
       const validationResult: VirtualTableValidationResult = await onValidateSql({
         connectionId,
         sql,
-        previewLimit: 5,
       });
       if (!validationResult.ok) {
         setError(validationResult.error.message);

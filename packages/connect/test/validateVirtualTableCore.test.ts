@@ -9,11 +9,13 @@ import {
 } from "~/util/validateVirtualTableCore";
 
 function makeDeps(
-  previewRows: Record<string, unknown>[],
+  probeRows: Record<string, unknown>[],
   inferResult: InferColumnsFromDbResult,
+  metadataResult: InferColumnsFromDbResult | null = null,
 ): ValidateVirtualTableCoreDeps {
   return {
-    executeProbeQuery: async () => ({ rows: previewRows }),
+    inferColumnsFromValidationMetadata: async () => metadataResult,
+    executeProbeQuery: async () => ({ rows: probeRows }),
     inferColumnsFromDb: async () => inferResult,
   };
 }
@@ -22,7 +24,7 @@ function makeInput(dialect: DatabaseDialect = "postgresql") {
   return {
     sql: "SELECT 1 AS id",
     dialect,
-    previewLimit: 5,
+    previewLimit: 1,
     db: {} as any,
   };
 }
@@ -89,26 +91,59 @@ describe("validateVirtualTableCore", () => {
       ok: false,
       error: {
         message:
-          "Could not infer virtual-table column types from redshift metadata. This can happen when the validation preview returns zero rows (no column names are available for pg_typeof). Try validating with a query/filter that returns at least one row.",
+          "Could not infer virtual-table column types from redshift metadata.",
       },
     });
   });
 
-  test("returns inferred columns and preview rows when inference succeeds", async () => {
+  test("returns inferred columns when inference succeeds", async () => {
     const columns: ValidateVirtualTableColumn[] = [
       { sourceName: "id", type: "number", nullable: false },
     ];
-    const previewRows = [{ id: 1 }];
 
     const response = await validateVirtualTableCore(
       makeInput("postgresql"),
-      makeDeps(previewRows, { kind: "columns", columns }),
+      makeDeps([{ id: 1 }], { kind: "columns", columns }),
     );
 
     expect(response).toEqual({
       ok: true,
       columns,
-      previewRows,
     });
+  });
+
+  test("uses metadata-only inference for postgresql when connection metadata is available", async () => {
+    const columns: ValidateVirtualTableColumn[] = [
+      { sourceName: "id", type: "number", nullable: null },
+    ];
+    const executeProbeQuery = jest.fn(async () => ({ rows: [{ id: 1 }] }));
+    const inferColumnsFromDb = jest.fn(async () => ({
+      kind: "columns" as const,
+      columns,
+    }));
+    const inferColumnsFromValidationMetadata = jest.fn(async () => ({
+      kind: "columns" as const,
+      columns,
+    }));
+
+    const response = await validateVirtualTableCore(
+      {
+        ...makeInput("postgresql"),
+        pgConnectionString: "postgres://example",
+      },
+      {
+        inferColumnsFromValidationMetadata,
+        executeProbeQuery,
+        inferColumnsFromDb,
+      },
+    );
+
+    expect(response).toEqual({
+      ok: true,
+      columns,
+    });
+    expect(inferColumnsFromValidationMetadata).toHaveBeenCalledTimes(1);
+    expect(executeProbeQuery).not.toHaveBeenCalled();
+    expect(inferColumnsFromDb).not.toHaveBeenCalled();
   });
 });

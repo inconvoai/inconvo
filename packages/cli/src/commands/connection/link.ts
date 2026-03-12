@@ -39,7 +39,7 @@ export const connectionLinkCommand = new Command("link")
         const selected = await p.select({
           message: "Select a connection to link",
           options: shareable.map((conn) => ({
-            label: `${conn.name} (${conn.databaseType}) — owner: ${conn.ownerAgent.name}`,
+            label: `${conn.name} (${conn.databaseType ?? "UNKNOWN"}) — owner: ${conn.ownerAgent.name}`,
             value: conn.id,
           })),
         });

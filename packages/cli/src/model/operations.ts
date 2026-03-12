@@ -389,6 +389,7 @@ export async function pullAgentsToWorkspace(params: {
     await writeYamlFile(path.join(connectionDir, "connection.yaml"), {
       id: connection.id,
       name: connection.name,
+      description: connection.description,
       status: connection.status,
       ownerAgentName: connection.ownerAgentName,
       hash: model.hash,
@@ -452,6 +453,7 @@ export async function pullAgentsToWorkspace(params: {
       entry.shareable.map((connection) => ({
         id: connection.id,
         name: connection.name,
+        description: connection.description,
         databaseType: connection.databaseType,
         ownerAgent: connection.ownerAgent,
       })),
@@ -466,6 +468,7 @@ export async function pullAgentsToWorkspace(params: {
       await writeYamlFile(path.join(connectionRefDir, "connection.yaml"), {
         id: connection.id,
         name: connection.name,
+        description: connection.description,
         status: connection.status,
         isShared: connection.isShared,
         ownerAgentName: connection.ownerAgentName,

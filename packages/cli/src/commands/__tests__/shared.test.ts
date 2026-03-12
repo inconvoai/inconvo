@@ -35,12 +35,16 @@ test("parseConnectionCommandOptions trims required/optional connection command f
   const parsed = parseConnectionCommandOptions({
     agent: " agt_3 ",
     connection: " con_3 ",
+    description: " warehouse ",
+    clearDescription: true,
     apiKey: " api_key ",
   });
 
   assert.deepEqual(parsed, {
     agentId: "agt_3",
     connectionId: "con_3",
+    description: "warehouse",
+    clearDescription: true,
     json: false,
     apiBaseUrl: undefined,
     apiKey: "api_key",

@@ -123,6 +123,25 @@ npx inconvo@latest connection sync --agent <agentId> --connection <connectionId>
 npx inconvo@latest connection sync --agent <agentId>
 ```
 
+### `inconvo connection get`
+
+Show metadata for a connection, including its description. In CLI responses, `description` is the user-facing name for the platform's internal connection `context` field.
+
+```bash
+npx inconvo@latest connection get --agent <agentId> --connection <connectionId>
+# or interactively:
+npx inconvo@latest connection get --agent <agentId>
+```
+
+### `inconvo connection update`
+
+Update or clear a connection description without redeploying the connector. After a successful update, the CLI refreshes the local `.inconvo/` snapshot for that connection.
+
+```bash
+npx inconvo@latest connection update --agent <agentId> --connection <connectionId> --description "Sales warehouse used for BI reporting"
+npx inconvo@latest connection update --agent <agentId> --connection <connectionId> --clear-description
+```
+
 ## Configuration
 
 On first run, the CLI will prompt you for:

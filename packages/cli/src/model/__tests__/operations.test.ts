@@ -37,10 +37,13 @@ function createClientStub(
     listAgentConnections: failMethod("listAgentConnections"),
     getAgentUserContext: failMethod("getAgentUserContext"),
     getConnectionSemanticModel: failMethod("getConnectionSemanticModel"),
+    getConnection: failMethod("getConnection"),
     runModelAction: failMethod("runModelAction"),
     listShareableConnections: failMethod("listShareableConnections"),
     linkConnection: failMethod("linkConnection"),
+    syncConnection: failMethod("syncConnection"),
     unlinkConnection: failMethod("unlinkConnection"),
+    updateConnectionDescription: failMethod("updateConnectionDescription"),
     ...overrides,
   } as unknown as PlatformApiClient;
 }
@@ -63,6 +66,7 @@ test("pull writes deterministic files without lock/timestamp artifacts", async (
       {
         id: "con_b",
         name: "Second",
+        description: "Primary warehouse",
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -90,7 +94,18 @@ test("pull writes deterministic files without lock/timestamp artifacts", async (
       ],
       hash: "hash_b",
     }),
-    listShareableConnections: async () => [],
+    listShareableConnections: async () => [
+      {
+        id: "con_shareable",
+        name: "Shared Finance",
+        description: "Finance reporting source",
+        databaseType: "POSTGRES",
+        ownerAgent: {
+          id: "agt_owner",
+          name: "Owner",
+        },
+      },
+    ],
   });
 
   await pullAgentsToWorkspace({
@@ -141,8 +156,20 @@ test("pull writes deterministic files without lock/timestamp artifacts", async (
       path.join(agentDir, "connections", "second", "connection.yaml"),
       "utf8",
     ),
-  ) as { snapshotPath?: string };
+  ) as { snapshotPath?: string; description?: string };
   assert.equal(agentConnectionDoc.snapshotPath, ".inconvo/connections/second");
+  assert.equal(agentConnectionDoc.description, "Primary warehouse");
+  const canonicalConnectionDoc = YAML.parse(
+    await fs.readFile(
+      path.join(repoRoot, ".inconvo", "connections", "second", "connection.yaml"),
+      "utf8",
+    ),
+  ) as { description?: string };
+  assert.equal(canonicalConnectionDoc.description, "Primary warehouse");
+  const shareableConnectionsDoc = YAML.parse(
+    await fs.readFile(path.join(agentDir, "shareable-connections.yaml"), "utf8"),
+  ) as Array<{ description?: string }>;
+  assert.equal(shareableConnectionsDoc[0]?.description, "Finance reporting source");
   await assert.rejects(
     fs.access(path.join(agentDir, "connections", "second", "tables")),
     /ENOENT/,
@@ -167,6 +194,7 @@ test("pull with selectedConnectionId fetches only requested connection", async (
       {
         id: "con_a",
         name: "A",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -174,6 +202,7 @@ test("pull with selectedConnectionId fetches only requested connection", async (
       {
         id: "con_b",
         name: "B",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -243,6 +272,7 @@ test("syncSingleAgentToWorkspace preserves unrelated local agent directories", a
       {
         id: "con_a",
         name: "A",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -277,6 +307,7 @@ test("pull writes collision-safe slugs without IDs in folder/file names", async 
       {
         id: "con_1",
         name: "Sales Data",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -284,6 +315,7 @@ test("pull writes collision-safe slugs without IDs in folder/file names", async 
       {
         id: "con_2",
         name: "sales-data",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -394,6 +426,7 @@ test("pull ignores unsafe persisted slugs from slug-map files", async (t) => {
       {
         id: "con_safe",
         name: "Safe Name",
+        description: null,
         status: null,
         isShared: false,
         ownerAgentName: "Owner",
@@ -449,6 +482,7 @@ test("linked connection is stored once and referenced by multiple agents", async
   const sharedConnection = {
     id: "con_shared",
     name: "Shared Warehouse",
+    description: "Shared analytics warehouse",
     status: "CONNECTED",
     ownerAgentName: "Owner",
   };

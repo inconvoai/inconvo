@@ -1,5 +1,7 @@
 import type {
   AgentInfo,
+  ConnectionDescriptionUpdateResponse,
+  ConnectionDetails,
   ConnectionInfo,
   ConnectionLinkResponse,
   ModelActionType,
@@ -9,6 +11,8 @@ import type {
   ShareableConnectionInfo,
   UserContextResponse,
 } from "./types.js";
+
+type PayloadWithContext = { description?: string | null; context?: string | null };
 
 export class PlatformApiError extends Error {
   readonly status: number;
@@ -40,6 +44,11 @@ function nonEmptyString(value: unknown): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** Resolve `description` from response, falling back to legacy `context` field. */
+function resolveDescription(payload: PayloadWithContext): string | null {
+  return payload.description ?? payload.context ?? null;
 }
 
 function extractListFromPayload<T>(params: {
@@ -137,14 +146,13 @@ export class PlatformApiClient {
   }
 
   async listAgentConnections(agentId: string): Promise<ConnectionInfo[]> {
-    const payload = await this.request<unknown>(
-      `/agents/${encodeURIComponent(agentId)}/connections`,
-    );
-    return extractListFromPayload<ConnectionInfo>({
+    const endpoint = `/agents/${encodeURIComponent(agentId)}/connections`;
+    const payload = await this.request<unknown>(endpoint);
+    return extractListFromPayload<ConnectionInfo & PayloadWithContext>({
       payload,
       listKey: "connections",
-      endpoint: `/agents/${encodeURIComponent(agentId)}/connections`,
-    });
+      endpoint,
+    }).map((c) => ({ ...c, description: resolveDescription(c) }));
   }
 
   async getAgentUserContext(agentId: string): Promise<UserContextResponse> {
@@ -183,11 +191,31 @@ export class PlatformApiClient {
   ): Promise<ShareableConnectionInfo[]> {
     const endpoint = `/agents/${encodeURIComponent(agentId)}/connections/shareable`;
     const payload = await this.request<unknown>(endpoint);
-    return extractListFromPayload<ShareableConnectionInfo>({
+    return extractListFromPayload<ShareableConnectionInfo & PayloadWithContext>({
       payload,
       listKey: "connections",
       endpoint,
-    });
+    }).map((c) => ({ ...c, description: resolveDescription(c) }));
+  }
+
+  async getConnection(
+    agentId: string,
+    connectionId: string,
+  ): Promise<ConnectionDetails> {
+    return this.request<ConnectionDetails>(
+      `/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(connectionId)}`,
+    );
+  }
+
+  async updateConnectionDescription(
+    agentId: string,
+    connectionId: string,
+    description: string | null,
+  ): Promise<ConnectionDescriptionUpdateResponse> {
+    return this.request<ConnectionDescriptionUpdateResponse>(
+      `/agents/${encodeURIComponent(agentId)}/connections/${encodeURIComponent(connectionId)}`,
+      { method: "PATCH", body: JSON.stringify({ description }) },
+    );
   }
 
   async linkConnection(

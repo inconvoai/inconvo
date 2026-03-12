@@ -14,22 +14,33 @@ export interface AgentInfo {
 export interface ConnectionInfo {
   id: string;
   name: string;
+  description: string | null;
   status: string | null;
   isShared: boolean;
   ownerAgentName: string;
 }
 
+export interface ConnectionDetails extends ConnectionInfo {
+  canEdit: boolean;
+}
+
 export interface ShareableConnectionInfo {
   id: string;
   name: string;
-  context: string | null;
-  databaseType: string;
+  description: string | null;
+  databaseType: string | null;
   ownerAgent: { id: string; name: string };
 }
 
 export interface ConnectionLinkResponse {
   success: boolean;
   connectionId: string;
+}
+
+export interface ConnectionDescriptionUpdateResponse {
+  id: string;
+  name: string;
+  description: string | null;
 }
 
 export interface UserContextField {

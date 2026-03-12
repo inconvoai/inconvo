@@ -143,3 +143,61 @@ test("request fallback uses HTTP status when error payload is empty string", asy
     },
   );
 });
+
+test("listShareableConnections falls back to legacy context", async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({
+      ok: true,
+      status: 200,
+      body: {
+        connections: [
+          {
+            id: "con_2",
+            name: "Finance",
+            context: "Legacy context field",
+            databaseType: "POSTGRES",
+            ownerAgent: {
+              id: "agt_owner",
+              name: "Owner",
+            },
+          },
+        ],
+      },
+    });
+
+  const client = new PlatformApiClient({
+    baseUrl: "https://example.com",
+    apiKey: "test-key",
+  });
+
+  const connections = await client.listShareableConnections("agt_1");
+  assert.equal(connections[0]?.description, "Legacy context field");
+});
+
+test("updateConnectionDescription patches the connection endpoint", async () => {
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+  globalThis.fetch = async (url, init) => {
+    requestUrl = String(url);
+    requestInit = init;
+    return jsonResponse({
+      ok: true,
+      status: 200,
+      body: { id: "con_4", name: "ERP", description: null },
+    });
+  };
+
+  const client = new PlatformApiClient({
+    baseUrl: "https://example.com",
+    apiKey: "test-key",
+  });
+
+  await client.updateConnectionDescription("agt_1", "con_4", null);
+
+  assert.equal(
+    requestUrl,
+    "https://example.com/api/v1/agents/agt_1/connections/con_4",
+  );
+  assert.equal(requestInit?.method, "PATCH");
+  assert.equal(requestInit?.body, JSON.stringify({ description: null }));
+});

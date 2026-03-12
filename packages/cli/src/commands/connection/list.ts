@@ -37,6 +37,9 @@ export const connectionListCommand = new Command("list")
         console.log(
           `  ${COLORS.bold}${conn.name}${COLORS.reset}  ${COLORS.dim}${conn.id}${COLORS.reset}  ${conn.status ?? ""}${sharedBadge}`,
         );
+        if (conn.description) {
+          console.log(`    ${COLORS.dim}${conn.description}${COLORS.reset}`);
+        }
       }
     }),
   );

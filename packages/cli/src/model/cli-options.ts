@@ -1,5 +1,8 @@
 import { PlatformApiClient } from "./api-client.js";
-import { findRepoRoot, loadLocalCliConfig } from "./config-store.js";
+import {
+  findRepoRoot,
+  loadRepoEnvConfig,
+} from "./env-config.js";
 
 export const DEFAULT_API_BASE_URL = "https://app.inconvo.ai";
 
@@ -14,20 +17,22 @@ export async function createApiClientFromOptions(options: {
   repoRoot?: string;
 }): Promise<PlatformApiClient> {
   const repoRoot = options.repoRoot ?? (await findRepoRoot());
-  const localConfig = await loadLocalCliConfig(repoRoot);
+  const repoEnvConfig = await loadRepoEnvConfig(repoRoot);
 
   const apiKey =
-    options.apiKey ?? process.env.INCONVO_API_KEY ?? localConfig.apiKey;
+    options.apiKey ??
+    process.env.INCONVO_API_KEY ??
+    repoEnvConfig.apiKey;
   if (!apiKey) {
     throw new Error(
-      "Missing API key. Pass --api-key, set INCONVO_API_KEY, or add apiKey to .inconvo/config.yaml.",
+      "Missing API key. Pass --api-key, set INCONVO_API_KEY, or add it to the repo .env.",
     );
   }
 
   const apiBaseUrl =
     options.apiBaseUrl ??
     process.env.INCONVO_API_BASE_URL ??
-    localConfig.apiBaseUrl ??
+    repoEnvConfig.apiBaseUrl ??
     DEFAULT_API_BASE_URL;
 
   return new PlatformApiClient({
@@ -35,4 +40,3 @@ export async function createApiClientFromOptions(options: {
     baseUrl: apiBaseUrl,
   });
 }
-

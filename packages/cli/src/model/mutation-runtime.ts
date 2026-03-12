@@ -1,5 +1,5 @@
 import { createApiClientFromOptions } from "./cli-options.js";
-import { findRepoRoot } from "./config-store.js";
+import { findRepoRoot } from "./env-config.js";
 import {
   syncConnectionSnapshot,
   syncAgentUserContext,

@@ -1,4 +1,4 @@
-import { findRepoRoot } from "../../model/config-store.js";
+import { findRepoRoot } from "../../model/env-config.js";
 import { createApiClientFromOptions } from "../../model/cli-options.js";
 import { normalizeAgentIds, validatePullFlags } from "../../model/selection.js";
 import {

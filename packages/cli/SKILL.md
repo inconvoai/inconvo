@@ -187,15 +187,31 @@ Only fall back to manual relations if FKs genuinely don't exist in the schema.
 
 ## Semantic Model Content Guidelines
 
+Prefer fewer, higher-signal semantics over broad coverage. Default to preserving
+existing semantics; only mutate entries that are clearly missing, wrong, or
+materially improved by the code context.
+
+Before adding or changing table context or column notes, ask: "Does this add
+non-obvious business meaning that is not already captured by the schema,
+relations, units, renames, computed columns, or existing notes?" If not, skip
+it.
+
 Keeping each layer focused prevents duplication and improves model quality:
 
 | Layer                     | What belongs here                                                                                                                                  | What does NOT belong here                                                   |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **Table context**         | What the table represents, business domain meaning, important distinctions (e.g. "accounts vs customers"), which questions to direct at this table | Column-specific formulas, thresholds, or FK details                         |
-| **Column notes**          | What a specific column means, valid ranges, formulas for derived values, business rules for that field                                             | Repeating the table description; FK details already expressed as a relation |
+| **Table context**         | What the table represents, business domain meaning, important distinctions (e.g. "accounts vs customers"), which questions to direct at this table | Formulas, thresholds, enum values, per-column behavior, or repeated FK details |
+| **Column notes**          | Non-obvious business meaning, valid ranges, business rules, or app-specific interpretation for a field                                             | Restating the name/type, generic timestamps, or FK details already expressed as a relation/condition |
 | **Computed columns**      | The single authoritative place for a derived metric formula (e.g. `total = subtotal - discount + tax`)                                             | Don't repeat the formula in the notes of input columns                      |
 | **Column rename**         | Business-friendly display name when the DB column name is unclear (`ean` → `EAN (barcode)`)                                                        | —                                                                           |
 | **Column selected=false** | Sensitive columns that must never be exposed (passwords, tokens, internal flags)                                                                   | —                                                                           |
+
+- Do not add notes just to fill blank fields. Broad annotation coverage is worse
+  than a smaller set of precise semantics.
+- Do not restate ownership or tenant scoping in notes or table context when
+  relations and row-level conditions already express it.
+- Preserve existing good semantics. Change only what is clearly improved by the
+  code context.
 
 ## Multi-Tenancy Pattern
 

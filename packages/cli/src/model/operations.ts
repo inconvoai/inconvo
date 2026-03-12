@@ -11,7 +11,8 @@ import type {
   ShareableConnectionInfo,
   UserContextResponse,
 } from "./types.js";
-import { PlatformApiClient } from "./api-client.js";
+import type { PlatformApiClient } from "./api-client.js";
+import { pathExists } from "./fs-utils.js";
 
 const AGENT_PULL_CONCURRENCY = 4;
 const CONNECTION_PULL_CONCURRENCY = 6;
@@ -44,15 +45,6 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(Array.from({ length: limit }, () => runWorker()));
   return results;
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 const GENERATED_FILE_HEADER =
@@ -534,4 +526,199 @@ export async function syncSingleAgentToWorkspace(params: {
     selectedConnectionId: params.selectedConnectionId,
     pruneUnselectedAgents: false,
   });
+}
+
+// --- Scoped sync helpers ---
+
+async function readHashFromYaml(filePath: string): Promise<string | undefined> {
+  if (!(await pathExists(filePath))) {
+    return undefined;
+  }
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = YAML.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.hash === "string") {
+      return parsed.hash;
+    }
+  } catch {
+    // Corrupted file — treat as no hash
+  }
+  return undefined;
+}
+
+export type SyncScope = "connection" | "user-context";
+
+export interface ScopedSyncResult {
+  scope: SyncScope;
+  skipped: boolean;
+}
+
+export async function syncConnectionSnapshot(params: {
+  client: PlatformApiClient;
+  repoRoot: string;
+  agentId: string;
+  connectionId: string;
+}): Promise<ScopedSyncResult> {
+  const rootDir = modelRoot(params.repoRoot);
+  const connectionsDir = path.join(rootDir, "connections");
+  const agentsDir = path.join(rootDir, "agents");
+
+  // Scoped sync only works when both the canonical snapshot and this agent's
+  // local connection ref already exist.
+  const existingSlugMap = await readSlugMap(connectionsDir);
+  const existingSlug = existingSlugMap[params.connectionId];
+  const agentSlugMap = await readSlugMap(agentsDir);
+  const agentSlug = agentSlugMap[params.agentId];
+  const agentConnectionRefPath =
+    existingSlug && agentSlug
+      ? path.join(
+          agentsDir,
+          agentSlug,
+          "connections",
+          existingSlug,
+          "connection.yaml",
+        )
+      : undefined;
+
+  if (!existingSlug || !agentSlug || !agentConnectionRefPath) {
+    await syncSingleAgentToWorkspace({
+      client: params.client,
+      repoRoot: params.repoRoot,
+      agentId: params.agentId,
+      selectedConnectionId: params.connectionId,
+    });
+    return { scope: "connection", skipped: false };
+  }
+  if (!(await pathExists(agentConnectionRefPath))) {
+    await syncSingleAgentToWorkspace({
+      client: params.client,
+      repoRoot: params.repoRoot,
+      agentId: params.agentId,
+      selectedConnectionId: params.connectionId,
+    });
+    return { scope: "connection", skipped: false };
+  }
+
+  // Fetch only the semantic model for this connection
+  const model = await params.client.getConnectionSemanticModel(
+    params.agentId,
+    params.connectionId,
+  );
+
+  // Hash-based skip
+  const connectionDir = path.join(connectionsDir, existingSlug);
+  const connectionYamlPath = path.join(connectionDir, "connection.yaml");
+  const localHash = await readHashFromYaml(connectionYamlPath);
+  if (localHash && localHash === model.hash) {
+    return { scope: "connection", skipped: true };
+  }
+
+  // Fetch connection info for metadata
+  const connection = await params.client.getConnection(
+    params.agentId,
+    params.connectionId,
+  );
+
+  // Write connection.yaml
+  await writeYamlFile(connectionYamlPath, {
+    id: connection.id,
+    name: connection.name,
+    description: connection.description ?? null,
+    status: connection.status,
+    ownerAgentName: connection.ownerAgentName,
+    hash: model.hash,
+  });
+
+  // Write table files
+  const tableDir = path.join(connectionDir, "tables");
+  await fs.mkdir(tableDir, { recursive: true });
+
+  const existingTableSlugMap = await readSlugMap(tableDir);
+  const sortedTables = sortByNameThenId(
+    [...model.tables].map((table) => ({
+      id: table.id,
+      name: table.name,
+      table,
+    })),
+  );
+  const tableSlugs = resolveScopedSlugs({
+    entities: sortedTables.map((item) => ({ id: item.id, name: item.name })),
+    existingMap: existingTableSlugMap,
+    preserveUnknown: false,
+  });
+
+  const keepTableFiles = new Set<string>([SLUG_MAP_FILE]);
+  for (const item of sortedTables) {
+    tableNameFromPayload(item.table);
+    const fileName = `${tableSlugs.get(item.id)!}.yaml`;
+    keepTableFiles.add(fileName);
+    await writeYamlFile(path.join(tableDir, fileName), item.table);
+  }
+  await writeYamlFile(
+    path.join(tableDir, SLUG_MAP_FILE),
+    buildSlugMapRecord({
+      slugs: tableSlugs,
+      existingMap: existingTableSlugMap,
+      preserveUnknown: false,
+    }),
+  );
+  await removeStaleChildren(tableDir, keepTableFiles);
+
+  // Update agent-level connection ref if it exists
+  const existingRef = YAML.parse(
+    await fs.readFile(agentConnectionRefPath, "utf8"),
+  );
+  await writeYamlFile(agentConnectionRefPath, {
+    ...existingRef,
+    hash: model.hash,
+  });
+
+  return { scope: "connection", skipped: false };
+}
+
+export async function syncAgentUserContext(params: {
+  client: PlatformApiClient;
+  repoRoot: string;
+  agentId: string;
+}): Promise<ScopedSyncResult> {
+  const rootDir = modelRoot(params.repoRoot);
+  const agentsDir = path.join(rootDir, "agents");
+
+  const agentSlugMap = await readSlugMap(agentsDir);
+  const agentSlug = agentSlugMap[params.agentId];
+
+  if (!agentSlug) {
+    // Never pulled — fall back to full sync
+    await syncSingleAgentToWorkspace({
+      client: params.client,
+      repoRoot: params.repoRoot,
+      agentId: params.agentId,
+    });
+    return { scope: "user-context", skipped: false };
+  }
+
+  const userContextPath = path.join(agentsDir, agentSlug, "user-context.yaml");
+
+  // Fetch remote user context
+  const userContextResponse = await params.client.getAgentUserContext(
+    params.agentId,
+  );
+
+  // Hash-based skip
+  const localHash = await readHashFromYaml(userContextPath);
+  if (localHash && localHash === userContextResponse.hash) {
+    return { scope: "user-context", skipped: true };
+  }
+
+  // Write user-context.yaml
+  const sortedFields = [...userContextResponse.userContext.fields].sort(
+    (left, right) => left.key.localeCompare(right.key),
+  );
+  await writeYamlFile(userContextPath, {
+    hash: userContextResponse.hash,
+    status: userContextResponse.userContext.status,
+    fields: sortedFields,
+  });
+
+  return { scope: "user-context", skipped: false };
 }

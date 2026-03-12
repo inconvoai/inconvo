@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
-import { COLORS, logInfo } from "../process/output.js";
+import { logInfo, logBold, logDim } from "../process/output.js";
 import { runCliAction } from "./_shared/command-runtime.js";
 import {
   findRepoRoot,
@@ -8,8 +8,7 @@ import {
   writeLocalCliConfig,
   LOCAL_CONFIG_PATH,
 } from "../model/config-store.js";
-
-const DEFAULT_API_BASE_URL = "https://app.inconvo.ai";
+import { DEFAULT_API_BASE_URL } from "../model/cli-options.js";
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "***";
@@ -21,7 +20,7 @@ const configSetCommand = new Command("set")
   .option("--api-key <apiKey>", "API key to store")
   .option(
     "--api-base-url <url>",
-    "API base URL to store (default: https://app.inconvo.ai)",
+    `API base URL to store (default: ${DEFAULT_API_BASE_URL})`,
   )
   .action((options: { apiKey?: string; apiBaseUrl?: string }) =>
     runCliAction(async () => {
@@ -83,16 +82,16 @@ const configViewCommand = new Command("view")
         return;
       }
 
-      console.log(`\n  ${COLORS.bold}${LOCAL_CONFIG_PATH}${COLORS.reset}\n`);
+      console.log("");
+      logBold(`  ${LOCAL_CONFIG_PATH}`);
+      console.log("");
       if (config.apiKey) {
-        console.log(
-          `  apiKey     ${COLORS.dim}${maskApiKey(config.apiKey)}${COLORS.reset}`,
-        );
+        logDim(`  apiKey     ${maskApiKey(config.apiKey)}`);
       }
       if (config.apiBaseUrl) {
-        console.log(`  apiBaseUrl ${COLORS.dim}${config.apiBaseUrl}${COLORS.reset}`);
+        logDim(`  apiBaseUrl ${config.apiBaseUrl}`);
       }
-      console.log();
+      console.log("");
     }),
   );
 

@@ -1,14 +1,35 @@
+import type { Command } from "commander";
 import {
   createApiClientFromOptions,
   isInteractiveEnvironment,
+  DEFAULT_API_BASE_URL,
 } from "../../model/cli-options.js";
 import { findRepoRoot } from "../../model/config-store.js";
-import { PlatformApiClient } from "../../model/api-client.js";
+import type { PlatformApiClient } from "../../model/api-client.js";
 import {
   parseConnectionCommandOptions,
   requireConnectionInNonInteractiveMode,
   type ConnectionCommandOptions,
 } from "./options.js";
+
+export function addConnectionCommandOptions(
+  command: Command,
+  options?: { requireConnection?: boolean },
+): Command {
+  command.requiredOption("--agent <agentId>", "Target agent id");
+  if (options?.requireConnection) {
+    command.requiredOption("--connection <connectionId>", "Target connection id");
+  } else {
+    command.option("--connection <connectionId>", "Connection id");
+  }
+  command.option("--json", "Print JSON output");
+  command.option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)");
+  command.option(
+    "--api-base-url <url>",
+    `API base URL override (default: ${DEFAULT_API_BASE_URL})`,
+  );
+  return command;
+}
 
 export interface ConnectionAgentContext {
   parsedOptions: ConnectionCommandOptions;

@@ -1,4 +1,9 @@
-type OptionRecord = Record<string, unknown>;
+import {
+  optionRecord,
+  parseString,
+  parseBoolean,
+  type OptionRecord,
+} from "../../model/parse-utils.js";
 
 export interface ApiCommandOptions {
   apiBaseUrl?: string;
@@ -20,26 +25,6 @@ export interface ConnectionCommandOptions extends ApiCommandOptions {
   json: boolean;
 }
 
-function optionRecord(raw: unknown): OptionRecord {
-  if (typeof raw !== "object" || raw === null) {
-    return {};
-  }
-
-  const parsed: OptionRecord = {};
-  for (const [key, value] of Object.entries(raw)) {
-    parsed[key] = value;
-  }
-  return parsed;
-}
-
-function parseString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
     const parsed: string[] = [];
@@ -54,10 +39,6 @@ function parseStringList(value: unknown): string[] {
 
   const single = parseString(value);
   return single ? [single] : [];
-}
-
-function parseBoolean(value: unknown): boolean {
-  return value === true;
 }
 
 function parseApiCommandOptions(record: OptionRecord): ApiCommandOptions {

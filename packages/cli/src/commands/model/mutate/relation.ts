@@ -28,7 +28,7 @@ addCommonOptions(
               selected: options.selected,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -78,7 +78,7 @@ addCommonOptions(
               columnPairs,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -147,7 +147,7 @@ addCommonOptions(
 
             return payload;
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -177,7 +177,7 @@ addCommonOptions(
               relationId: relation.id,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),

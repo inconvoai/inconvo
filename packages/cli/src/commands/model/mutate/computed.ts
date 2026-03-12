@@ -36,7 +36,7 @@ addCommonOptions(
               ...(options.unit !== undefined ? { unit: options.unit } : {}),
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -100,7 +100,7 @@ addCommonOptions(
                   : {}),
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -127,7 +127,7 @@ addCommonOptions(
               computedColumnId: computed.id,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -160,7 +160,7 @@ addCommonOptions(
               unit: options.clear === true ? null : options.unit,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),

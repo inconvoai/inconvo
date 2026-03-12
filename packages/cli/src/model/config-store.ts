@@ -1,15 +1,8 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import YAML from "yaml";
-
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { logWarning } from "../process/output.js";
+import { pathExists } from "./fs-utils.js";
 
 export async function findRepoRoot(cwd = process.cwd()): Promise<string> {
   let current = path.resolve(cwd);
@@ -21,6 +14,9 @@ export async function findRepoRoot(cwd = process.cwd()): Promise<string> {
 
     const parent = path.dirname(current);
     if (parent === current) {
+      logWarning(
+        "No .git directory found. Using current directory as repo root.",
+      );
       return path.resolve(cwd);
     }
     current = parent;

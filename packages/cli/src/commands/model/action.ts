@@ -11,6 +11,7 @@ import {
   MODEL_ACTION_DEFINITIONS,
   resolveActionDefinition,
 } from "../../model/action-registry.js";
+import { DEFAULT_API_BASE_URL } from "../../model/cli-options.js";
 import type { ModelActionType } from "../../model/types.js";
 
 const actionRunCommand = new Command("run")
@@ -22,10 +23,11 @@ const actionRunCommand = new Command("run")
   .option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)")
   .option(
     "--api-base-url <url>",
-    "API base URL override (default: https://app.inconvo.ai)",
+    `API base URL override (default: ${DEFAULT_API_BASE_URL})`,
   )
   .option("--dry-run", "Resolve and print action payload without applying")
   .option("--json", "Print JSON output")
+  .option("--no-sync", "Skip post-mutation sync")
   .action((options) =>
     runCliAction(async () => {
       const actionDefinition = resolveActionDefinition(options.action);
@@ -46,12 +48,13 @@ const actionRunCommand = new Command("run")
       }
 
       const payload = parseJsonOption(options.payload, "--payload");
+      const syncScope = actionDefinition.requiresConnection ? "connection" as const : undefined;
       if (context.dryRun) {
         printDryRunOutput({
           context,
           action: actionDefinition.action,
           payload,
-          syncConnectionId: context.connectionId,
+          syncScope,
         });
         return;
       }
@@ -60,7 +63,7 @@ const actionRunCommand = new Command("run")
         context,
         action: actionDefinition.action as ModelActionType,
         payload,
-        syncConnectionId: context.connectionId,
+        syncScope,
       });
       printMutationOutput({
         context,

@@ -31,7 +31,7 @@ addCommonOptions(
               userContextFieldId: field.id,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -56,7 +56,7 @@ addCommonOptions(
               tableId: table.id,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { isInteractiveEnvironment } from "../../model/cli-options.js";
+import { isInteractiveEnvironment, DEFAULT_API_BASE_URL } from "../../model/cli-options.js";
 import {
   resolvePullTargetMode,
 } from "../../model/selection.js";
@@ -47,7 +47,7 @@ export const modelPullCommand = new Command("pull")
   .option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)")
   .option(
     "--api-base-url <url>",
-    "API base URL override (default: https://app.inconvo.ai)",
+    `API base URL override (default: ${DEFAULT_API_BASE_URL})`,
   )
   .addHelpText(
     "after",

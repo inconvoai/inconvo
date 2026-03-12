@@ -3,7 +3,10 @@ import {
   resolveMutationContext,
   runActionAndSync,
   type MutationContext,
+  type SyncScope,
+  type SyncResult,
 } from "../../../model/mutation-runtime.js";
+import { DEFAULT_API_BASE_URL } from "../../../model/cli-options.js";
 import type { ConnectionSemanticModelResponse, ModelActionType } from "../../../model/types.js";
 import { logInfo } from "../../../process/output.js";
 
@@ -20,10 +23,11 @@ export function addCommonOptions(command: Command, requireConnection: boolean): 
   command.option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)");
   command.option(
     "--api-base-url <url>",
-    "API base URL override (default: https://app.inconvo.ai)",
+    `API base URL override (default: ${DEFAULT_API_BASE_URL})`,
   );
   command.option("--dry-run", "Resolve and print action payload without applying");
   command.option("--json", "Print JSON output");
+  command.option("--no-sync", "Skip post-mutation sync (use with 'inconvo model pull' after batch mutations)");
   return command;
 }
 
@@ -31,7 +35,7 @@ export function printDryRunOutput(params: {
   context: MutationContext;
   action: string;
   payload: unknown;
-  syncConnectionId?: string;
+  syncScope?: SyncScope;
 }): void {
   const body = {
     dryRun: true,
@@ -39,7 +43,7 @@ export function printDryRunOutput(params: {
     target: {
       agentId: params.context.agentId,
       connectionId: params.context.connectionId,
-      syncConnectionId: params.syncConnectionId,
+      syncScope: params.syncScope,
     },
     payload: params.payload,
   };
@@ -66,11 +70,21 @@ export async function loadSnapshot(
   );
 }
 
+function formatSyncMessage(sync: SyncResult): string {
+  if (sync.scope === "none") {
+    return "Sync skipped (--no-sync).";
+  }
+  if (sync.skipped) {
+    return "No changes detected (hash unchanged).";
+  }
+  return "Local snapshot updated.";
+}
+
 export function printMutationOutput(params: {
   context: MutationContext;
   action: string;
   result: unknown;
-  sync: { pulledAgents: number; pulledConnections: number };
+  sync: SyncResult;
 }): void {
   if (params.context.json) {
     console.log(
@@ -88,9 +102,7 @@ export function printMutationOutput(params: {
   }
 
   logInfo(`Action ${params.action} completed.`);
-  logInfo(
-    `Sync complete: ${params.sync.pulledAgents} agent(s), ${params.sync.pulledConnections} connection snapshot(s).`,
-  );
+  logInfo(formatSyncMessage(params.sync));
 }
 
 export function printActionOnlyOutput(params: {
@@ -123,20 +135,19 @@ export async function runMutation(params: {
   action: ModelActionType;
   requireConnection: boolean;
   buildPayload: (context: MutationContext) => Promise<unknown>;
-  syncConnection: (context: MutationContext) => string | undefined;
+  syncScope: SyncScope;
 }): Promise<void> {
   const context = await resolveMutationContext({
     options: params.options,
     requireConnection: params.requireConnection,
   });
   const payload = await params.buildPayload(context);
-  const syncConnectionId = params.syncConnection(context);
   if (context.dryRun) {
     printDryRunOutput({
       context,
       action: params.action,
       payload,
-      syncConnectionId,
+      syncScope: params.syncScope,
     });
     return;
   }
@@ -144,7 +155,7 @@ export async function runMutation(params: {
     context,
     action: params.action,
     payload,
-    syncConnectionId,
+    syncScope: params.syncScope,
   });
   printMutationOutput({
     context,

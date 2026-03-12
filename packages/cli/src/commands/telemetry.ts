@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import * as fs from "fs/promises";
 import { getEnvPath, envExists, readEnvFile, ensureInconvoDir } from "../wizard/setup.js";
-import { logInfo, logError, logGray } from "../process/output.js";
+import { logInfo, logGray } from "../process/output.js";
+import { runCliAction } from "./_shared/command-runtime.js";
 
 async function updateTelemetrySetting(enabled: boolean): Promise<void> {
   const envPath = getEnvPath();
@@ -49,58 +50,47 @@ async function updateTelemetrySetting(enabled: boolean): Promise<void> {
 export const telemetryCommand = new Command("telemetry")
   .description("Manage anonymous telemetry settings")
   .argument("[action]", "Action to perform: on, off, or status")
-  .action(async (action?: string) => {
-    await ensureInconvoDir();
+  .action((action?: string) =>
+    runCliAction(async () => {
+      await ensureInconvoDir();
 
-    if (!action || action === "status") {
-      // Show current status
-      if (!(await envExists())) {
-        logGray("Telemetry: enabled (default)");
-        logGray("Run 'inconvo dev configure' to set up Inconvo.");
+      if (!action || action === "status") {
+        if (!(await envExists())) {
+          logGray("Telemetry: enabled (default)");
+          logGray("Run 'inconvo dev configure' to set up Inconvo.");
+          return;
+        }
+
+        const config = await readEnvFile();
+        const disabled = config.DISABLE_TELEMETRY === "true";
+
+        if (disabled) {
+          logInfo("Telemetry: disabled");
+        } else {
+          logInfo("Telemetry: enabled");
+        }
+
+        logGray("");
+        logGray("Inconvo collects anonymous usage data to help improve the product.");
+        logGray("No personal information, queries, or database content is collected.");
+        logGray("");
+        logGray("Run 'inconvo telemetry off' to disable or 'inconvo telemetry on' to enable.");
         return;
       }
 
-      const config = await readEnvFile();
-      const disabled = config.DISABLE_TELEMETRY === "true";
-
-      if (disabled) {
-        logInfo("Telemetry: disabled");
-      } else {
-        logInfo("Telemetry: enabled");
-      }
-
-      logGray("");
-      logGray("Inconvo collects anonymous usage data to help improve the product.");
-      logGray("No personal information, queries, or database content is collected.");
-      logGray("");
-      logGray("Run 'inconvo telemetry off' to disable or 'inconvo telemetry on' to enable.");
-      return;
-    }
-
-    if (action === "on") {
-      try {
+      if (action === "on") {
         await updateTelemetrySetting(true);
         logInfo("Telemetry enabled");
         logGray("Thank you for helping improve Inconvo!");
-      } catch (error) {
-        logError(error instanceof Error ? error.message : String(error));
-        process.exit(1);
+        return;
       }
-      return;
-    }
 
-    if (action === "off") {
-      try {
+      if (action === "off") {
         await updateTelemetrySetting(false);
         logInfo("Telemetry disabled");
-      } catch (error) {
-        logError(error instanceof Error ? error.message : String(error));
-        process.exit(1);
+        return;
       }
-      return;
-    }
 
-    logError(`Unknown action: ${action}`);
-    logGray("Usage: inconvo telemetry [on|off|status]");
-    process.exit(1);
-  });
+      throw new Error(`Unknown action: ${action}. Usage: inconvo telemetry [on|off|status]`);
+    }),
+  );

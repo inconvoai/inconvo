@@ -15,6 +15,8 @@ export interface ModelPullCommandOptions extends ApiCommandOptions {
 export interface ConnectionCommandOptions extends ApiCommandOptions {
   agentId?: string;
   connectionId?: string;
+  description?: string;
+  clearDescription: boolean;
   json: boolean;
 }
 
@@ -86,6 +88,8 @@ export function parseConnectionCommandOptions(
     ...parseApiCommandOptions(record),
     agentId: parseString(record.agent),
     connectionId: parseString(record.connection),
+    description: parseString(record.description),
+    clearDescription: parseBoolean(record.clearDescription),
     json: parseBoolean(record.json),
   };
 }

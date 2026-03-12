@@ -37,6 +37,7 @@ npx inconvo@latest config view
 
 - `agentId` for all mutations (`--agent`). Read from `.inconvo/agents/<slug>/agent.yaml`.
 - `connectionId` for schema mutations (`--connection`). Read from `.inconvo/connections/<slug>/connection.yaml`.
+- Connection descriptions are stored in connection snapshots as `description`, which maps to the platform's internal connection `context` field.
 - Target identifiers: prefer IDs for stability, names work when unambiguous.
 
 ## Snapshot Layout
@@ -51,11 +52,11 @@ npx inconvo@latest config view
       shareable-connections.yaml
       connections/
         <connection-slug>/
-          connection.yaml         # reference only — snapshotPath points to .inconvo/connections/
+          connection.yaml         # reference only — includes description + snapshotPath
   connections/
     .slug-map.yaml
     <connection-slug>/
-      connection.yaml             # contains connectionId
+      connection.yaml             # contains connectionId + description
       tables/
         .slug-map.yaml
         <table-slug>.yaml         # full table snapshot: columns, relations, computed, condition, policy
@@ -104,8 +105,32 @@ npx inconvo@latest connection --help
 | Add user-context field             | `model user-context add-field --key --type STRING\|NUMBER\|BOOLEAN`                  |
 | Delete user-context field          | `model user-context delete-field --key`                                              |
 | Enable user-context                | `model user-context set-status --status ENABLED`                                     |
+| View connection description        | `connection get --agent <agentId> --connection <connectionId>`                       |
+| Update connection description      | `connection update --agent <agentId> --connection <connectionId> --description "..."` |
 | Pull latest snapshot               | `model pull --agent <agentId> [--connection <connectionId>]`                         |
 | Trigger DB resync                  | `connection sync --agent <agentId> --connection <connectionId>`                      |
+
+## Connection Metadata
+
+Use the connection commands when you need to inspect or update the database-level description instead of the semantic model:
+
+```bash
+# Read current connection metadata (description maps to platform "context")
+npx inconvo@latest connection get \
+  --agent <agentId> --connection <connectionId> --json
+
+# Set the description
+npx inconvo@latest connection update \
+  --agent <agentId> --connection <connectionId> \
+  --description "Sales warehouse used for BI reporting" --json
+
+# Clear the description
+npx inconvo@latest connection update \
+  --agent <agentId> --connection <connectionId> \
+  --clear-description --json
+```
+
+Successful `connection update` commands auto-refresh the local `.inconvo/` snapshot for that connection, so verify the generated YAML instead of editing it directly.
 
 ## Computed Column AST Format
 

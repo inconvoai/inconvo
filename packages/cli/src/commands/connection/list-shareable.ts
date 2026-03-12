@@ -32,8 +32,11 @@ export const connectionListShareableCommand = new Command("list-shareable")
       logInfo(`Found ${connections.length} shareable connection(s):\n`);
       for (const conn of connections) {
         console.log(
-          `  ${COLORS.bold}${conn.name}${COLORS.reset}  ${COLORS.dim}${conn.id}${COLORS.reset}  ${conn.databaseType}  ${COLORS.cyan}owner: ${conn.ownerAgent.name}${COLORS.reset}`,
+          `  ${COLORS.bold}${conn.name}${COLORS.reset}  ${COLORS.dim}${conn.id}${COLORS.reset}  ${conn.databaseType ?? "UNKNOWN"}  ${COLORS.cyan}owner: ${conn.ownerAgent.name}${COLORS.reset}`,
         );
+        if (conn.description) {
+          console.log(`    ${COLORS.dim}${conn.description}${COLORS.reset}`);
+        }
       }
     }),
   );

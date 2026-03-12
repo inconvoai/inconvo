@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import { logInfo } from "../../process/output.js";
-import { findRepoRoot } from "../../model/config-store.js";
+import { findRepoRoot } from "../../model/env-config.js";
 import { syncSingleAgentToWorkspace } from "../../model/operations.js";
 import { runCliAction } from "../_shared/command-runtime.js";
 import {

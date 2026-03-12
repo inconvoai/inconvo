@@ -20,24 +20,13 @@ Then open http://localhost:26686 to start chatting with your data.
 
 ## Commands
 
-### `inconvo config set`
+Credential priority (highest first): `--api-key` flag → exported `INCONVO_API_KEY` env var → repo `.env` (`INCONVO_API_KEY`).
 
-Store your API key (and optionally a custom API base URL) in `.inconvo/config.yaml` so you don't have to pass `--api-key` on every command. The file is gitignored and never committed.
-
-```bash
-npx inconvo@latest config set
-# or non-interactively:
-npx inconvo@latest config set --api-key <key> --api-base-url <url>
-```
-
-Credential priority (highest first): `--api-key` flag → `INCONVO_API_KEY` env var → `.inconvo/config.yaml`.
-
-### `inconvo config view`
-
-Show the credentials currently stored in `.inconvo/config.yaml` (API key is masked).
+If you're working from a cloned repo, add your API settings to the repo `.env`:
 
 ```bash
-npx inconvo@latest config view
+INCONVO_API_KEY=your-api-key
+INCONVO_API_BASE_URL=https://app.inconvo.ai
 ```
 
 ### `inconvo dev`

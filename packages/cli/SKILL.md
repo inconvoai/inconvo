@@ -25,14 +25,7 @@ The CLI resolves credentials in this priority order (highest first):
 
 1. `--api-key` / `--api-base-url` flags on the command
 2. `INCONVO_API_KEY` / `INCONVO_API_BASE_URL` environment variables
-3. `.inconvo/config.yaml` in the repo root (gitignored, never committed)
-
-```bash
-npx inconvo@latest config set
-# or non-interactively:
-npx inconvo@latest config set --api-key <key> --api-base-url <url>
-npx inconvo@latest config view
-```
+3. Repo `.env` (`INCONVO_API_KEY` / `INCONVO_API_BASE_URL`)
 
 ## Required Inputs
 
@@ -319,7 +312,7 @@ If ambiguous (multiple matches) or not found — fail fast and use the explicit 
 | "No changes detected (hash unchanged)"               | Remote data hasn't changed since last sync                                              | Expected — the CLI skips redundant disk writes when hashes match                                                              |
 | "Sync skipped (--no-sync)"                            | `--no-sync` flag was used                                                               | Run `model pull --agent <agentId>` when ready                                                                                 |
 | `--table` / `--column` not found                      | Name mismatch or ambiguous                                                              | Use exact ID from YAML                                                                                                        |
-| `UNAUTHORIZED`                                        | Missing or expired API key                                                              | Re-run `inconvo config set`                                                                                                   |
+| `UNAUTHORIZED`                                        | Missing or expired API key                                                              | Pass `--api-key`, export `INCONVO_API_KEY`, or add it to the repo `.env`                                                     |
 | `BAD_REQUEST` with Zod errors on `computedColumn.ast` | Wrong AST node shape                                                                    | Check the AST Format section above; every node requires a `type` discriminator                                                |
 | `BAD_REQUEST` from user-context mutation              | Field key already exists                                                                | Check `user-context.yaml` fields list                                                                                         |
 | FK relations missing after pull                       | Inconvo DB user lacks `information_schema` access, or no FK constraints exist in the DB | Confirm FK constraints exist and that the DB user has `information_schema` read access, then `connection sync` + `model pull` |

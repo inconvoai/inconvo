@@ -4,7 +4,7 @@ import {
   isInteractiveEnvironment,
   DEFAULT_API_BASE_URL,
 } from "../../model/cli-options.js";
-import { findRepoRoot } from "../../model/config-store.js";
+import { findRepoRoot } from "../../model/env-config.js";
 import type { PlatformApiClient } from "../../model/api-client.js";
 import {
   parseConnectionCommandOptions,

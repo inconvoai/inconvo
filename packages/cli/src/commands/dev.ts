@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { execSync, spawn, spawnSync, type ChildProcess } from "child_process";
+import { execFileSync, execSync, spawn, spawnSync, type ChildProcess } from "child_process";
 import { createRequire } from "module";
 import * as fs from "fs";
 import * as path from "path";
@@ -7,7 +7,7 @@ import * as os from "os";
 import { fileURLToPath } from "url";
 import * as p from "@clack/prompts";
 import { envExists, runSetupWizard, readEnvFile } from "../wizard/setup.js";
-import { logInfo, logError, logDim, COLORS } from "../process/output.js";
+import { logInfo, logError, logDim, logGray, logCyan, COLORS } from "../process/output.js";
 import { seedDemoData } from "../seed/demo-data.js";
 
 const require = createRequire(import.meta.url);
@@ -111,7 +111,7 @@ function openBrowser(url: string): void {
         ? "start"
         : "xdg-open";
   try {
-    execSync(`${cmd} ${url}`, { stdio: "ignore" });
+    execFileSync(cmd, [url], { stdio: "ignore" });
   } catch {
     // Silently fail if browser can't be opened
   }
@@ -154,9 +154,7 @@ async function waitForDemoDbAndSeed(maxAttempts = 60): Promise<void> {
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  console.log(
-    `${COLORS.dim}  Warning: Could not seed demo database${COLORS.reset}`,
-  );
+  logDim("  Warning: Could not seed demo database");
 }
 
 /**
@@ -188,9 +186,7 @@ async function configureDemoDatabase(
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  console.log(
-    `${COLORS.dim}  Warning: Could not configure demo database${COLORS.reset}`,
-  );
+  logDim("  Warning: Could not configure demo database");
 }
 
 function copyBundledFiles(): void {
@@ -417,17 +413,13 @@ export const devCommand = new Command("dev")
 
     // Print startup banner
     console.log("");
-    console.log(`${COLORS.cyan}${COLORS.bold}  Inconvo${COLORS.reset}`);
+    logCyan("  Inconvo");
     console.log("");
     if (telemetryDisabled) {
-      console.log(`${COLORS.dim}  Telemetry disabled${COLORS.reset}`);
+      logDim("  Telemetry disabled");
     } else {
-      console.log(
-        `${COLORS.dim}  Anonymous telemetry is enabled to help improve Inconvo.${COLORS.reset}`,
-      );
-      console.log(
-        `${COLORS.dim}  Run 'inconvo telemetry off' to disable.${COLORS.reset}`,
-      );
+      logDim("  Anonymous telemetry is enabled to help improve Inconvo.");
+      logDim("  Run 'inconvo telemetry off' to disable.");
     }
     console.log("");
     logDim(`  dev-server: ${devServerUrl}`);
@@ -475,7 +467,8 @@ export const devCommand = new Command("dev")
       if (shuttingDown) return;
       shuttingDown = true;
 
-      console.log(`\n${COLORS.gray}Shutting down...${COLORS.reset}`);
+      console.log("");
+      logGray("Shutting down...");
 
       if (sandboxProc && !sandboxProc.killed) {
         sandboxProc.kill("SIGINT");

@@ -13,10 +13,11 @@ from code context. This repository uses a CLI-only mutation workflow.
 1. Never edit `.inconvo/**` by hand.
 2. Never use local YAML as mutation input.
 3. Perform every remote change via `inconvo model <group> <command>`.
-4. Let the CLI auto-sync snapshots after successful mutations.
-5. Use `--dry-run` to verify entity resolution (which table/column gets targeted), not to validate payload format — the API may still reject a payload the dry-run accepted.
-6. Always use `--json` for automation/agent workflows.
-7. Use `inconvo model pull` after DB schema changes or to recover sync.
+4. Let the CLI auto-refresh local `.inconvo/` snapshots after successful mutations.
+5. Use `--dry-run` to verify target resolution; it does not validate payload format.
+6. Use `--json` for automation/agent workflows.
+7. For many independent mutations, use `--no-sync` on each command and run `inconvo model pull` once at the end.
+8. Use `inconvo model pull` after DB schema changes or to recover local snapshots.
 
 ## Authentication
 
@@ -37,7 +38,7 @@ npx inconvo@latest config view
 
 - `agentId` for all mutations (`--agent`). Read from `.inconvo/agents/<slug>/agent.yaml`.
 - `connectionId` for schema mutations (`--connection`). Read from `.inconvo/connections/<slug>/connection.yaml`.
-- Connection descriptions are stored in connection snapshots as `description`, which maps to the platform's internal connection `context` field.
+- Connection snapshots expose the platform connection context as `description`.
 - Target identifiers: prefer IDs for stability, names work when unambiguous.
 
 ## Snapshot Layout
@@ -64,12 +65,18 @@ npx inconvo@latest config view
 
 All files are auto-generated. Read them for IDs and current state; never edit directly.
 
+## Sync Terms
+
+- **Post-mutation sync**: automatic refresh of local `.inconvo/` files after a successful mutation.
+- **`model pull`**: rebuild local snapshots from the platform.
+- **`connection sync`**: ask the platform to re-introspect a connection's database schema. Follow with `model pull` when you need updated local files.
+
 ## Standard Workflow
 
 1. Read `.inconvo/` YAML files to understand current state and collect IDs.
 2. Read code context (schema, routes, UI) to understand intended semantics.
 3. Plan all mutations, group independent ones for parallel execution.
-4. Run mutations — use `--dry-run --json` first when targeting is uncertain.
+4. Run mutations. Use `--dry-run --json` when target resolution is uncertain. For many independent mutations, add `--no-sync` to each command and run `inconvo model pull` once at the end.
 5. Verify the synced YAML files reflect expected changes.
 6. If sync fails, run `inconvo model pull --agent <agentId>`.
 
@@ -112,7 +119,7 @@ npx inconvo@latest connection --help
 
 ## Connection Metadata
 
-Use the connection commands when you need to inspect or update the database-level description instead of the semantic model:
+Use connection commands for database-level metadata, not semantic-model changes:
 
 ```bash
 # Read current connection metadata (description maps to platform "context")
@@ -130,7 +137,7 @@ npx inconvo@latest connection update \
   --clear-description --json
 ```
 
-Successful `connection update` commands auto-refresh the local `.inconvo/` snapshot for that connection, so verify the generated YAML instead of editing it directly.
+`connection update` refreshes the local `.inconvo/` snapshot for that connection. It does not perform a remote DB rescan; `connection sync` does that.
 
 ## Computed Column AST Format
 
@@ -197,16 +204,19 @@ For apps that scope all data by a tenant/organisation ID:
 ```bash
 # 1. Add the tenant field to user-context
 npx inconvo@latest model user-context add-field \
-  --agent <agentId> --key organisationId --type NUMBER --json
+  --agent <agentId> --key organisationId --type NUMBER --no-sync --json
 
 # 2. Enable user-context
 npx inconvo@latest model user-context set-status \
-  --agent <agentId> --status ENABLED --json
+  --agent <agentId> --status ENABLED --no-sync --json
 
 # 3. Set condition on every tenant-scoped table (run in parallel)
 npx inconvo@latest model condition set \
   --agent <agentId> --connection <connectionId> \
-  --table <table> --column organisation_id --field organisationId --json
+  --table <table> --column organisation_id --field organisationId --no-sync --json
+
+# 4. Pull once at the end
+npx inconvo@latest model pull --agent <agentId> --json
 ```
 
 Conditions require user-context to be `ENABLED` to take effect. The order of add-field / set-status / condition set does not matter as long as status is ENABLED before queries run.
@@ -223,16 +233,19 @@ Conditions require user-context to be `ENABLED` to take effect. The order of add
 
 ## High-Confidence Patterns
 
-### Bulk table setup (run in parallel)
+### Bulk table setup (run in parallel with --no-sync, then pull once)
 
 ```bash
 npx inconvo@latest model table set-access \
   --agent <agentId> --connection <connectionId> \
-  --table <table> --access QUERYABLE --json
+  --table <table> --access QUERYABLE --no-sync --json
 
 npx inconvo@latest model table set-context \
   --agent <agentId> --connection <connectionId> \
-  --table <table> --context "What this table is and when to use it." --json
+  --table <table> --context "What this table is and when to use it." --no-sync --json
+
+# After all mutations complete:
+npx inconvo@latest model pull --agent <agentId> --json
 ```
 
 ### Column updates
@@ -287,6 +300,8 @@ If ambiguous (multiple matches) or not found — fail fast and use the explicit 
 | Symptom                                               | Likely cause                                                                            | Fix                                                                                                                           |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Mutation succeeds but sync warning                    | Transient network error after remote write                                              | `model pull --agent <agentId>`                                                                                                |
+| "No changes detected (hash unchanged)"               | Remote data hasn't changed since last sync                                              | Expected — the CLI skips redundant disk writes when hashes match                                                              |
+| "Sync skipped (--no-sync)"                            | `--no-sync` flag was used                                                               | Run `model pull --agent <agentId>` when ready                                                                                 |
 | `--table` / `--column` not found                      | Name mismatch or ambiguous                                                              | Use exact ID from YAML                                                                                                        |
 | `UNAUTHORIZED`                                        | Missing or expired API key                                                              | Re-run `inconvo config set`                                                                                                   |
 | `BAD_REQUEST` with Zod errors on `computedColumn.ast` | Wrong AST node shape                                                                    | Check the AST Format section above; every node requires a `type` discriminator                                                |
@@ -297,7 +312,7 @@ If ambiguous (multiple matches) or not found — fail fast and use the explicit 
 ## Done Criteria
 
 - All remote mutations executed via CLI.
-- Local `.inconvo/` snapshot auto-synced after each mutation.
+- Local `.inconvo/` snapshot auto-synced after each mutation (or synced once at end if `--no-sync` was used).
 - No manual edits to generated YAML files.
 - Table contexts describe purpose only — no column-level details.
 - Column notes describe the specific column only — no table-level details.

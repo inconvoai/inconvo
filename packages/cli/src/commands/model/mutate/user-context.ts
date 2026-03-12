@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { runCliAction } from "../../_shared/command-runtime.js";
 import { resolveUserContextField } from "../../../model/resolution.js";
 import { addCommonOptions, runMutation } from "./_shared.js";
@@ -12,7 +12,11 @@ addCommonOptions(
     .command("add-field")
     .description("Add user-context field")
     .requiredOption("--key <key>", "Field key")
-    .requiredOption("--type <type>", "STRING|NUMBER|BOOLEAN")
+    .addOption(
+      new Option("--type <type>", "Field type")
+        .choices(["STRING", "NUMBER", "BOOLEAN"])
+        .makeOptionMandatory(),
+    )
     .action((options) =>
       runCliAction(async () => {
         await runMutation({
@@ -23,7 +27,7 @@ addCommonOptions(
             key: options.key,
             type: options.type,
           }),
-          syncConnection: () => undefined,
+          syncScope: "user-context",
         });
       }),
     ),
@@ -50,7 +54,7 @@ addCommonOptions(
               id: field.id,
             };
           },
-          syncConnection: () => undefined,
+          syncScope: "user-context",
         });
       }),
     ),
@@ -61,7 +65,11 @@ addCommonOptions(
   userContextCommand
     .command("set-status")
     .description("Set user-context status")
-    .requiredOption("--status <status>", "ENABLED|DISABLED")
+    .addOption(
+      new Option("--status <status>", "User-context status")
+        .choices(["ENABLED", "DISABLED"])
+        .makeOptionMandatory(),
+    )
     .action((options) =>
       runCliAction(async () => {
         await runMutation({
@@ -71,7 +79,7 @@ addCommonOptions(
           buildPayload: async () => ({
             status: options.status,
           }),
-          syncConnection: () => undefined,
+          syncScope: "user-context",
         });
       }),
     ),

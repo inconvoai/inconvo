@@ -6,6 +6,7 @@ import { runCliAction } from "../_shared/command-runtime.js";
 import {
   resolveConnectionAgentContext,
   resolveConnectionTargetContext,
+  addConnectionCommandOptions,
 } from "../_shared/connection-command-factory.js";
 
 function renderConnectionDetails(connection: ConnectionDetails): void {
@@ -22,53 +23,45 @@ function renderConnectionDetails(connection: ConnectionDetails): void {
   }
 }
 
-export const connectionGetCommand = new Command("get")
-  .description("Show metadata for a connection")
-  .requiredOption("--agent <agentId>", "Target agent id")
-  .option("--connection <connectionId>", "Connection id to inspect")
-  .option("--json", "Print JSON output")
-  .option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)")
-  .option(
-    "--api-base-url <url>",
-    "API base URL override (default: https://app.inconvo.ai)",
-  )
-  .action((options) =>
-    runCliAction(async () => {
-      const { parsedOptions, agentId, client } =
-        await resolveConnectionAgentContext(options);
+export const connectionGetCommand = addConnectionCommandOptions(
+  new Command("get").description("Show metadata for a connection"),
+).action((options) =>
+  runCliAction(async () => {
+    const { parsedOptions, agentId, client } =
+      await resolveConnectionAgentContext(options);
 
-      let { connectionId } = resolveConnectionTargetContext({
-        connectionId: parsedOptions.connectionId,
+    let { connectionId } = resolveConnectionTargetContext({
+      connectionId: parsedOptions.connectionId,
+    });
+
+    if (!connectionId) {
+      const connections = await client.listAgentConnections(agentId);
+      if (connections.length === 0) {
+        throw new Error("No connections found for this agent.");
+      }
+
+      const selected = await p.select({
+        message: "Select a connection to inspect",
+        options: connections.map((conn) => ({
+          label: `${conn.name} (${conn.id})`,
+          value: conn.id,
+        })),
       });
 
-      if (!connectionId) {
-        const connections = await client.listAgentConnections(agentId);
-        if (connections.length === 0) {
-          throw new Error("No connections found for this agent.");
-        }
-
-        const selected = await p.select({
-          message: "Select a connection to inspect",
-          options: connections.map((conn) => ({
-            label: `${conn.name} (${conn.id})`,
-            value: conn.id,
-          })),
-        });
-
-        if (p.isCancel(selected)) {
-          throw new Error("Selection cancelled.");
-        }
-
-        connectionId = selected;
+      if (p.isCancel(selected)) {
+        throw new Error("Selection cancelled.");
       }
 
-      const connection = await client.getConnection(agentId, connectionId);
+      connectionId = selected;
+    }
 
-      if (parsedOptions.json) {
-        console.log(JSON.stringify({ connection }, null, 2));
-        return;
-      }
+    const connection = await client.getConnection(agentId, connectionId);
 
-      renderConnectionDetails(connection);
-    }),
-  );
+    if (parsedOptions.json) {
+      console.log(JSON.stringify({ connection }, null, 2));
+      return;
+    }
+
+    renderConnectionDetails(connection);
+  }),
+);

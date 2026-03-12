@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { runCliAction } from "../../_shared/command-runtime.js";
 import { resolveTable } from "../../../model/resolution.js";
 import { addCommonOptions, loadSnapshot, runMutation } from "./_shared.js";
@@ -10,7 +10,11 @@ addCommonOptions(
     .command("set-access")
     .description("Set table access mode")
     .requiredOption("--table <table>", "Table id or name")
-    .requiredOption("--access <access>", "QUERYABLE|JOINABLE|OFF")
+    .addOption(
+      new Option("--access <access>", "Table access mode")
+        .choices(["QUERYABLE", "JOINABLE", "OFF"])
+        .makeOptionMandatory(),
+    )
     .action((options) =>
       runCliAction(async () => {
         await runMutation({
@@ -25,7 +29,7 @@ addCommonOptions(
               access: options.access,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -56,7 +60,7 @@ addCommonOptions(
               context: options.clear === true ? null : options.context,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),

@@ -1,6 +1,8 @@
 import { PlatformApiClient } from "./api-client.js";
 import { findRepoRoot, loadLocalCliConfig } from "./config-store.js";
 
+export const DEFAULT_API_BASE_URL = "https://app.inconvo.ai";
+
 export function isInteractiveEnvironment(): boolean {
   const isCi = process.env.CI === "true" || process.env.CI === "1";
   return Boolean(process.stdin.isTTY && process.stdout.isTTY && !isCi);
@@ -26,7 +28,7 @@ export async function createApiClientFromOptions(options: {
     options.apiBaseUrl ??
     process.env.INCONVO_API_BASE_URL ??
     localConfig.apiBaseUrl ??
-    "https://app.inconvo.ai";
+    DEFAULT_API_BASE_URL;
 
   return new PlatformApiClient({
     apiKey,

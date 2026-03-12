@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { runCliAction } from "../../_shared/command-runtime.js";
 import { resolveTable } from "../../../model/resolution.js";
 import { parseIntArg } from "../mutate-args.js";
@@ -13,7 +13,15 @@ addCommonOptions(
     .command("validate-sql")
     .description("Validate virtual table SQL")
     .requiredOption("--sql <sql>", "SQL query")
-    .option("--dialect <dialect>", "postgresql|mysql|redshift|bigquery|mssql")
+    .addOption(
+      new Option("--dialect <dialect>", "SQL dialect").choices([
+        "postgresql",
+        "mysql",
+        "redshift",
+        "bigquery",
+        "mssql",
+      ]),
+    )
     .option("--preview-limit <n>", "Preview limit", parseIntArg)
     .action((options) =>
       runCliAction(async () => {
@@ -41,8 +49,22 @@ addCommonOptions(
     .description("Create virtual table")
     .requiredOption("--name <name>", "Virtual table name")
     .requiredOption("--sql <sql>", "SQL query")
-    .option("--dialect <dialect>", "postgresql|mysql|redshift|bigquery|mssql")
-    .option("--access <access>", "QUERYABLE|JOINABLE|OFF")
+    .addOption(
+      new Option("--dialect <dialect>", "SQL dialect").choices([
+        "postgresql",
+        "mysql",
+        "redshift",
+        "bigquery",
+        "mssql",
+      ]),
+    )
+    .addOption(
+      new Option("--access <access>", "Table access mode").choices([
+        "QUERYABLE",
+        "JOINABLE",
+        "OFF",
+      ]),
+    )
     .option("--context <context>", "Table context")
     .action((options) =>
       runCliAction(async () => {
@@ -58,7 +80,7 @@ addCommonOptions(
             ...(options.access !== undefined ? { access: options.access } : {}),
             ...(options.context !== undefined ? { context: options.context } : {}),
           }),
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -71,7 +93,15 @@ addCommonOptions(
     .description("Update virtual table SQL")
     .requiredOption("--table <table>", "Virtual table id or name")
     .requiredOption("--sql <sql>", "SQL query")
-    .option("--dialect <dialect>", "postgresql|mysql|redshift|bigquery|mssql")
+    .addOption(
+      new Option("--dialect <dialect>", "SQL dialect").choices([
+        "postgresql",
+        "mysql",
+        "redshift",
+        "bigquery",
+        "mssql",
+      ]),
+    )
     .action((options) =>
       runCliAction(async () => {
         await runMutation({
@@ -87,7 +117,7 @@ addCommonOptions(
               ...(options.dialect !== undefined ? { dialect: options.dialect } : {}),
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -116,7 +146,7 @@ addCommonOptions(
                 : {}),
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),
@@ -141,7 +171,7 @@ addCommonOptions(
               tableId: table.id,
             };
           },
-          syncConnection: (context) => context.connectionId,
+          syncScope: "connection",
         });
       }),
     ),

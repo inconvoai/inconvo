@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { createApiClientFromOptions } from "../../model/cli-options.js";
+import { createApiClientFromOptions, DEFAULT_API_BASE_URL } from "../../model/cli-options.js";
 import { COLORS, logInfo } from "../../process/output.js";
 import { runCliAction } from "../_shared/command-runtime.js";
 
@@ -9,7 +9,7 @@ const modelAgentListCommand = new Command("list")
   .option("--api-key <apiKey>", "API key override (otherwise INCONVO_API_KEY)")
   .option(
     "--api-base-url <url>",
-    "API base URL override (default: https://app.inconvo.ai)",
+    `API base URL override (default: ${DEFAULT_API_BASE_URL})`,
   )
   .action((options: {
     apiKey?: string;

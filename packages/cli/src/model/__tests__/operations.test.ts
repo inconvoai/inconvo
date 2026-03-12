@@ -7,6 +7,7 @@ import YAML from "yaml";
 import {
   pullAgentsToWorkspace,
   slugify,
+  syncConnectionSnapshot,
   syncSingleAgentToWorkspace,
 } from "../operations.js";
 import type { PlatformApiClient } from "../api-client.js";
@@ -293,6 +294,99 @@ test("syncSingleAgentToWorkspace preserves unrelated local agent directories", a
   });
 
   await fs.access(path.join(otherAgentDir, "agent.yaml"));
+});
+
+test("syncConnectionSnapshot falls back when agent connection ref is missing", async (t) => {
+  const repoRoot = await withTempRepo(t);
+  const connectionSlug = "shared-warehouse";
+  const agentSlug = "test-agent";
+
+  await fs.mkdir(
+    path.join(repoRoot, ".inconvo", "connections", connectionSlug, "tables"),
+    { recursive: true },
+  );
+  await fs.mkdir(path.join(repoRoot, ".inconvo", "agents", agentSlug), {
+    recursive: true,
+  });
+
+  await fs.writeFile(
+    path.join(repoRoot, ".inconvo", "connections", ".slug-map.yaml"),
+    YAML.stringify({ con_shared: connectionSlug }),
+  );
+  await fs.writeFile(
+    path.join(repoRoot, ".inconvo", "connections", connectionSlug, "connection.yaml"),
+    YAML.stringify({
+      id: "con_shared",
+      name: "Shared Warehouse",
+      description: "Shared analytics warehouse",
+      status: "CONNECTED",
+      ownerAgentName: "Owner",
+      hash: "hash_shared",
+    }),
+  );
+  await fs.writeFile(
+    path.join(repoRoot, ".inconvo", "connections", connectionSlug, "tables", ".slug-map.yaml"),
+    YAML.stringify({}),
+  );
+  await fs.writeFile(
+    path.join(repoRoot, ".inconvo", "agents", ".slug-map.yaml"),
+    YAML.stringify({ [AGENT_ID]: agentSlug }),
+  );
+
+  const client = createClientStub({
+    getOrg: async () => ({ id: ORG_ID, name: "Test Org" }),
+    listOrgAgents: async () => [{ id: AGENT_ID, name: "Test Agent" }],
+    getAgentUserContext: async () => ({
+      userContext: { status: "ENABLED", fields: [] },
+      hash: "uc_hash",
+    }),
+    listAgentConnections: async () => [
+      {
+        id: "con_shared",
+        name: "Shared Warehouse",
+        description: "Shared analytics warehouse",
+        status: "CONNECTED",
+        isShared: false,
+        ownerAgentName: "Owner",
+      },
+    ],
+    getConnectionSemanticModel: async () => ({
+      connectionId: "con_shared",
+      tables: [],
+      hash: "hash_shared",
+    }),
+    getConnection: failMethod("getConnection"),
+    listShareableConnections: async () => [],
+  });
+
+  const result = await syncConnectionSnapshot({
+    client,
+    repoRoot,
+    agentId: AGENT_ID,
+    connectionId: "con_shared",
+  });
+
+  assert.deepEqual(result, { scope: "connection", skipped: false });
+
+  const agentConnectionDoc = YAML.parse(
+    await fs.readFile(
+      path.join(
+        repoRoot,
+        ".inconvo",
+        "agents",
+        agentSlug,
+        "connections",
+        connectionSlug,
+        "connection.yaml",
+      ),
+      "utf8",
+    ),
+  ) as { snapshotPath?: string; hash?: string };
+  assert.equal(
+    agentConnectionDoc.snapshotPath,
+    `.inconvo/connections/${connectionSlug}`,
+  );
+  assert.equal(agentConnectionDoc.hash, "hash_shared");
 });
 
 test("pull writes collision-safe slugs without IDs in folder/file names", async (t) => {

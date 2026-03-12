@@ -1,30 +1,18 @@
 import { createApiClientFromOptions } from "./cli-options.js";
 import { findRepoRoot } from "./config-store.js";
-import { syncSingleAgentToWorkspace } from "./operations.js";
+import {
+  syncConnectionSnapshot,
+  syncAgentUserContext,
+  syncSingleAgentToWorkspace,
+  type SyncScope,
+  type ScopedSyncResult,
+} from "./operations.js";
 import type { ModelActionType } from "./types.js";
 import type { PlatformApiClient } from "./api-client.js";
 import { logWarning } from "../process/output.js";
+import { optionRecord, parseString, parseBoolean } from "./parse-utils.js";
 
-type OptionRecord = Record<string, unknown>;
-
-function optionRecord(raw: unknown): OptionRecord {
-  if (!raw || typeof raw !== "object") {
-    return {};
-  }
-  return raw as OptionRecord;
-}
-
-function parseString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function parseBoolean(value: unknown): boolean {
-  return value === true;
-}
+export type { SyncScope };
 
 export interface MutationContext {
   client: PlatformApiClient;
@@ -33,6 +21,7 @@ export interface MutationContext {
   connectionId?: string;
   json: boolean;
   dryRun: boolean;
+  noSync: boolean;
 }
 
 export async function resolveMutationContext(params: {
@@ -64,20 +53,23 @@ export async function resolveMutationContext(params: {
     connectionId,
     json: parseBoolean(record.json),
     dryRun: parseBoolean(record.dryRun),
+    noSync: parseBoolean(record.noSync),
   };
+}
+
+export interface SyncResult {
+  scope: SyncScope | "full" | "none";
+  skipped: boolean;
 }
 
 export async function runActionAndSync(params: {
   context: MutationContext;
   action: ModelActionType;
   payload: unknown;
-  syncConnectionId?: string;
+  syncScope?: SyncScope;
 }): Promise<{
   actionResult: unknown;
-  sync: {
-    pulledAgents: number;
-    pulledConnections: number;
-  };
+  sync: SyncResult;
 }> {
   const actionResponse = await params.context.client.runModelAction(
     params.context.agentId,
@@ -87,14 +79,40 @@ export async function runActionAndSync(params: {
     },
   );
 
-  let sync = { pulledAgents: 0, pulledConnections: 0 };
+  if (params.context.noSync) {
+    return {
+      actionResult: actionResponse.result,
+      sync: { scope: "none", skipped: true },
+    };
+  }
+
+  let sync: SyncResult = { scope: "none", skipped: false };
+
   try {
-    sync = await syncSingleAgentToWorkspace({
-      client: params.context.client,
-      repoRoot: params.context.repoRoot,
-      agentId: params.context.agentId,
-      selectedConnectionId: params.syncConnectionId,
-    });
+    if (params.syncScope === "connection" && params.context.connectionId) {
+      const result = await syncConnectionSnapshot({
+        client: params.context.client,
+        repoRoot: params.context.repoRoot,
+        agentId: params.context.agentId,
+        connectionId: params.context.connectionId,
+      });
+      sync = result;
+    } else if (params.syncScope === "user-context") {
+      const result = await syncAgentUserContext({
+        client: params.context.client,
+        repoRoot: params.context.repoRoot,
+        agentId: params.context.agentId,
+      });
+      sync = result;
+    } else {
+      // Fallback to full sync
+      await syncSingleAgentToWorkspace({
+        client: params.context.client,
+        repoRoot: params.context.repoRoot,
+        agentId: params.context.agentId,
+      });
+      sync = { scope: "full", skipped: false };
+    }
   } catch (syncError) {
     logWarning(
       `Mutation succeeded but local sync failed: ${syncError instanceof Error ? syncError.message : String(syncError)}. Run 'inconvo model pull' to update local files.`,

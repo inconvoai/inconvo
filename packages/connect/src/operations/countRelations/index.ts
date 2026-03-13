@@ -10,7 +10,10 @@ import {
 } from "../utils/joinDescriptorHelpers";
 import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
-import { resolveBaseSource } from "../utils/logicalTableSource";
+import {
+  resolveBaseSource,
+  resolveJoinTargetSource,
+} from "../utils/logicalTableSource";
 import { getTableIdentifier } from "../utils/tableIdentifier";
 
 type RelationCountPlan = {
@@ -23,7 +26,14 @@ type RelationCountPlan = {
   cteQuery: any;
 };
 
-function resolveRelationTargetTableId({
+/**
+ * Resolve the source expression for a relation target table in a countRelations CTE.
+ *
+ * For virtual tables, delegates to `resolveJoinTargetSource` which returns a subquery
+ * expression. For physical tables, resolves the target schema from relation metadata
+ * and returns a schema-qualified identifier.
+ */
+function resolveRelationTargetSource({
   targetTableName,
   relationAlias,
   joinAlias,
@@ -37,8 +47,19 @@ function resolveRelationTargetTableId({
   baseTableName: string;
   tableSchema: string | null | undefined;
   ctx: OperationContext;
-}): string {
+}) {
   const { schema, dialect } = ctx;
+
+  // Virtual tables need subquery wrapping — delegate to the shared helper.
+  const targetTable = schema.tables.find((t) => t.name === targetTableName);
+  if (targetTable?.virtualTable) {
+    return resolveJoinTargetSource({
+      tableName: targetTableName,
+      sqlAlias: targetTableName,
+      schema,
+      dialect,
+    }).source;
+  }
 
   // BigQuery relation joins are sensitive to dataset-qualified refs. Preserve
   // existing behavior and keep relation table ids unqualified there.
@@ -60,6 +81,9 @@ function resolveRelationTargetTableId({
       (relation) => relation.targetTable === targetTableName,
     );
 
+  // Fall back through: relation metadata → schema-matched table → any table with
+  // the same name → base table's schema. This covers cross-schema relations where
+  // the target lives in a different schema than the base table.
   const targetSchema =
     relationFromSchema?.targetSchema ??
     schema.tables.find(
@@ -124,7 +148,7 @@ export async function countRelations(
         `Unable to determine target table for relation ${relation.name}.`,
       );
     }
-    const targetTableId = resolveRelationTargetTableId({
+    const targetSource = resolveRelationTargetSource({
       targetTableName,
       relationAlias: relation.name,
       joinAlias: joinDescriptor.name ?? joinDescriptor.table,
@@ -155,7 +179,7 @@ export async function countRelations(
       );
     }
 
-    let cte = db.selectFrom(targetTableId);
+    let cte = db.selectFrom(targetSource as any);
 
     for (const column of targetColumns) {
       cte = cte.select(

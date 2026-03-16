@@ -5,6 +5,11 @@ import {
   type FindManyQuery,
   type JoinPathHop,
 } from "@repo/types";
+import {
+  buildJoinDescriptorDescription,
+  buildJoinPathMismatchMessage,
+  buildJoinTableMismatchMessage,
+} from "../utils/joinGuidance";
 
 export interface FindManyJoinOption {
   name: string;
@@ -37,6 +42,14 @@ export type FindManyValidationResult =
   | FindManyInvalidResult;
 
 export function buildFindManyZodSchema(ctx: FindManyValidatorContext) {
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors required when selecting related-table columns.",
+    ctx.joinOptions,
+    {
+      emptyStateMessage:
+        "Array of join descriptors (no joins available from this table).",
+    },
+  );
   const selectValidator = z.object(
     Object.entries(ctx.selectableTableColumns).reduce(
       (
@@ -72,7 +85,11 @@ export function buildFindManyZodSchema(ctx: FindManyValidatorContext) {
           ),
         "Select must include at least one column.",
       ),
-    joins: z.array(joinDescriptorSchema).nullable().optional(),
+    joins: z
+      .array(joinDescriptorSchema)
+      .nullable()
+      .optional()
+      .describe(joinDescription),
     orderBy: z
       .object({
         direction: z.enum(["asc", "desc"]),
@@ -176,7 +193,7 @@ function validateJoins(
       if (!option) {
         issues.push({
           path: `joins.${index}.path`,
-          message: "Join path does not match any available relation path.",
+          message: buildJoinPathMismatchMessage(join, ctx.joinOptions),
           code: "invalid_join_path",
         });
         return null;
@@ -185,7 +202,11 @@ function validateJoins(
       if (join.table !== option.table) {
         issues.push({
           path: `joins.${index}.table`,
-          message: `Join table must be ${option.table} for the selected path.`,
+          message: buildJoinTableMismatchMessage(
+            join,
+            option,
+            "the selected path",
+          ),
           code: "mismatched_join_table",
         });
         return null;

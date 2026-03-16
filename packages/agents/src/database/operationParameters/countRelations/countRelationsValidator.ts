@@ -5,6 +5,11 @@ import {
   type JoinPathHop,
 } from "@repo/types";
 import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
+import {
+  buildJoinDescriptorDescription,
+  buildJoinPathMismatchMessage,
+  buildJoinTableMismatchMessage,
+} from "../utils/joinGuidance";
 
 const countRelationsJoinSchema = joinDescriptorSchema
   .extend({
@@ -84,19 +89,14 @@ export function buildCountRelationsZodSchema(
     ctx.relationOptions.map((r) => r.name),
   );
 
-  const joinDescription =
-    ctx.relationOptions.length > 0
-      ? [
-          "Array of join descriptors. Each relation must appear here with name matching the relation.",
-          "Available joins:",
-          ...ctx.relationOptions.map(
-            (option) =>
-              `${option.name} (${option.table}) path=${formatJoinPath(
-                option.path,
-              )}`,
-          ),
-        ].join("\n")
-      : "Array of join descriptors (no relations available).";
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors. Each relation must appear here with name matching the relation.",
+    ctx.relationOptions,
+    {
+      nameRequirement: "required",
+      emptyStateMessage: "Array of join descriptors (no relations available).",
+    },
+  );
 
   return z.object({
     columns: z
@@ -284,7 +284,11 @@ function validateJoins(
       if (candidateKey !== expectedKey) {
         issues.push({
           path: `joins.${index}.path`,
-          message: `Join path for ${alias} does not match the relation's columns.`,
+          message: buildJoinPathMismatchMessage(
+            join,
+            ctx.relationOptions,
+            option,
+          ),
           code: "invalid_join_path",
         });
       }
@@ -292,7 +296,11 @@ function validateJoins(
       if (join.table !== option.table) {
         issues.push({
           path: `joins.${index}.table`,
-          message: `Join table must be ${option.table} for relation ${alias}.`,
+          message: buildJoinTableMismatchMessage(
+            join,
+            option,
+            `relation ${alias}`,
+          ),
           code: "invalid_join_table",
         });
       }
@@ -317,10 +325,4 @@ function joinPathKey(path: JoinPathHop[]) {
   return path
     .map((hop) => `${hop.source.join(",")}=>${hop.target.join(",")}`)
     .join("|");
-}
-
-function formatJoinPath(path: JoinPathHop[]) {
-  return path
-    .map((hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`)
-    .join(" | ");
 }

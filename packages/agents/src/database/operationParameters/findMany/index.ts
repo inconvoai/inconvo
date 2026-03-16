@@ -7,6 +7,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildJoinDescriptorDescription } from "../utils/joinGuidance";
 import { stringArrayToZodEnum } from "../../../utils/zodHelpers";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 import {
@@ -86,16 +87,14 @@ export async function defineFindManyOperationParameters(
     })
     .strict();
 
-  const joinOptionDescriptions = joinOptions
-    .map((option) => {
-      const pathDescription = option.path
-        .map(
-          (hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`,
-        )
-        .join(" | ");
-      return `${option.name} (${option.table}) path=${pathDescription}`;
-    })
-    .join("\n");
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors required when selecting related-table columns.",
+    joinOptions,
+    {
+      emptyStateMessage:
+        "Array of join descriptors (no joins available from this table).",
+    },
+  );
 
   const applyFindManyOperationParametersTool = tool(
     async (input: {
@@ -132,7 +131,11 @@ export async function defineFindManyOperationParameters(
                 {} as Record<string, z.ZodOptional<z.ZodArray<z.ZodString>>>,
               ),
             ),
-            joins: z.array(joinSchema).nullable().optional(),
+            joins: z
+              .array(joinSchema)
+              .nullable()
+              .optional()
+              .describe(joinDescription),
             orderBy: z
               .object({
                 direction: z.enum(["asc", "desc"]),
@@ -146,11 +149,7 @@ export async function defineFindManyOperationParameters(
               .nullable(),
             limit: z.number().int().positive().max(1000),
           })
-          .describe(
-            joinOptionDescriptions
-              ? `Candidate findMany params object. Available joins:\n${joinOptionDescriptions}`
-              : "Candidate findMany params object; if valid it will be added to the query",
-          ),
+          .describe("Candidate findMany params object."),
       }),
       responseFormat: "content_and_artifact",
       verboseParsingErrors: true,

@@ -1,9 +1,9 @@
 name: Release Docker CLI
 
 on:
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -282,8 +282,11 @@ jobs:
 
       - name: Create PR for version sync
         if: ${{ steps.sync.outputs.changed == 'true' }}
+        id: create-pr
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ secrets.CLI_SYNC_PR_TOKEN != '' && secrets.CLI_SYNC_PR_TOKEN || github.token }}
           commit-message: "chore(cli): sync version to ${{ needs.prepare.outputs.version }}"
           title: "chore(cli): sync cli version to ${{ needs.prepare.outputs.version }}"
           body: "Sync `packages/cli/package.json` version to match release `${{ needs.prepare.outputs.version }}`."
@@ -291,3 +294,9 @@ jobs:
           base: ${{ github.event.repository.default_branch }}
           add-paths: |
             packages/cli/package.json
+
+      - name: Explain PR creation failure
+        if: ${{ steps.sync.outputs.changed == 'true' && steps.create-pr.outcome == 'failure' }}
+        run: |
+          echo "::error::Failed to create the CLI version sync PR. Enable 'Allow GitHub Actions to create and approve pull requests' under Actions > General, or set the CLI_SYNC_PR_TOKEN secret with contents:write and pull-requests:write access."
+          exit 1

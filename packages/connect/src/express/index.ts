@@ -32,6 +32,7 @@ import { env } from "../env";
 import type { OperationContext } from "../operations/types";
 import { QueryExecutionError } from "../util/queryErrors";
 import { validateVirtualTableCore } from "../util/validateVirtualTableCore";
+import { errorMessageWithFallback } from "../util/errorMessage";
 
 function safeJsonStringify(value: unknown): string {
   return JSON.stringify(value, (key, val) => {
@@ -190,6 +191,7 @@ export async function inconvo(): Promise<Router> {
         requestDialect: parsed.dialect,
         previewLimit: parsed.previewLimit ?? 1,
         db,
+        pgConnectionString: env.INCONVO_DATABASE_URL,
       });
       return res
         .status(200)
@@ -204,6 +206,10 @@ export async function inconvo(): Promise<Router> {
       }
 
       if (error instanceof QueryExecutionError) {
+        const message = errorMessageWithFallback(
+          error,
+          "Query execution failed during virtual table validation.",
+        );
         return res
           .status(200)
           .setHeader("Content-Type", "application/json")
@@ -212,7 +218,7 @@ export async function inconvo(): Promise<Router> {
               validateVirtualTableResponseSchema.parse({
                 ok: false,
                 error: {
-                  message: error.details.message,
+                  message,
                   sql: error.details.sql,
                   code: error.details.code,
                   detail: error.details.detail,
@@ -223,7 +229,10 @@ export async function inconvo(): Promise<Router> {
           );
       }
 
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = errorMessageWithFallback(
+        error,
+        "Virtual table validation failed.",
+      );
       logger.error({ error }, "POST /validate/virtual-table - failed");
       return res
         .status(200)

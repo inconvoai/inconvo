@@ -2,8 +2,9 @@
 import { Command } from "commander";
 import { createRequire } from "module";
 import { devCommand } from "./commands/dev.js";
-import { configureCommand } from "./commands/configure.js";
 import { telemetryCommand } from "./commands/telemetry.js";
+import { modelCommand } from "./commands/model.js";
+import { connectionCommand } from "./commands/connection.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -14,7 +15,8 @@ const program = new Command()
   .version(pkg.version);
 
 program.addCommand(devCommand);
-program.addCommand(configureCommand);
 program.addCommand(telemetryCommand);
+program.addCommand(modelCommand);
+program.addCommand(connectionCommand);
 
 program.parse();

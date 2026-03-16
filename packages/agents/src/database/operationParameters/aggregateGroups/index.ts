@@ -20,6 +20,7 @@ import {
   buildOperationParametersTableSchemasString,
   createOperationParametersAgent,
 } from "../utils/operationParametersAgent";
+import { buildJoinDescriptorDescription } from "../utils/joinGuidance";
 import { buildPromptCacheKey } from "../../../utils/promptCacheKey";
 import type { AIProvider } from "../../../utils/getAIModel";
 
@@ -72,7 +73,9 @@ export async function defineAggregateGroupsOperationParameters(
       const columnType = column.effectiveType ?? column.type;
       columnCatalog.set(key, {
         isTemporal: temporalTypes.has(columnType),
-        isNumeric: !isActiveEnumColumn(column.valueEnum) && NUMERIC_LOGICAL_TYPES.has(columnType),
+        isNumeric:
+          !isActiveEnumColumn(column.valueEnum) &&
+          NUMERIC_LOGICAL_TYPES.has(columnType),
       });
     });
     tableSchema.computedColumns.forEach(
@@ -106,16 +109,14 @@ export async function defineAggregateGroupsOperationParameters(
     })
     .strip();
 
-  const joinOptionDescriptions = joinOptions
-    .map((option) => {
-      const pathDescription = option.path
-        .map(
-          (hop) => `[${hop.source.join(", ")}] -> [${hop.target.join(", ")}]`,
-        )
-        .join(" | ");
-      return `${option.name} (${option.table}) path=${pathDescription}`;
-    })
-    .join("\n");
+  const joinDescription = buildJoinDescriptorDescription(
+    "Array of join descriptors required when referencing related-table columns.",
+    joinOptions,
+    {
+      emptyStateMessage:
+        "Array of join descriptors (no joins available from this table).",
+    },
+  );
 
   const applyAggregateGroupsOperationParametersTool = tool(
     async (input: {
@@ -141,7 +142,11 @@ export async function defineAggregateGroupsOperationParameters(
       schema: z.object({
         candidateOperationParameters: z
           .object({
-            joins: z.array(joinSchema).nullable().optional(),
+            joins: z
+              .array(joinSchema)
+              .nullable()
+              .optional()
+              .describe(joinDescription),
             groupBy: z
               .array(
                 z.union([
@@ -277,11 +282,7 @@ export async function defineAggregateGroupsOperationParameters(
               })
               .optional(),
           })
-          .describe(
-            joinOptionDescriptions
-              ? `Candidate aggregateGroups params object. Available joins:\n${joinOptionDescriptions}`
-              : "Candidate aggregateGroups params object; if valid it will be added to the query",
-          ),
+          .describe("Candidate aggregateGroups params object."),
       }),
       responseFormat: "content_and_artifact",
       verboseParsingErrors: true,

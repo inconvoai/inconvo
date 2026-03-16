@@ -386,7 +386,6 @@ export type VirtualTableValidationResult =
   | {
       ok: true;
       columns: VirtualTableValidationColumn[];
-      previewRows?: Array<Record<string, unknown>>;
     }
   | {
       ok: false;
@@ -414,7 +413,6 @@ export interface UpdateVirtualTableSqlPayload {
 
 export interface VirtualTableColumnRefreshResult {
   tableId: string;
-  previewRows: Array<Record<string, unknown>>;
   createdColumns: number;
   updatedColumns: number;
   removedColumns: string[];

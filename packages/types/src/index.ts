@@ -550,7 +550,6 @@ export const validateVirtualTableSuccessSchema = z
   .object({
     ok: z.literal(true),
     columns: z.array(validateVirtualTableColumnSchema),
-    previewRows: z.array(z.record(z.string(), z.unknown())).optional(),
   })
   .strict();
 

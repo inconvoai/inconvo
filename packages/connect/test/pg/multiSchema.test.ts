@@ -10,12 +10,14 @@ import type { Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
 import type { SchemaResponse } from "../../src/types/types";
 import type { OperationContext } from "../../src/operations/types";
+import { containsSchemaQualifiedTable as containsSchemaTable } from "../utils/sqlAssertions";
 
 describe("PostgreSQL Multi-Schema Operations", () => {
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let findMany: (typeof import("~/operations/findMany"))["findMany"];
   let count: (typeof import("~/operations/count"))["count"];
+  let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
   let groupBy: (typeof import("~/operations/groupBy"))["groupBy"];
   let aggregate: (typeof import("~/operations/aggregate"))["aggregate"];
   let clearSchemaCache: (typeof import("~/util/schemaCache"))["clearSchemaCache"];
@@ -23,17 +25,6 @@ describe("PostgreSQL Multi-Schema Operations", () => {
   // Custom context with HR schema tables
   let hrCtx: OperationContext;
   let publicCtx: OperationContext;
-
-  // Helper to check if SQL contains schema-qualified table reference
-  // PostgreSQL quotes identifiers, so "hr"."employees" is valid
-  const containsSchemaTable = (sqlStr: string, schema: string, table: string) => {
-    return (
-      sqlStr.includes(`${schema}.${table}`) ||
-      sqlStr.includes(`"${schema}"."${table}"`) ||
-      sqlStr.includes(`"${schema}".${table}`) ||
-      sqlStr.includes(`${schema}."${table}"`)
-    );
-  };
 
   beforeAll(async () => {
     loadTestEnv("postgresql");
@@ -47,6 +38,7 @@ describe("PostgreSQL Multi-Schema Operations", () => {
     QuerySchema = (await import("~/types/querySchema")).QuerySchema;
     findMany = (await import("~/operations/findMany")).findMany;
     count = (await import("~/operations/count")).count;
+    countRelations = (await import("~/operations/countRelations")).countRelations;
     groupBy = (await import("~/operations/groupBy")).groupBy;
     aggregate = (await import("~/operations/aggregate")).aggregate;
     const { getDb } = await import("~/dbConnection");
@@ -374,6 +366,56 @@ describe("PostgreSQL Multi-Schema Operations", () => {
       expect(response.data._count["projects.id"]).toBe(
         Number(expected.project_count),
       );
+    });
+  });
+
+  describe("countRelations with tableSchema", () => {
+    it("counts hr.employees per hr.department", async () => {
+      const iql = {
+        operation: "countRelations" as const,
+        table: "departments",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [],
+        operationParameters: {
+          columns: ["id", "name"],
+          joins: [
+            {
+              table: "employees",
+              name: "employees",
+              path: [
+                {
+                  source: ["departments.id"],
+                  target: ["employees.department_id"],
+                },
+              ],
+            },
+          ],
+          relationsToCount: [
+            {
+              name: "employees",
+              distinct: null,
+            },
+          ],
+          orderBy: {
+            name: "employees",
+            direction: "desc" as const,
+          },
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await countRelations(db, parsed, hrCtx);
+      const rows = Array.isArray(response) ? response : response.data;
+
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "hr", "employees")).toBe(true);
+      expect(Array.isArray(rows)).toBe(true);
+      expect(rows.length).toBeGreaterThan(0);
+      rows.forEach((row: any) => {
+        expect(Number.isFinite(Number(row.employees_count))).toBe(true);
+      });
     });
   });
 
@@ -780,6 +822,89 @@ describe("PostgreSQL Multi-Schema Operations", () => {
       expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
       expect(containsSchemaTable(response.query.sql, "hr", "employees")).toBe(true);
       expect(response.data).toBeDefined();
+    });
+  });
+
+  describe("countRelations cross-schema", () => {
+    // Exercises the primary cross-schema scenario: base table in `hr`,
+    // relation target in `public`. No real FK data exists, so we only
+    // assert on SQL correctness (both schemas appear in the generated SQL).
+    let crossSchemaCtx: OperationContext;
+
+    beforeAll(() => {
+      const crossSchema: SchemaResponse = {
+        tables: [
+          {
+            name: "departments",
+            schema: "hr",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "name", type: "string" },
+            ],
+            relations: [
+              {
+                name: "organisations",
+                isList: true,
+                targetTable: "organisations",
+                targetSchema: "public",
+                sourceColumns: ["id"],
+                targetColumns: ["id"],
+              },
+            ],
+          },
+          {
+            name: "organisations",
+            schema: "public",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "name", type: "string" },
+            ],
+            relations: [],
+          },
+        ],
+        databaseSchemas: ["hr", "public"],
+      };
+      crossSchemaCtx = { schema: crossSchema, dialect: "postgresql" };
+    });
+
+    it("schema-qualifies both hr.departments and public.organisations in SQL", async () => {
+      const iql = {
+        operation: "countRelations" as const,
+        table: "departments",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [],
+        operationParameters: {
+          columns: ["id", "name"],
+          joins: [
+            {
+              table: "organisations",
+              name: "organisations",
+              path: [
+                {
+                  source: ["departments.id"],
+                  target: ["organisations.id"],
+                },
+              ],
+            },
+          ],
+          relationsToCount: [
+            {
+              name: "organisations",
+              distinct: null,
+            },
+          ],
+          orderBy: null,
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await countRelations(db, parsed, crossSchemaCtx);
+
+      // Both schemas must appear in the generated SQL
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "public", "organisations")).toBe(true);
     });
   });
 

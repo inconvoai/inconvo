@@ -29,7 +29,7 @@ async function buildWorkerBundle() {
     format: "esm",
     platform: "neutral",
     target: "es2022",
-    external: ["cloudflare:workers"],
+    external: ["cloudflare:workers", "node:*"],
   });
 
   const wranglerConfig = await fs.readFile(wranglerSource, "utf-8");

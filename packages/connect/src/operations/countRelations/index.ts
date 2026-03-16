@@ -81,15 +81,12 @@ function resolveRelationTargetSource({
       (relation) => relation.targetTable === targetTableName,
     );
 
-  // Fall back through: relation metadata → schema-matched table → any table with
-  // the same name → base table's schema. This covers cross-schema relations where
-  // the target lives in a different schema than the base table.
+  // Fall back through: relation metadata → table schema lookup → base table's
+  // schema. This covers cross-schema relations where the target lives in a
+  // different schema than the base table.
   const targetSchema =
     relationFromSchema?.targetSchema ??
-    schema.tables.find(
-      (table) => table.name === targetTableName && table.schema === tableSchema,
-    )?.schema ??
-    schema.tables.find((table) => table.name === targetTableName)?.schema ??
+    targetTable?.schema ??
     tableSchema ??
     null;
 

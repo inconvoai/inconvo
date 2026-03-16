@@ -1,25 +1,9 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
+import { containsSchemaQualifiedTable as hasDatasetQualifiedTable } from "../utils/sqlAssertions";
 
 describe("BigQuery countRelations Operation", () => {
-  const hasDatasetQualifiedTable = (
-    sqlStr: string,
-    dataset: string,
-    table: string,
-  ) => {
-    const escapeRegex = (value: string) =>
-      value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const datasetEscaped = escapeRegex(dataset);
-    const tableEscaped = escapeRegex(table);
-    const pattern =
-      '(?:`|"|\\[)?' +
-      datasetEscaped +
-      '(?:`|"|\\])?\\s*\\.\\s*(?:`|"|\\[)?' +
-      tableEscaped +
-      '(?:`|"|\\])?';
-    return new RegExp(pattern, "i").test(sqlStr);
-  };
 
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];

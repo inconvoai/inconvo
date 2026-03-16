@@ -10,6 +10,7 @@ import type { Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
 import type { SchemaResponse } from "../../src/types/types";
 import type { OperationContext } from "../../src/operations/types";
+import { containsSchemaQualifiedTable as containsSchemaTable } from "../utils/sqlAssertions";
 
 describe("MSSQL Multi-Schema Operations", () => {
   let db: Kysely<any>;
@@ -24,18 +25,6 @@ describe("MSSQL Multi-Schema Operations", () => {
   // Custom context with HR schema tables
   let hrCtx: OperationContext;
   let dboCtx: OperationContext;
-
-  // Helper to check if SQL contains schema-qualified table reference
-  // MSSQL quotes identifiers, so "hr"."employees" is valid
-  const containsSchemaTable = (sqlStr: string, schema: string, table: string) => {
-    return (
-      sqlStr.includes(`${schema}.${table}`) ||
-      sqlStr.includes(`"${schema}"."${table}"`) ||
-      sqlStr.includes(`"${schema}".${table}`) ||
-      sqlStr.includes(`${schema}."${table}"`) ||
-      sqlStr.includes(`[${schema}].[${table}]`)
-    );
-  };
 
   beforeAll(async () => {
     loadTestEnv("mssql");

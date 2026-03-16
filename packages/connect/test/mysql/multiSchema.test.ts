@@ -515,6 +515,89 @@ describe("MySQL Multi-Schema Operations", () => {
     });
   });
 
+  describe("countRelations cross-schema", () => {
+    // Exercises the primary cross-schema scenario: base table in `hr`,
+    // relation target in `hosted` (MySQL's default database).
+    // No real FK data exists, so we only assert on SQL correctness.
+    let crossSchemaCtx: OperationContext;
+
+    beforeAll(() => {
+      const crossSchema: SchemaResponse = {
+        tables: [
+          {
+            name: "departments",
+            schema: "hr",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "name", type: "string" },
+            ],
+            relations: [
+              {
+                name: "organisations",
+                isList: true,
+                targetTable: "organisations",
+                targetSchema: "hosted",
+                sourceColumns: ["id"],
+                targetColumns: ["id"],
+              },
+            ],
+          },
+          {
+            name: "organisations",
+            schema: "hosted",
+            columns: [
+              { name: "id", type: "number" },
+              { name: "name", type: "string" },
+            ],
+            relations: [],
+          },
+        ],
+        databaseSchemas: ["hr", "hosted"],
+      };
+      crossSchemaCtx = { schema: crossSchema, dialect: "mysql" };
+    });
+
+    it("schema-qualifies both hr.departments and hosted.organisations in SQL", async () => {
+      const iql = {
+        operation: "countRelations" as const,
+        table: "departments",
+        tableSchema: "hr",
+        tableConditions: null,
+        whereAndArray: [],
+        operationParameters: {
+          columns: ["id", "name"],
+          joins: [
+            {
+              table: "organisations",
+              name: "organisations",
+              path: [
+                {
+                  source: ["departments.id"],
+                  target: ["organisations.id"],
+                },
+              ],
+            },
+          ],
+          relationsToCount: [
+            {
+              name: "organisations",
+              distinct: null,
+            },
+          ],
+          orderBy: null,
+          limit: 10,
+        },
+      };
+
+      const parsed = QuerySchema.parse(iql);
+      const response = await countRelations(db, parsed, crossSchemaCtx);
+
+      // Both schemas must appear in the generated SQL
+      expect(containsSchemaTable(response.query.sql, "hr", "departments")).toBe(true);
+      expect(containsSchemaTable(response.query.sql, "hosted", "organisations")).toBe(true);
+    });
+  });
+
   describe("verify database isolation", () => {
     it("hosted.users and hr.employees are separate tables", async () => {
       // Query hosted database users

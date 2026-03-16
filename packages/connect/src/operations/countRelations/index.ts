@@ -77,6 +77,8 @@ function resolveRelationTargetSource({
       (relation) => relation.name === relationAlias,
     ) ??
     baseTableFromSchema?.relations?.find((relation) => relation.name === joinAlias) ??
+    // Last-resort match by target table name. May pick the wrong relation if
+    // multiple relations point to the same target table (ambiguous).
     baseTableFromSchema?.relations?.find(
       (relation) => relation.targetTable === targetTableName,
     );

@@ -14,6 +14,7 @@ import {
   resolveBaseSource,
   resolveJoinTargetSource,
 } from "../utils/logicalTableSource";
+import { getTableIdentifier } from "../utils/tableIdentifier";
 
 type RelationCountPlan = {
   cteName: string;
@@ -24,6 +25,70 @@ type RelationCountPlan = {
   sourceColumns: ReturnType<typeof normaliseJoinHop>["source"];
   cteQuery: any;
 };
+
+/**
+ * Resolve the source expression for a relation target table in a countRelations CTE.
+ *
+ * For virtual tables, delegates to `resolveJoinTargetSource` which returns a subquery
+ * expression. For physical tables, resolves the target schema from relation metadata
+ * and returns a schema-qualified identifier.
+ */
+function resolveRelationTargetSource({
+  targetTableName,
+  relationAlias,
+  joinAlias,
+  baseTableName,
+  tableSchema,
+  ctx,
+}: {
+  targetTableName: string;
+  relationAlias: string;
+  joinAlias: string;
+  baseTableName: string;
+  tableSchema: string | null | undefined;
+  ctx: OperationContext;
+}) {
+  const { schema, dialect } = ctx;
+
+  // Virtual tables need subquery wrapping — delegate to the shared helper.
+  const targetTable = schema.tables.find((t) => t.name === targetTableName);
+  if (targetTable?.virtualTable) {
+    return resolveJoinTargetSource({
+      tableName: targetTableName,
+      sqlAlias: targetTableName,
+      schema,
+      dialect,
+    }).source;
+  }
+
+  // BigQuery relation joins are sensitive to dataset-qualified refs. Preserve
+  // existing behavior and keep relation table ids unqualified there.
+  if (dialect === "bigquery") {
+    return targetTableName;
+  }
+
+  const baseTableFromSchema =
+    schema.tables.find(
+      (table) => table.name === baseTableName && table.schema === tableSchema,
+    ) ?? schema.tables.find((table) => table.name === baseTableName);
+
+  const relationFromSchema =
+    baseTableFromSchema?.relations?.find(
+      (relation) => relation.name === relationAlias,
+    ) ??
+    baseTableFromSchema?.relations?.find((relation) => relation.name === joinAlias);
+
+  // Fall back through: relation metadata → table schema lookup → base table's
+  // schema. This covers cross-schema relations where the target lives in a
+  // different schema than the base table.
+  const targetSchema =
+    relationFromSchema?.targetSchema ??
+    targetTable?.schema ??
+    tableSchema ??
+    null;
+
+  return getTableIdentifier(targetTableName, targetSchema, dialect);
+}
 
 export async function countRelations(
   db: Kysely<any>,
@@ -77,6 +142,14 @@ export async function countRelations(
         `Unable to determine target table for relation ${relation.name}.`,
       );
     }
+    const targetSource = resolveRelationTargetSource({
+      targetTableName,
+      relationAlias: relation.name,
+      joinAlias: joinDescriptor.name ?? joinDescriptor.table,
+      baseTableName: table,
+      tableSchema: query.tableSchema,
+      ctx,
+    });
 
     const cteName = `${relation.name.replace(/\W+/g, "_")}_count`;
     const countColumnAlias = relation.distinct
@@ -99,13 +172,6 @@ export async function countRelations(
         `Distinct column ${relation.distinct} must belong to relation table ${targetTableName}.`,
       );
     }
-
-    const { source: targetSource } = resolveJoinTargetSource({
-      tableName: targetTableName,
-      sqlAlias: targetTableName,
-      schema,
-      dialect,
-    });
 
     let cte = db.selectFrom(targetSource as any);
 

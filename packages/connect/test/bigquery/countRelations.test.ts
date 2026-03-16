@@ -1,8 +1,10 @@
 // @ts-nocheck
 import { sql, type Kysely } from "kysely";
 import { loadTestEnv, getTestContext } from "../loadTestEnv";
+import { containsSchemaQualifiedTable as hasDatasetQualifiedTable } from "../utils/sqlAssertions";
 
 describe("BigQuery countRelations Operation", () => {
+
   let db: Kysely<any>;
   let QuerySchema: (typeof import("~/types/querySchema"))["QuerySchema"];
   let countRelations: (typeof import("~/operations/countRelations"))["countRelations"];
@@ -63,6 +65,13 @@ describe("BigQuery countRelations Operation", () => {
 
     const parsed = QuerySchema.parse(iql);
     const response = await countRelations(db, parsed, ctx);
+    // loadTestEnv("bigquery") throws if INCONVO_BIGQUERY_DATASET is unset,
+    // so dataset is always defined when this test runs.
+    const dataset = process.env.INCONVO_BIGQUERY_DATASET!;
+    // Keep relation refs unqualified to avoid BigQuery dataset-join regressions.
+    expect(hasDatasetQualifiedTable(response.query.sql, dataset, "orders")).toBe(
+      false,
+    );
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
@@ -123,6 +132,10 @@ describe("BigQuery countRelations Operation", () => {
 
     const parsed = QuerySchema.parse(iql);
     const response = await countRelations(db, parsed, ctx);
+    const dataset = process.env.INCONVO_BIGQUERY_DATASET!;
+    expect(hasDatasetQualifiedTable(response.query.sql, dataset, "orders")).toBe(
+      false,
+    );
 
     const resultRows = Array.isArray(response) ? response : response.data;
     expect(resultRows.length).toBeLessThanOrEqual(5);

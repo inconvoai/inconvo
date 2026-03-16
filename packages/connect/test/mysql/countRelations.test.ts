@@ -144,4 +144,49 @@ describe("MySQL countRelations Operation", () => {
 
     expect(resultRows).toEqual(expected);
   }, 10000);
+
+  test("Returns an empty array when no rows match", async () => {
+    const iql = {
+      table: "products",
+      tableConditions: null,
+      whereAndArray: [
+        {
+          "products.title": {
+            equals: "__count_relations_missing_title_9f9a0ff0__",
+          },
+        },
+      ],
+      operation: "countRelations" as const,
+      operationParameters: {
+        columns: ["id", "title"],
+        joins: [
+          {
+            table: "orders",
+            name: "orders",
+            path: [
+              {
+                source: ["products.id"],
+                target: ["orders.product_id"],
+              },
+            ],
+          },
+        ],
+        relationsToCount: [
+          {
+            name: "orders",
+            distinct: null,
+          },
+        ],
+        orderBy: null,
+        limit: 5,
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    const response = await countRelations(db, parsed, ctx);
+    const resultRows = Array.isArray(response) ? response : response.data;
+
+    expect(Array.isArray(resultRows)).toBe(true);
+    expect(resultRows).toEqual([]);
+  }, 10000);
 });

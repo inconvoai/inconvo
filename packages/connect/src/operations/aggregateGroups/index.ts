@@ -224,7 +224,16 @@ export async function aggregateGroups(
         }
         appliedHops.add(hopKey);
         const metadata = normaliseJoinHop(hop);
-        groupQuery = applyJoinHop(groupQuery, joinType, metadata, schema, dialect);
+        groupQuery = applyJoinHop(
+          groupQuery,
+          joinType,
+          metadata,
+          schema,
+          dialect,
+          {
+            baseTableName: table,
+          },
+        );
       }
     }
   }

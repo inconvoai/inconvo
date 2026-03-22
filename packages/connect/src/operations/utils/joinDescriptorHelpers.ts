@@ -58,6 +58,9 @@ export function applyJoinHop(
   hop: JoinHopMetadata,
   schema?: SchemaResponse,
   dialect?: DatabaseDialect,
+  options?: {
+    baseTableName?: string;
+  },
 ) {
   const targetTableName = hop.target[0]?.tableName;
   if (!targetTableName) {
@@ -78,6 +81,12 @@ export function applyJoinHop(
 
   // Build column refs with schema-qualified table names
   const getTableId = (tableName: string) => {
+    // The base table appears in the FROM clause under its unqualified name
+    // (Kysely aliases it), so the ON clause must reference that same alias
+    // rather than a schema-qualified identifier.
+    if (tableName === options?.baseTableName) {
+      return tableName;
+    }
     if (!schema || !dialect) return tableName;
     if (dialect === "bigquery") return tableName;
     const table = schema.tables.find((t) => t.name === tableName);

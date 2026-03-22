@@ -134,7 +134,16 @@ export async function aggregate(
         continue; // Skip duplicate hop
       }
       appliedHops.add(hopKey);
-      dbQuery = applyJoinHop(dbQuery, joinDescriptor.joinType, hop, schema, dialect);
+      dbQuery = applyJoinHop(
+        dbQuery,
+        joinDescriptor.joinType,
+        hop,
+        schema,
+        dialect,
+        {
+          baseTableName: table,
+        },
+      );
     }
   }
 

@@ -89,3 +89,91 @@ describe("count SQL JSON builder parity", () => {
     },
   );
 });
+
+const multiSchemaSchema = {
+  tables: [
+    {
+      name: "orders",
+      schema: "bench_debugging_pretext_1_wygmjicy",
+      columns: [
+        { name: "id", type: "number" },
+        { name: "product_id", type: "number" },
+      ],
+    },
+    {
+      name: "products",
+      schema: "bench_debugging_pretext_1_wygmjicy",
+      columns: [
+        { name: "id", type: "number" },
+        { name: "title", type: "string" },
+      ],
+    },
+  ],
+  databaseSchemas: ["bench_debugging_pretext_1_wygmjicy", "public"],
+};
+
+describe("count SQL generation with explicit tableSchema joins", () => {
+  let countOperation: (typeof import("~/operations/count"))["count"];
+  const executeWithLoggingMock = jest.fn(async (query: any) => ({
+    rows: [{ _count: {}, _countDistinct: {} }],
+    compiled: query.compile(),
+  }));
+
+  beforeAll(async () => {
+    await jest.unstable_mockModule("~/operations/utils/executeWithLogging", () => ({
+      executeWithLogging: executeWithLoggingMock,
+    }));
+    ({ count: countOperation } = await import("~/operations/count"));
+  });
+
+  beforeEach(() => {
+    executeWithLoggingMock.mockClear();
+  });
+
+  it("references the base table by its FROM-clause name in JOIN conditions", async () => {
+    const db = new Kysely<any>({
+      dialect: new PostgresDialect({ pool: {} as any }),
+    });
+
+    const response = await countOperation(
+      db,
+      {
+        table: "orders",
+        tableSchema: "public",
+        tableConditions: null,
+        whereAndArray: [],
+        operation: "count",
+        operationParameters: {
+          count: ["orders.id"],
+          countDistinct: null,
+          joins: [
+            {
+              joinType: "inner",
+              name: "orders.product",
+              path: [
+                {
+                  source: ["orders.product_id"],
+                  target: ["products.id"],
+                },
+              ],
+              table: "products",
+            },
+          ],
+        },
+      } as any,
+      {
+        schema: multiSchemaSchema,
+        dialect: "postgresql",
+      },
+    );
+
+    expect(response.query.sql).toContain('from "public"."orders"');
+    expect(response.query.sql).toContain(
+      'inner join "bench_debugging_pretext_1_wygmjicy"."products"',
+    );
+    expect(response.query.sql).toContain('"orders"."product_id"');
+    expect(response.query.sql).not.toContain(
+      '"bench_debugging_pretext_1_wygmjicy"."orders"."product_id"',
+    );
+  });
+});

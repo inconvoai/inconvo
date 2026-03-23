@@ -58,7 +58,16 @@ export async function groupBy(
         }
         appliedHops.add(hopKey);
         const metadata = normaliseJoinHop(hop);
-        dbQuery = applyJoinHop(dbQuery, joinType, metadata, schema, dialect);
+        dbQuery = applyJoinHop(
+          dbQuery,
+          joinType,
+          metadata,
+          schema,
+          dialect,
+          {
+            baseTableName: table,
+          },
+        );
       }
     }
   }

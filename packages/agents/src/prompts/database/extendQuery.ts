@@ -36,7 +36,10 @@ Table Schemas:
 {tableSchema}
 
 User Context:
-The user's request is scoped to the following context.
+These are runtime context values available for this request.
+- Do not assume every key becomes a row-level database filter.
+- Only configured table conditions, access policies, or other documented mechanisms may consume specific keys.
+- Your job here is not to turn user context into WHERE filters; WHERE filtering is handled separately.
 {userContext}
 
 Current Date: {currentDate}

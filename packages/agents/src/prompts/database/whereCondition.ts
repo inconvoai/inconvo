@@ -13,7 +13,7 @@ export const whereConditionPrompt = ChatPromptTemplate.fromMessages([
 
 # Instructions
 - Return null only when:
-(a) The natural-language question refers to all records already included by static conditions,
+(a) The natural-language question refers to all records already included by already-applied filters,
 AND (b) it introduces no temporal, categorical, numeric, or relational restriction.
 - If a filter is required → output a single, valid tool call to
 applyFilterTool.
@@ -76,18 +76,18 @@ applyFilterTool.
 - "between A and B": If date lacks a time, use 00:00:00.000Z for A and 23:59:59.999Z for B.
 - Explicit times: Use as provided (UTC unless stated).
 - Use the "Today's Date" given in context; do not generate it at runtime.
-- Any phrase indicating a time period (e.g., “last week”, “previous month”, “yesterday”, “today”, “this quarter”, or “in 2024”) always requires a WHERE condition on the relevant DateTime column, even if the question also includes grouping, aggregation, or static filters.
+- Any phrase indicating a time period (e.g., “last week”, “previous month”, “yesterday”, “today”, “this quarter”, or “in 2024”) always requires a WHERE condition on the relevant DateTime column, even if the question also includes grouping, aggregation, or already-applied filters.
 
 # Validation & Tool Usage
 - Before each significant tool call, list the bullet point plan of what you want the tool call to achieve.
 
 # When to Return null
-- When results are fully determined by aggregation, sorting, limiting, or static table filters alone.
+- When results are fully determined by aggregation, sorting, limiting, or already-applied filters alone.
 - When no additional or implied narrowing is needed.
-- Only return null if no new constraints whatsoever are introduced beyond the static filters.
+- Only return null if no new constraints whatsoever are introduced beyond the already-applied filters.
 
 # When to Add Filters
-- Whenever narrowing (attribute, relation, date, threshold, text search, or other non-static conditions) is required.
+- Whenever narrowing (attribute, relation, date, threshold, text search, or other conditions beyond the already-applied filters) is required.
 - Only apply strictly documented mappings for domain phrases; do not infer or guess.
 
 # To-many Relation Filters
@@ -121,8 +121,13 @@ applyFilterTool.
 - Joined table filter: \`{{ AND: [ {{ "joinedTable.status": {{ equals: "active" }} }} ] }}\`
 
 # Context
-## Important: Context Conditions & Tenant Isolation
-The \`Context Conditions\` below handle tenant/organisation isolation. These filters are automatically applied to every query. Each condition specifies which table it applies to via the "table" field.
+## Important: Context Conditions & Existing Filters
+The \`Context Conditions\` below are the row-level filters already derived for this query from configured table conditions.
+
+- Do not assume every \`userContext\` key becomes a row-level filter.
+- A user-context value only filters rows when a table condition explicitly references that key.
+- If \`Context Conditions\` is empty, there are no automatic row-level filters from user context for this query.
+- Each condition specifies which table it applies to via the \`table\` field.
 
 - Today's Date: {date}
 - Table: {tableName}

@@ -49,7 +49,7 @@ When a query includes joins, you can filter directly on joined table columns usi
 • { "orders.status": { equals: "active" } } — filter on the joined orders table
 • { "products.category": { in: ["electronics", "books"] } } — filter joined products
 • Works with all standard operators (equals, not, lt, gt, contains, etc.)
-• Row-level security conditions are auto-applied to joined tables
+• Configured table conditions are auto-applied to joined tables when those tables have them
 • This is simpler than relation-based filters when you already have a join defined
 
 When to use each approach:

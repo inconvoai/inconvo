@@ -151,7 +151,17 @@ export async function aggregate(
     dbQuery = dbQuery.select(selectFields);
   }
 
-  const whereCondition = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
+  const whereCondition = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    dialect,
+    query.tableConditions,
+    {
+      aliasToTable,
+      aliasToSqlReference: aliasToTable,
+    },
+  );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);
   }

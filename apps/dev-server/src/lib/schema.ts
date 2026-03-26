@@ -92,6 +92,7 @@ export async function getSchema(params?: {
       schema: true,
       access: true,
       context: true,
+      summary: true,
       columns: {
         select: {
           name: true,
@@ -259,6 +260,7 @@ export async function getSchema(params?: {
       schema: table.schema ?? null,
       access: table.access as "QUERYABLE" | "JOINABLE" | "OFF",
       context: table.context ?? null,
+      summary: table.summary ?? null,
       columns,
       computedColumns,
       outwardRelations,
@@ -658,6 +660,7 @@ export async function getTableIds(params: {
       name: true,
       access: true,
       source: true,
+      summary: true,
       condition: {
         select: {
           id: true,
@@ -679,6 +682,7 @@ export async function getTableIds(params: {
     name: table.name,
     access: table.access,
     source: table.source,
+    summary: table.summary ?? null,
     hasCondition: !!table.condition,
     hasAccessPolicy: !!table.accessPolicy,
   }));

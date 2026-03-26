@@ -47,6 +47,9 @@ export async function defineCountOperationParameters(
     baseColumns,
     computedColumns: computedColumns.map((column) => column.name),
     joinOptions,
+    joinAliasColumns: Object.fromEntries(
+      joinOptions.map((option) => [option.name, option.selectableColumns]),
+    ),
   };
 
   const applyCountOperationParametersTool = tool(

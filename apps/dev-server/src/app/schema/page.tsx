@@ -77,6 +77,7 @@ interface ApiTableId {
   name: string;
   access: string;
   source: TableSource;
+  summary: string | null;
   hasCondition: boolean;
   hasAccessPolicy: boolean;
 }
@@ -137,6 +138,7 @@ interface ApiTableDetail {
   source: TableSource;
   access: string;
   context: string | null;
+  summary: string | null;
   virtualTableConfig: {
     id: string;
     dialect: VirtualTableDialect;
@@ -225,6 +227,7 @@ function transformTableSchema(api: ApiTableDetail): TableSchema {
     source: api.source,
     access: api.access as TableAccess,
     context: api.context,
+    summary: api.summary,
     virtualTableConfig: api.virtualTableConfig
       ? {
           id: api.virtualTableConfig.id,
@@ -370,6 +373,7 @@ function SchemaPageContent() {
         id: table.id,
         name: table.name,
         source: table.source,
+        summary: table.summary,
         access: table.access as TableAccess,
         columnCount: 0,
         selectedColumnCount: 0,

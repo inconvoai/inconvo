@@ -22,6 +22,9 @@ const ctx: CountValidatorContext = {
       selectableColumns: ["id", "total", "createdAt"],
     },
   ],
+  joinAliasColumns: {
+    "users.orders": ["id", "total", "createdAt"],
+  },
 };
 
 describe("count validator", () => {

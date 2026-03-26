@@ -238,7 +238,7 @@ export function createQuestionConditionsDynamicSchema(
   tableSchema: Schema[number],
   fullSchema: Schema,
   tableName: string,
-  joinedTableNames?: string[],
+  joinedScalarFilterTargets?: string[] | Record<string, string>,
 ): z.ZodType<QuestionConditions> {
   const outwardRelations = tableSchema.outwardRelations ?? [];
 
@@ -318,20 +318,38 @@ export function createQuestionConditionsDynamicSchema(
     );
   });
 
-  const qualifiedColumnSchemas: z.ZodTypeAny[] = [];
-  if (joinedTableNames?.length) {
-    joinedTableNames.forEach((joinedTableName) => {
-      const joinedTable = fullSchema.find((table) => table.name === joinedTableName);
-      if (!joinedTable) {
-        return;
-      }
-      qualifiedColumnSchemas.push(
-        ...buildScalarSchemasForTable({
-          table: joinedTable,
-          keyBuilder: (columnName) => `${joinedTableName}.${columnName}`,
+  const normalizedJoinedScalarFilterTargets = Array.isArray(
+    joinedScalarFilterTargets,
+  )
+    ? joinedScalarFilterTargets.map((joinedTableName) => ({
+        qualifier: joinedTableName,
+        tableName: joinedTableName,
+      }))
+    : Object.entries(joinedScalarFilterTargets ?? {}).map(
+        ([qualifier, targetTableName]) => ({
+          qualifier,
+          tableName: targetTableName,
         }),
       );
-    });
+
+  const qualifiedColumnSchemas: z.ZodTypeAny[] = [];
+  if (normalizedJoinedScalarFilterTargets.length > 0) {
+    normalizedJoinedScalarFilterTargets.forEach(
+      ({ qualifier, tableName: joinedTableName }) => {
+        const joinedTable = fullSchema.find(
+          (table) => table.name === joinedTableName,
+        );
+        if (!joinedTable) {
+          return;
+        }
+        qualifiedColumnSchemas.push(
+          ...buildScalarSchemasForTable({
+            table: joinedTable,
+            keyBuilder: (columnName) => `${qualifier}.${columnName}`,
+          }),
+        );
+      },
+    );
   }
 
   const filterObjectUnionParts: z.ZodTypeAny[] = [];
@@ -370,13 +388,13 @@ export function validateQuestionConditions(
   tableSchema: Schema[number],
   fullSchema: Schema,
   tableName: string,
-  joinedTableNames?: string[],
+  joinedScalarFilterTargets?: string[] | Record<string, string>,
 ) {
   const schema = createQuestionConditionsDynamicSchema(
     tableSchema,
     fullSchema,
     tableName,
-    joinedTableNames,
+    joinedScalarFilterTargets,
   );
   return schema.safeParse(candidate);
 }

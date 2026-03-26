@@ -44,6 +44,117 @@ export type AggregateGroupsValidationResult =
   | { status: "valid"; result: AggregateGroupsQuery["operationParameters"] }
   | AggregateGroupsInvalidResult;
 
+function extractQualifier(column: string): string {
+  const lastDot = column.lastIndexOf(".");
+  if (lastDot === -1) {
+    return column;
+  }
+  return column.slice(0, lastDot);
+}
+
+function summarizeColumns(columns: string[], limit = 8): string {
+  if (columns.length === 0) {
+    return "(none)";
+  }
+
+  if (columns.length <= limit) {
+    return columns.join(", ");
+  }
+
+  return `${columns.slice(0, limit).join(", ")}, ... (+${columns.length - limit} more)`;
+}
+
+function buildGroupByKeyGuidance(
+  ctx: AggregateGroupsValidatorContext,
+): string {
+  return [
+    "Invalid groupBy entry.",
+    `1. { type: "column", column: <non-temporal column> } — regular grouping. Examples: ${summarizeColumns(ctx.groupableColumns)}.`,
+    `2. { type: "dateInterval", column: <temporal column>, interval: "day"|"week"|"month"|"quarter"|"year"|"hour" } — timeline grouping. Temporal columns: ${summarizeColumns(ctx.intervalColumns)}.`,
+    '3. { type: "dateComponent", column: <temporal column>, component: "dayOfWeek"|"monthOfYear"|"quarterOfYear" } — recurring calendar groupings.',
+    "If grouping on a joined table, use the selected join alias as the prefix (e.g. `product.category`).",
+  ].join("\n");
+}
+
+function summarizeQualifiedColumnsForAlias(
+  columns: string[],
+  alias: string,
+  limit = 6,
+): string | null {
+  const matchingColumns = columns.filter((column) =>
+    column.startsWith(`${alias}.`),
+  );
+
+  if (matchingColumns.length === 0) {
+    return null;
+  }
+
+  return summarizeColumns(matchingColumns, limit);
+}
+
+function buildSpecificGroupByKeyGuidance(
+  rawKey: unknown,
+  ctx: AggregateGroupsValidatorContext,
+): string {
+  if (!rawKey || typeof rawKey !== "object") {
+    return buildGroupByKeyGuidance(ctx);
+  }
+
+  const candidate = rawKey as {
+    type?: unknown;
+    column?: unknown;
+  };
+
+  if (typeof candidate.column !== "string") {
+    return buildGroupByKeyGuidance(ctx);
+  }
+
+  const qualifier = extractQualifier(candidate.column);
+
+  if (candidate.type === "column") {
+    if (ctx.groupableColumns.includes(candidate.column)) {
+      return buildGroupByKeyGuidance(ctx);
+    }
+
+    if (ctx.intervalColumns.includes(candidate.column)) {
+      return `Column ${candidate.column} is temporal. Use \`dateInterval\` or \`dateComponent\` instead of \`type: "column"\`.`;
+    }
+
+    const aliasScopedColumns = summarizeQualifiedColumnsForAlias(
+      ctx.groupableColumns,
+      qualifier,
+    );
+
+    if (aliasScopedColumns) {
+      return `Column ${candidate.column} is not a valid groupBy column. Use exact schema column names only. Valid groupBy columns for ${qualifier}: ${aliasScopedColumns}.`;
+    }
+
+    return `Column ${candidate.column} is not a valid groupBy column. Use exact schema column names only.`;
+  }
+
+  if (
+    candidate.type === "dateInterval" ||
+    candidate.type === "dateComponent"
+  ) {
+    if (ctx.intervalColumns.includes(candidate.column)) {
+      return buildGroupByKeyGuidance(ctx);
+    }
+
+    const temporalColumns = summarizeQualifiedColumnsForAlias(
+      ctx.intervalColumns,
+      qualifier,
+    );
+
+    if (temporalColumns) {
+      return `Column ${candidate.column} is not a valid temporal group key. Use exact schema column names only. Temporal columns for ${qualifier}: ${temporalColumns}.`;
+    }
+
+    return `Column ${candidate.column} is not a valid temporal group key. Use exact schema column names only.`;
+  }
+
+  return buildGroupByKeyGuidance(ctx);
+}
+
 const reducerEnum = z.enum(["sum", "min", "max", "avg"]);
 
 const DATE_COMPONENT_RANGES: Record<
@@ -418,11 +529,26 @@ export function validateAggregateGroupsCandidate(
   const parsed = schema.safeParse(candidate);
   if (!parsed.success) {
     const issues: AggregateGroupsInvalidResultIssue[] = parsed.error.issues.map(
-      (issue) => ({
-        path: issue.path.join(".") || "<root>",
-        message: issue.message,
-        code: issue.code,
-      }),
+      (issue) => {
+        const path = issue.path.join(".") || "<root>";
+        if (issue.code === "invalid_union" && /^groupBy\.\d+$/.test(path)) {
+          const groupByIndex = Number(path.split(".")[1]);
+          return {
+            path,
+            message: buildSpecificGroupByKeyGuidance(
+              (candidate as { groupBy?: unknown[] })?.groupBy?.[groupByIndex],
+              ctx,
+            ),
+            code: "invalid_group_by_key",
+          };
+        }
+
+        return {
+          path,
+          message: issue.message,
+          code: issue.code,
+        };
+      },
     );
     return { status: "invalid", issues };
   }
@@ -444,15 +570,13 @@ export function validateAggregateGroupsCandidate(
   });
 
   const selectedJoinTables = new Set(aliasToTable.keys());
-  const tablePart = (fq: string) => fq.split(".")[0] ?? "";
-
   const ensureColumnTablesAllowed = (
     cols: string[] | undefined,
     path: string,
   ) => {
     if (!cols) return;
     cols.forEach((c) => {
-      const tableAlias = tablePart(c);
+      const tableAlias = extractQualifier(c);
       if (!selectedJoinTables.has(tableAlias)) {
         issues.push({
           path,
@@ -485,7 +609,7 @@ export function validateAggregateGroupsCandidate(
       aliasSet.add(aliasCandidate);
     }
 
-    const groupByTable = tablePart(key.column);
+    const groupByTable = extractQualifier(key.column);
     if (!selectedJoinTables.has(groupByTable)) {
       issues.push({
         path: `groupBy[${index}].column`,

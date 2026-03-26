@@ -23,10 +23,53 @@ const ctx = {
     "users.name",
     "orders.id",
     "orders.total",
+    "users.orders.id",
+    "users.orders.total",
     "users.createdAt",
   ],
-  groupableColumns: ["users.id", "users.name", "orders.id", "orders.total"],
+  groupableColumns: [
+    "users.id",
+    "users.name",
+    "orders.id",
+    "orders.total",
+    "users.orders.id",
+    "users.orders.total",
+  ],
   intervalColumns: ["users.createdAt"],
+  numericalColumns: ["orders.total", "users.orders.total"],
+};
+
+const productCtx = {
+  baseTableName: "orders",
+  joinOptions: [
+    {
+      name: "product",
+      table: "products",
+      path: [
+        {
+          source: ["orders.product_id"],
+          target: ["products.id"],
+        },
+      ],
+    },
+  ],
+  allColumns: [
+    "orders.id",
+    "orders.total",
+    "orders.created_at",
+    "product.id",
+    "product.title",
+    "product.category",
+    "product.created_at",
+  ],
+  groupableColumns: [
+    "orders.id",
+    "orders.total",
+    "product.id",
+    "product.title",
+    "product.category",
+  ],
+  intervalColumns: ["orders.created_at", "product.created_at"],
   numericalColumns: ["orders.total"],
 };
 
@@ -70,6 +113,70 @@ describe("aggregateGroups validator", () => {
       expect(result.result.aggregates.count).toEqual(["orders.id"]);
       expect(result.result.reducers?.count).toEqual(["sum"]);
       expect(result.result.reducers?.sum).toEqual(["sum"]);
+    }
+  });
+
+  it("accepts groupBy keys qualified by join alias", () => {
+    const candidate = {
+      joins: [
+        {
+          table: "orders",
+          name: "users.orders",
+          path: [
+            {
+              source: ["users.id"],
+              target: ["orders.user_id"],
+            },
+          ],
+        },
+      ],
+      groupBy: [{ type: "column" as const, column: "users.orders.id" }],
+      having: null,
+      aggregates: {
+        groupCount: true,
+        sum: ["users.orders.total"],
+      },
+    };
+
+    const result = validateAggregateGroupsCandidate(candidate, ctx);
+    expect(result.status).toBe("valid");
+  });
+
+  it("suggests valid alias-scoped columns for an invalid joined groupBy column", () => {
+    const candidate = {
+      joins: [
+        {
+          table: "products",
+          name: "product",
+          path: [
+            {
+              source: ["orders.product_id"],
+              target: ["products.id"],
+            },
+          ],
+        },
+      ],
+      groupBy: [{ type: "column" as const, column: "product.name" }],
+      having: null,
+      aggregates: {
+        groupCount: true,
+        sum: ["orders.total"],
+      },
+    };
+
+    const result = validateAggregateGroupsCandidate(candidate, productCtx);
+    expect(result.status).toBe("invalid");
+    if (result.status === "invalid") {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          path: "groupBy.0",
+          code: "invalid_group_by_key",
+        }),
+      );
+      expect(result.issues[0]?.message).toContain(
+        "Valid groupBy columns for product",
+      );
+      expect(result.issues[0]?.message).toContain("product.title");
     }
   });
 

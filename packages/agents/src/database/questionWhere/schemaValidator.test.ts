@@ -259,6 +259,47 @@ describe("questionWhere dynamic schema validator (stub schema)", () => {
         expect(result.success).toBe(true);
       });
     }
+
+    if (targetNumber) {
+      test("joined scalar filters accept the selected join alias", () => {
+        const candidate = {
+          AND: [
+            {
+              [`${toManyRel.name}.${targetNumber.name}`]: { lt: 100 },
+            },
+          ],
+        };
+        const result = validateQuestionConditions(
+          candidate,
+          table,
+          fullSchema,
+          tableName,
+          { [toManyRel.name]: targetTable?.name ?? "" },
+        );
+        expect(result.success).toBe(true);
+      });
+
+      test("joined scalar filters reject physical table names when a custom alias is supplied", () => {
+        if (!targetTable) {
+          return;
+        }
+        const candidate = {
+          AND: [
+            {
+              [`${targetTable.name}.${targetNumber.name}`]: { lt: 100 },
+            },
+          ],
+        };
+        const result = validateQuestionConditions(
+          candidate,
+          table,
+          fullSchema,
+          tableName,
+          { [toManyRel.name]: targetTable.name },
+        );
+        expect(result.success).toBe(false);
+      });
+    }
   }
 
   // ── Multi-operator condition tests ──────────────────────────────

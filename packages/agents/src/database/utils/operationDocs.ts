@@ -171,11 +171,13 @@ export const operationDocs = {
             count: ["posts.id"],
             countDistinct: ["user.id"],
           },
-          whereAndArray: [
-            {
-              emailVerified: { equals: true },
-            },
-          ],
+          questionConditions: {
+            AND: [
+              {
+                "user.emailVerified": { equals: true },
+              },
+            ],
+          },
         },
         response: {
           _count: {
@@ -259,7 +261,13 @@ export const operationDocs = {
   },
   groupBy: {
     description:
-      'Groups rows by one or more keys drawn from the starting table or hop-based joins. Keys can be direct columns (`{ type: "column", column: "table.column" }`), date intervals (`{ type: "dateInterval", column: "table.dateColumn", interval: "month" }`), or recurring date components (`{ type: "dateComponent", column: "table.dateColumn", component: "dayOfWeek" }`). Aggregates (count, countDistinct, sum, min, max, avg) should be arrays of fully-qualified column names, or null when unused. countDistinct counts unique values per group. Provide joins as an array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source columns with target columns). Order the results either by an aggregate (type `"aggregate"`) or by one of the group keys (type `"groupKey"`). Optionally add `having` as an AND-only array of predicates on group keys or aggregates (operators: equals, not, in, notIn, lt, lte, gt, gte; null handling mirrors WHERE). Ensure every `groupBy` alias is unique. Supported join types: `inner` (default), `left`, `right`.',
+      'Groups rows by one or more keys drawn from the starting table or hop-based joins. ' +
+      'Keys can be: direct columns (`{ type: "column", column: "alias.column" }`), date intervals (`{ type: "dateInterval", column: "alias.dateColumn", interval: "month" }`), or recurring date components (`{ type: "dateComponent", column: "alias.dateColumn", component: "dayOfWeek" }`). ' +
+      'Aggregates (count, countDistinct, sum, min, max, avg) are arrays of fully-qualified column names, or null when unused; countDistinct counts unique values per group. ' +
+      'Joins: array of descriptors with `table`, optional alias `name`, and `path` hops (each hop pairs source/target columns). If you set a join `name`, use that alias in groupBy columns and aggregate references. Supported join types: `inner` (default), `left`, `right`. ' +
+      'OrderBy: either an aggregate (`type: "aggregate"`) or a group key (`type: "groupKey"`). ' +
+      'Having: optional AND-only array of predicates on group keys or aggregates (operators: equals, not, in, notIn, lt, lte, gt, gte; null handling mirrors WHERE). ' +
+      'Ensure every `groupBy` alias is unique.',
     examples: [
       {
         question:
@@ -284,7 +292,7 @@ export const operationDocs = {
             groupBy: [
               {
                 type: "column",
-                column: "country.name",
+                column: "user.country.name",
                 alias: "country",
               },
             ],
@@ -355,7 +363,7 @@ export const operationDocs = {
       },
       {
         question:
-          "How many orders were created each day of the week over the last month?",
+          "How many orders were created each day of the week?",
         query: {
           table: "orders",
           operation: "groupBy",
@@ -391,6 +399,65 @@ export const operationDocs = {
           { dayOfWeek: "Friday", _count: { "orders.id": 61 } },
           { dayOfWeek: "Saturday", _count: { "orders.id": 34 } },
           { dayOfWeek: "Sunday", _count: { "orders.id": 27 } },
+        ],
+      },
+      {
+        question: "What were total sales by product category in February 2026?",
+        query: {
+          table: "orders",
+          operation: "groupBy",
+          operationParameters: {
+            joins: [
+              {
+                table: "products",
+                name: "product",
+                path: [
+                  {
+                    source: ["orders.product_id"],
+                    target: ["products.id"],
+                  },
+                ],
+                joinType: "inner",
+              },
+            ],
+            groupBy: [{ type: "column", column: "product.category" }],
+            count: ["orders.id"],
+            countDistinct: null,
+            sum: ["orders.total"],
+            min: null,
+            max: null,
+            avg: null,
+            orderBy: {
+              type: "aggregate",
+              function: "sum",
+              column: "orders.total",
+              direction: "desc",
+            },
+            having: null,
+            limit: 20,
+          },
+          questionConditions: {
+            AND: [
+              {
+                "orders.created_at": { gte: "2026-02-01T00:00:00.000Z" },
+              },
+              {
+                "orders.created_at": { lte: "2026-02-28T23:59:59.999Z" },
+              },
+            ],
+          },
+        },
+        response: [
+          {
+            "product.category": "Electronics",
+            _count: { "orders.id": 128 },
+            _sum: { "orders.total": 48192.33 },
+          },
+          {
+            "product.category": "Home",
+            _count: { "orders.id": 94 },
+            _sum: { "orders.total": 31210.55 },
+          },
         ],
       },
     ],

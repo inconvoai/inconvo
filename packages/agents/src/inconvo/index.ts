@@ -25,11 +25,18 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
-import type { Schema, DatabaseConnector } from "@repo/types";
+import type { Schema, DatabaseConnector, QueryResponse } from "@repo/types";
 import { getPrompt } from "../utils/getPrompt";
-import { databaseRetrieverAgent } from "../database";
+import {
+  databaseRetrieverAgent,
+  type DatabaseRetrieverError,
+} from "../database";
 import type { RunnableToolLike } from "@langchain/core/runnables";
 import { buildTableSchemaStringFromTableSchema } from "../database/utils/schemaFormatters";
+import {
+  type DatabaseRetrieverQueryDraft,
+  databaseRetrieverQueryDraftSchema,
+} from "../database/queryDraft";
 import { stringArrayToZodEnum } from "../utils/zodHelpers";
 import { getAIModel, type AIProvider } from "../utils/getAIModel";
 import { buildPromptCacheKey } from "../utils/promptCacheKey";
@@ -68,6 +75,32 @@ interface DatabaseConfig {
   schema: Schema;
   connector: DatabaseConnector;
 }
+
+export function formatDatabaseContext(databases: DatabaseConfig[]) {
+  return databases
+    .map((db) => {
+      const descriptionLine = db.context
+        ? `  Description: ${db.context}`
+        : "  Description: (none)";
+      const tableList =
+        db.schema.length > 0
+          ? db.schema
+              .map((table) =>
+                table.summary
+                  ? `    - ${table.name}: ${table.summary}`
+                  : `    - ${table.name}`,
+              )
+              .join("\n")
+          : "    - (none)";
+      return `- **${db.friendlyName}**\n${descriptionLine}\n  Tables:\n${tableList}`;
+    })
+    .join("\n");
+}
+
+type SchemaReviewManifestEntry = {
+  database: string;
+  tables: string[];
+};
 
 interface QuestionAgentParams {
   databases: DatabaseConfig[];
@@ -134,11 +167,15 @@ function sanitizeMessageForHistory(msg: BaseMessage): BaseMessage {
 }
 
 /**
- * Extracts tool calls (for a specific tool name) and their corresponding tool messages
- * from a list of messages. Returns an ordered list containing each AI message that
- * invoked the tool followed immediately by its matching ToolMessage (if present).
+ * Extracts full assistant tool turns for any assistant message that invoked at least
+ * one of the requested tool names. Once an AI message is included, all executed tool
+ * outputs from that AI message are included in tool-call order to preserve the
+ * request/response pairing required by the OpenAI Responses API.
  */
-function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
+export function extractToolTurnMessages(
+  messages: BaseMessage[],
+  toolNames: string[],
+) {
   const relatedMessages: BaseMessage[] = [];
   const messageMap = new Map<string, ToolMessage>();
 
@@ -149,17 +186,18 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
     }
   });
 
-  // Second pass: find AI messages with the specified tool calls and their responses
+  // Second pass: find AI messages with at least one relevant tool call and keep
+  // every executed tool response for that AI message.
   messages.forEach((msg) => {
     if (AIMessage.isInstance(msg)) {
-      const matchingCalls = [
-        ...(msg.tool_calls ?? []),
-        ...(msg.invalid_tool_calls ?? []),
-      ].filter((call) => call.name === toolName);
+      const toolCalls = msg.tool_calls ?? [];
+      const hasRelevantToolCall = toolCalls.some(
+        (call) => !!call.name && toolNames.includes(call.name),
+      );
 
-      if (matchingCalls.length > 0) {
+      if (hasRelevantToolCall) {
         relatedMessages.push(msg);
-        matchingCalls.forEach((call) => {
+        toolCalls.forEach((call) => {
           if (call.id) {
             const toolMessage = messageMap.get(call.id);
             if (toolMessage) relatedMessages.push(toolMessage);
@@ -170,6 +208,184 @@ function extractToolRelatedMessages(messages: BaseMessage[], toolName: string) {
   });
 
   return relatedMessages;
+}
+
+function countToolCalls(messages: BaseMessage[], toolName: string): number {
+  return messages.reduce((count, message) => {
+    if (!AIMessage.isInstance(message)) {
+      return count;
+    }
+    const toolCalls = [
+      ...(message.tool_calls ?? []),
+      ...(message.invalid_tool_calls ?? []),
+    ];
+    return count + toolCalls.filter((call) => call.name === toolName).length;
+  }, 0);
+}
+
+function mergeSchemaReviewManifest(
+  current: SchemaReviewManifestEntry[],
+  incoming: SchemaReviewManifestEntry[],
+): SchemaReviewManifestEntry[] {
+  const manifest = new Map<string, Set<string>>();
+
+  for (const entry of [...current, ...incoming]) {
+    if (!manifest.has(entry.database)) {
+      manifest.set(entry.database, new Set());
+    }
+
+    for (const table of entry.tables) {
+      manifest.get(entry.database)!.add(table);
+    }
+  }
+
+  return Array.from(manifest.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([database, tables]) => ({
+      database,
+      tables: Array.from(tables).sort(),
+    }));
+}
+
+function formatSchemaReviewManifest(
+  entries: SchemaReviewManifestEntry[],
+): string {
+  if (entries.length === 0) {
+    return "No previously reviewed schemas in this session.";
+  }
+
+  return entries
+    .map((entry) => `- ${entry.database}: ${entry.tables.join(", ")}`)
+    .join("\n");
+}
+
+function createDatabaseRetrieverToolMessage(
+  toolCallId: string,
+  database: string,
+  error: DatabaseRetrieverError,
+): ToolMessage {
+  return new ToolMessage({
+    status: "error",
+    name: "databaseRetriever",
+    content: JSON.stringify(
+      {
+        error,
+        database,
+      },
+      null,
+      2,
+    ),
+    tool_call_id: toolCallId,
+  });
+}
+
+function createDatabaseRetrieverExecutionError(
+  message: string,
+): DatabaseRetrieverError {
+  return {
+    type: "execution",
+    stage: "execution",
+    message,
+  };
+}
+
+export function findMostRecentDatabaseRetrieverValidationError(
+  messages: BaseMessage[],
+): DatabaseRetrieverError | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || !ToolMessage.isInstance(message)) {
+      continue;
+    }
+
+    if (message.name !== "databaseRetriever") {
+      continue;
+    }
+
+    const content =
+      typeof message.content === "string"
+        ? message.content
+        : message.content
+            .map((part) => {
+              if (typeof part === "string") {
+                return part;
+              }
+              if ("text" in part && typeof part.text === "string") {
+                return part.text;
+              }
+              return JSON.stringify(part);
+            })
+            .join("\n");
+    if (!content) continue;
+
+    const parsed = tryCatchSync(() => JSON.parse(content) as unknown) as {
+      data: unknown;
+      error: Error | null;
+    };
+    if (parsed.error || !parsed.data || typeof parsed.data !== "object") {
+      continue;
+    }
+
+    const maybeError = (parsed.data as { error?: unknown }).error;
+    if (!maybeError || typeof maybeError !== "object") {
+      continue;
+    }
+
+    const errorRecord = maybeError as Record<string, unknown>;
+    if (
+      errorRecord.type === "validation" &&
+      typeof errorRecord.stage === "string"
+    ) {
+      return errorRecord as DatabaseRetrieverError;
+    }
+  }
+
+  return null;
+}
+
+export function formatDatabaseRetrieverValidationFeedback(
+  error: DatabaseRetrieverError,
+  attemptNumber: number,
+): string {
+  const issues = error.issues?.length
+    ? error.issues
+        .slice(0, 4)
+        .map(
+          (issue) => `- ${issue.path} (${issue.code}): ${issue.message}`,
+        )
+        .join("\n")
+    : null;
+
+  return [
+    "The most recent `databaseRetriever` call returned a validation error.",
+    `Stage: ${error.stage}.`,
+    error.message ? `Guidance: ${error.message}` : null,
+    issues ? `Issues:\n${issues}` : null,
+    `Do not answer the user yet. Repair the structured query draft and retry \`databaseRetriever\`. This was failed attempt ${attemptNumber} of 3.`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function formatInvalidToolCallFeedback(lastMessage: AIMessage): string {
+  const invalidCalls = lastMessage.invalid_tool_calls ?? [];
+  const invalidSummary = invalidCalls
+    .map((call, index) => {
+      const name = call.name ?? `unknown_tool_${index + 1}`;
+      const error = call.error ? ` (${call.error})` : "";
+      return `- ${name}${error}`;
+    })
+    .join("\n");
+
+  return [
+    "One or more tool calls were malformed and were not executed.",
+    invalidSummary ? `Malformed calls:\n${invalidSummary}` : null,
+    "Re-emit a valid tool call instead of answering normally.",
+    'For `databaseRetriever`, the arguments must be {"database":"...","query":{"table":"...","operation":"...","operationParameters":{...},"questionConditions":null|{"AND":[...]}}}.',
+    'For `getSchemasForTables`, the arguments must be {"database":"...","tables":["table_a","table_b"]}.',
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**
@@ -346,6 +562,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       },
       default: () => [],
     }),
+    reviewedSchemas: Annotation<SchemaReviewManifestEntry[]>({
+      reducer: (x, y) => mergeSchemaReviewManifest(x, y),
+      default: () => [],
+    }),
     answer: Annotation<Answer>({
       reducer: (x, y) => y,
       default: () => ({
@@ -354,7 +574,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       }),
     }),
     databaseRetrieverResults: Annotation<
-      { query?: string; data?: Record<string, unknown> }[] | undefined
+      { query?: QueryResponse["query"]; data?: unknown }[] | undefined
     >({
       reducer: (x, y) => (x ? x.concat(y ?? []) : y),
       default: () => undefined,
@@ -365,7 +585,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
       Array<{
         toolCallId: string;
         database: string;
-        query: string;
+        query: QueryResponse["query"];
         data: unknown;
         warning?: string;
       }>
@@ -383,6 +603,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     error: Annotation<Record<string, unknown> | undefined>({
       reducer: (x, y) => y,
       default: () => undefined,
+    }),
+    lastDatabaseRetrieverValidationRepairAttemptCount: Annotation<number>({
+      reducer: (_x, y) => y,
+      default: () => 0,
     }),
     formatAttempts: Annotation<number>({
       reducer: (x, y) => x + y,
@@ -416,32 +640,9 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   // Build database names for tool schema validation
   const databaseNames = params.databases.map((db) => db.friendlyName);
 
-  // Build combined table context from all databases
-  const tableContext = params.databases
-    .flatMap((db) =>
-      db.schema
-        .filter((table) => table.context)
-        .map(
-          (table) =>
-            `Database: ${db.friendlyName}, Table: ${table.name}, Context: ${table.context}`,
-        ),
-    )
-    .join("\n");
-
   // Build database context for system prompt.
-  // Includes database description and table listings.
-  const databaseContext = params.databases
-    .map((db) => {
-      const descriptionLine = db.context
-        ? `  Description: ${db.context}`
-        : "  Description: (none)";
-      const tableList =
-        db.schema.length > 0
-          ? db.schema.map((table) => `    - ${table.name}`).join("\n")
-          : "    - (none)";
-      return `- **${db.friendlyName}**\n${descriptionLine}\n  Tables:\n${tableList}`;
-    })
-    .join("\n");
+  // Includes database description and per-table semantic summaries.
+  const databaseContext = formatDatabaseContext(params.databases);
 
   function resetState(_state: typeof AgentState.State) {
     // We only have to preserve the chat history from the checkpointer
@@ -455,6 +656,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         type: "text",
         message: "",
       },
+      lastDatabaseRetrieverValidationRepairAttemptCount: 0,
       formatAttempts: -_state.formatAttempts, // Reset to 0 via reducer
       runId: params.runId, // Use runId from params to scope sandbox instance
       sandboxUsed: false, // Reset sandbox tracking for new run
@@ -469,7 +671,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
 
     const databaseRetriever = tool(
       async (
-        input: { question: string; database: string },
+        input: { query: DatabaseRetrieverQueryDraft; database: string },
         config: ToolRunnableConfig,
       ) => {
         const toolCallId = config.toolCall?.id;
@@ -478,44 +680,57 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             "Tool call ID is missing in ToolRunnableConfig. Cannot create ToolMessage without a valid tool_call_id.",
           );
         }
+        const currentState = getCurrentTaskInput() as typeof AgentState.State;
+        const priorAttemptCount = countToolCalls(
+          currentState?.messages ?? [],
+          "databaseRetriever",
+        );
+        const attemptNumber = priorAttemptCount + 1;
 
         try {
+          const startedAt = Date.now();
+
           // Look up the database configuration
           const dbConfig = databaseMap.get(input.database);
           if (!dbConfig) {
-            return new ToolMessage({
-              content: `Tool error: Please check your input and try again. (Database "${input.database}" not found. Available databases: ${databaseNames.join(", ")})`,
-              tool_call_id: toolCallId,
-            });
+            return createDatabaseRetrieverToolMessage(
+              toolCallId,
+              input.database,
+              createDatabaseRetrieverExecutionError(
+                `Database "${input.database}" not found. Available databases: ${databaseNames.join(", ")}`,
+              ),
+            );
           }
 
           const databaseRetrieverResponse = await (
             await databaseRetrieverAgent({
-              userQuestion: input.question,
+              query: input.query,
               schema: dbConfig.schema,
               userContext: state.userContext,
-              agentId: params.agentId,
-              userIdentifier: params.userIdentifier,
               connector: dbConfig.connector,
-              provider: params.provider,
             })
           ).invoke({});
 
+          console.info(
+            JSON.stringify({
+              event: "databaseRetriever_attempt",
+              component: "inconvo",
+              database: input.database,
+              database_retriever_attempt_count: attemptNumber,
+              question_to_sql_ms:
+                databaseRetrieverResponse.preExecutionMs ??
+                Date.now() - startedAt,
+              database_retriever_total_ms: Date.now() - startedAt,
+            }),
+          );
+
           // Check for errors from the database agent
           if (databaseRetrieverResponse.error) {
-            return new ToolMessage({
-              status: "error",
-              name: "databaseRetriever",
-              content: JSON.stringify(
-                {
-                  error: databaseRetrieverResponse.error,
-                  database: input.database,
-                },
-                null,
-                2,
-              ),
-              tool_call_id: toolCallId,
-            });
+            return createDatabaseRetrieverToolMessage(
+              toolCallId,
+              input.database,
+              databaseRetrieverResponse.error,
+            );
           }
 
           // Store raw response in state for process_database_results node
@@ -534,28 +749,24 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           });
         } catch (e) {
           // Fallback for unexpected errors
-          return new ToolMessage({
-            status: "error",
-            name: "databaseRetriever",
-            content: JSON.stringify(
-              {
-                error: { message: e instanceof Error ? e.message : String(e) },
-                database: input.database,
-              },
-              null,
-              2,
+          return createDatabaseRetrieverToolMessage(
+            toolCallId,
+            input.database,
+            createDatabaseRetrieverExecutionError(
+              e instanceof Error ? e.message : String(e),
             ),
-            tool_call_id: toolCallId,
-          });
+          );
         }
       },
       {
         name: "databaseRetriever",
         description: databaseRetrieverToolDescription,
         schema: z.object({
-          question: z.string().describe("The question to ask the database"),
           database: stringArrayToZodEnum(databaseNames).describe(
             "The name of the database to query",
+          ),
+          query: databaseRetrieverQueryDraftSchema.describe(
+            "A complete structured query draft built from the selected table schemas.",
           ),
         }),
       },
@@ -575,6 +786,8 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         }
 
         try {
+          const currentState = getCurrentTaskInput() as typeof AgentState.State;
+          const startedAt = Date.now();
           const dbConfig = databaseMap.get(input.database);
           if (!dbConfig) {
             return new ToolMessage({
@@ -592,7 +805,37 @@ export async function inconvoAgent(params: QuestionAgentParams) {
             }
             return buildTableSchemaStringFromTableSchema(table);
           });
-          return schemaStrings.join("\n\n---\n\n");
+          console.info(
+            JSON.stringify({
+              event: "schema_fetch",
+              component: "inconvo",
+              database: input.database,
+              schema_fetch_count: countToolCalls(
+                currentState?.messages ?? [],
+                "getSchemasForTables",
+              ),
+              table_count: input.tables.length,
+              duration_ms: Date.now() - startedAt,
+            }),
+          );
+          return new Command({
+            update: {
+              reviewedSchemas: [
+                {
+                  database: input.database,
+                  tables: input.tables,
+                },
+              ],
+              messages: [
+                new ToolMessage({
+                  status: "success",
+                  name: "getSchemasForTables",
+                  content: schemaStrings.join("\n\n---\n\n"),
+                  tool_call_id: toolCallId,
+                }),
+              ],
+            },
+          });
         } catch (e) {
           return new ToolMessage({
             content: `Tool error: Please check your input and try again. (${e instanceof Error ? e.message : String(e)})`,
@@ -748,31 +991,13 @@ export async function inconvoAgent(params: QuestionAgentParams) {
           // Get tool-related messages for chat history
           const stateMessages =
             (getCurrentTaskInput() as typeof AgentState.State)?.messages ?? [];
-          const databaseRelatedMessages = extractToolRelatedMessages(
+          const toolTurnMessages = extractToolTurnMessages(
             stateMessages,
-            "databaseRetriever",
-          );
-          const getSchemaRelatedMessages = extractToolRelatedMessages(
-            stateMessages,
-            "getSchemasForTables",
-          );
-          const getCurrentTimeRelatedMessages = extractToolRelatedMessages(
-            stateMessages,
-            "getCurrentTime",
+            ["databaseRetriever", "getCurrentTime"],
           );
           const userQuestion =
             (getCurrentTaskInput() as typeof AgentState.State)?.userQuestion ??
             "";
-
-          // Combine and deduplicate messages (AI messages may appear in multiple extractions)
-          const allToolMessages = [
-            ...getSchemaRelatedMessages,
-            ...getCurrentTimeRelatedMessages,
-            ...databaseRelatedMessages,
-          ];
-          const uniqueToolMessages = allToolMessages.filter(
-            (msg, index, self) => self.indexOf(msg) === index,
-          );
 
           // Return Command that sets answer - conditional edge will route to format_response
           return new Command({
@@ -781,7 +1006,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
               answer: validated.data,
               chatHistory: [
                 new HumanMessage(userQuestion),
-                ...uniqueToolMessages.map(sanitizeMessageForHistory),
+                ...toolTurnMessages.map(sanitizeMessageForHistory),
                 new AIMessage(JSON.stringify(validated.data, null, 2)),
               ],
               messages: [
@@ -875,14 +1100,81 @@ export async function inconvoAgent(params: QuestionAgentParams) {
   const shouldContinue = (state: typeof AgentState.State) => {
     const { messages } = state;
     const lastMessage = messages?.at(-1) as AIMessage;
+    const hasValidToolCalls =
+      AIMessage.isInstance(lastMessage) &&
+      Array.isArray(lastMessage.tool_calls) &&
+      lastMessage.tool_calls.length > 0;
+    const hasInvalidToolCalls =
+      AIMessage.isInstance(lastMessage) &&
+      Array.isArray(lastMessage.invalid_tool_calls) &&
+      lastMessage.invalid_tool_calls.length > 0;
+    const databaseRetrieverAttemptCount = countToolCalls(
+      messages ?? [],
+      "databaseRetriever",
+    );
+    const mostRecentDatabaseRetrieverValidationError =
+      findMostRecentDatabaseRetrieverValidationError(messages ?? []);
+
+    if (hasInvalidToolCalls && !hasValidToolCalls) {
+      return "repairInvalidToolCalls";
+    }
     if (
       AIMessage.isInstance(lastMessage) &&
-      (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0)
+      !hasValidToolCalls &&
+      mostRecentDatabaseRetrieverValidationError &&
+      databaseRetrieverAttemptCount < 3 &&
+      databaseRetrieverAttemptCount >
+        state.lastDatabaseRetrieverValidationRepairAttemptCount
+    ) {
+      return "repairDatabaseRetrieverValidation";
+    }
+    if (
+      AIMessage.isInstance(lastMessage) &&
+      !hasValidToolCalls
     ) {
       return "formatResponse";
     } else {
       return "continue";
     }
+  };
+
+  const repairInvalidToolCalls = async (state: typeof AgentState.State) => {
+    const lastMessage = state.messages?.at(-1);
+    if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
+      return {};
+    }
+
+    return {
+      messages: [new SystemMessage(formatInvalidToolCallFeedback(lastMessage))],
+    };
+  };
+
+  const repairDatabaseRetrieverValidation = async (
+    state: typeof AgentState.State,
+  ) => {
+    const attemptCount = countToolCalls(
+      state.messages ?? [],
+      "databaseRetriever",
+    );
+    const validationError = findMostRecentDatabaseRetrieverValidationError(
+      state.messages ?? [],
+    );
+
+    if (!validationError) {
+      return {};
+    }
+
+    return {
+      lastDatabaseRetrieverValidationRepairAttemptCount: attemptCount,
+      messages: [
+        new SystemMessage(
+          formatDatabaseRetrieverValidationFeedback(
+            validationError,
+            attemptCount,
+          ),
+        ),
+      ],
+    };
   };
 
   // After tools run, check if we need to process database results or if answer is set
@@ -912,7 +1204,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     });
 
     const DATA_PREVIEW_LIMIT = 50;
-    const allResults: { query: string; data: unknown }[] = [];
+      const allResults: { query: QueryResponse["query"]; data: unknown }[] = [];
     const allMessages: ToolMessage[] = [];
 
     // Process all pending database results (supports parallel tool calls)
@@ -1060,9 +1352,9 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     })();
 
     const response = await prompt.pipe(model.bindTools(tools)).invoke({
-      tableContext: tableContext,
       databaseContext: databaseContext,
       chatHistory: state.chatHistory,
+      reviewedSchemasManifest: formatSchemaReviewManifest(state.reviewedSchemas),
       date: new Date().toISOString().split("T")[0],
       userContext: JSON.stringify(state.userContext),
       userQuestion: state.userQuestion,
@@ -1164,27 +1456,9 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     const validResponses = parseResults.valid;
 
     const stateMessages = state.messages ?? [];
-    const databaseRelatedMessages = extractToolRelatedMessages(
+    const toolTurnMessages = extractToolTurnMessages(
       stateMessages,
-      "databaseRetriever",
-    );
-    const getSchemaRelatedMessages = extractToolRelatedMessages(
-      stateMessages,
-      "getSchemasForTables",
-    );
-    const getCurrentTimeRelatedMessages = extractToolRelatedMessages(
-      stateMessages,
-      "getCurrentTime",
-    );
-
-    // Combine and deduplicate messages (AI messages may appear in multiple extractions)
-    const allToolMessages = [
-      ...getSchemaRelatedMessages,
-      ...getCurrentTimeRelatedMessages,
-      ...databaseRelatedMessages,
-    ];
-    const uniqueToolMessages = allToolMessages.filter(
-      (msg, index, self) => self.indexOf(msg) === index,
+      ["databaseRetriever", "getCurrentTime"],
     );
 
     if (validResponses.length > 0) {
@@ -1205,7 +1479,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         answer: selectedResponse,
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...uniqueToolMessages.map(sanitizeMessageForHistory),
+          ...toolTurnMessages.map(sanitizeMessageForHistory),
           new AIMessage(JSON.stringify(selectedResponse, null, 2)),
         ],
       };
@@ -1240,7 +1514,7 @@ export async function inconvoAgent(params: QuestionAgentParams) {
         },
         chatHistory: [
           new HumanMessage(state.userQuestion),
-          ...uniqueToolMessages.map(sanitizeMessageForHistory),
+          ...toolTurnMessages.map(sanitizeMessageForHistory),
           new AIMessage(fallbackMessage),
         ],
       };
@@ -1278,6 +1552,11 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     .addNode("title_conversation", titleConversation)
     .addNode("build_tools", buildTools)
     .addNode("inconvo_agent", callModel)
+    .addNode("repair_invalid_tool_calls", repairInvalidToolCalls)
+    .addNode(
+      "repair_database_retriever_validation",
+      repairDatabaseRetrieverValidation,
+    )
     .addNode("inconvo_agent_tools", toolNode)
     .addNode("process_database_results", processDatabaseResults)
     .addNode("format_response", formatResponse)
@@ -1287,8 +1566,13 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     .addEdge("build_tools", "inconvo_agent")
     .addConditionalEdges("inconvo_agent", shouldContinue, {
       continue: "inconvo_agent_tools",
+      repairInvalidToolCalls: "repair_invalid_tool_calls",
+      repairDatabaseRetrieverValidation:
+        "repair_database_retriever_validation",
       formatResponse: "format_response",
     })
+    .addEdge("repair_invalid_tool_calls", "inconvo_agent")
+    .addEdge("repair_database_retriever_validation", "inconvo_agent")
     .addConditionalEdges("inconvo_agent_tools", routeAfterTools, {
       continue: "inconvo_agent",
       formatResponse: "format_response",

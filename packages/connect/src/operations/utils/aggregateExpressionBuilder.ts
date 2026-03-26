@@ -17,12 +17,13 @@ export function buildAggregateExpression(
   columnRef: string,
   schema: SchemaResponse,
   dialect: DatabaseDialect,
+  aliasToTable?: Map<string, string>,
 ): Expression<unknown> {
-  assert(
-    columnRef.split(".").length === 2,
-    "Aggregate column must be in the format table.column",
-  );
-  const [tableName, columnName] = columnRef.split(".") as [string, string];
+  const lastDot = columnRef.lastIndexOf(".");
+  assert(lastDot !== -1, "Aggregate column must be in the format table.column");
+  const tableOrAlias = columnRef.slice(0, lastDot);
+  const columnName = columnRef.slice(lastDot + 1);
+  const tableName = aliasToTable?.get(tableOrAlias) ?? tableOrAlias;
   const column = getColumnFromTable({
     columnName,
     tableName,

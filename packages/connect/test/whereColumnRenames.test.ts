@@ -92,4 +92,29 @@ describe("where conditions resolve semantic column renames", () => {
     expect(compiled.sql).toContain(`"orders"."total_amount" > $1`);
     expect(compiled.parameters).toEqual([100]);
   });
+
+  test("join aliases can resolve to a distinct SQL table alias", () => {
+    const db = createDb();
+    const whereExpr = buildWhereConditions(
+      [{ "customerOrders.totalAmount": { gt: 100 } }],
+      "users",
+      schema as any,
+      "postgresql",
+      undefined,
+      {
+        aliasToTable: new Map([["customerOrders", "orders"]]),
+        aliasToSqlReference: new Map([["customerOrders", "orders_2"]]),
+      },
+    );
+
+    const compiled = db
+      .selectFrom("users")
+      .selectAll()
+      .where(whereExpr as any)
+      .compile();
+
+    expect(compiled.sql).toContain(`"orders_2"."total_amount" > $1`);
+    expect(compiled.sql).not.toContain(`"customerOrders"."total_amount"`);
+    expect(compiled.parameters).toEqual([100]);
+  });
 });

@@ -6,6 +6,7 @@ export const stubSchema = [
     schema: null,
     access: "QUERYABLE",
     context: null,
+    summary: null,
     columns: [
       {
         name: "id",
@@ -114,6 +115,7 @@ export const stubSchema = [
     schema: null,
     access: "QUERYABLE",
     context: null,
+    summary: null,
     columns: [
       {
         name: "id",
@@ -174,6 +176,7 @@ export const stubSchema = [
     schema: null,
     access: "QUERYABLE",
     context: null,
+    summary: null,
     columns: [
       {
         name: "authorId",

@@ -23,6 +23,8 @@ import { applyHavingComparison } from "../utils/havingComparison";
 import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
 
+type GroupByQueryType = Extract<Query, { operation: "groupBy" }>;
+
 export async function groupBy(
   db: Kysely<any>,
   query: Query,
@@ -35,6 +37,7 @@ export async function groupBy(
   const dbForQuery = getSchemaBoundDb(db, schema, dialect);
   const { groupBy: groupByList, orderBy, limit, joins } = operationParameters;
   const having = operationParameters.having ?? null;
+  const aliasToTable = buildAliasToTable(table, joins);
 
   // Build query with schema-qualified table name
   const { source: baseSource } = resolveBaseSource({
@@ -78,6 +81,7 @@ export async function groupBy(
     (column) => sql`COUNT(${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const countDistinctJsonFields = createAggregationFields(
@@ -85,6 +89,7 @@ export async function groupBy(
     (column) => sql`COUNT(DISTINCT ${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const minJsonFields = createAggregationFields(
@@ -92,6 +97,7 @@ export async function groupBy(
     (column) => sql`MIN(${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const maxJsonFields = createAggregationFields(
@@ -99,6 +105,7 @@ export async function groupBy(
     (column) => sql`MAX(${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const sumJsonFields = createAggregationFields(
@@ -106,6 +113,7 @@ export async function groupBy(
     (column) => sql`SUM(${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const avgJsonFields = createAggregationFields(
@@ -113,6 +121,7 @@ export async function groupBy(
     (column) => sql`AVG(${column})`,
     schema,
     dialect,
+    aliasToTable,
   );
 
   const selectFields: Record<string, any> = {};
@@ -176,18 +185,8 @@ export async function groupBy(
 
   for (const key of groupByList) {
     if (key.type === "column") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias = key.alias ?? `${tableName!}.${columnName!}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? key.column;
       const dialectAlias = getDialectAlias(alias);
       selections.push(sql`${column}`.as(dialectAlias));
       groupByColumns.push(column);
@@ -197,18 +196,8 @@ export async function groupBy(
         having: column,
       });
     } else if (key.type === "dateInterval") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by interval (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.interval}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? `${key.column}|${key.interval}`;
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
@@ -228,19 +217,8 @@ export async function groupBy(
         having: havingExpr,
       });
     } else if (key.type === "dateComponent") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by component (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias =
-        key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? `${key.column}|${key.component}`;
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
@@ -293,7 +271,17 @@ export async function groupBy(
   }
 
   // Apply WHERE conditions before grouping
-  const whereExpr = buildWhereConditions(whereAndArray, table, schema, dialect, query.tableConditions);
+  const whereExpr = buildWhereConditions(
+    whereAndArray,
+    table,
+    schema,
+    dialect,
+    query.tableConditions,
+    {
+      aliasToTable,
+      aliasToSqlReference: aliasToTable,
+    },
+  );
   if (whereExpr) {
     dbQuery = dbQuery.where(whereExpr);
   }
@@ -332,6 +320,7 @@ export async function groupBy(
           condition.column,
           schema,
           dialect,
+          aliasToTable,
         );
         havingExpressions.push(
           applyHavingComparison(
@@ -366,17 +355,7 @@ export async function groupBy(
     );
     dbQuery = dbQuery.orderBy(expression.order, dir);
   } else {
-    assert(
-      orderBy.column.split(".").length === 2,
-      "Order By column must be in the format table.column",
-    );
-    const [tableName, columnName] = orderBy.column.split(".");
-    const column = getColumnFromTable({
-      columnName: columnName!,
-      tableName: tableName!,
-      schema,
-      dialect,
-    });
+    const column = resolveColumnReference(orderBy.column, schema, dialect, aliasToTable);
     const dir = orderBy.direction === "desc" ? "desc" : "asc";
 
     switch (orderBy.function) {
@@ -454,4 +433,40 @@ export async function groupBy(
     query: { sql: compiled.sql, params: compiled.parameters },
     data: normalisedRows,
   };
+}
+
+function buildAliasToTable(
+  baseTable: string,
+  joins: GroupByQueryType["operationParameters"]["joins"],
+) {
+  const map = new Map<string, string>();
+  map.set(baseTable, baseTable);
+
+  joins?.forEach((join: NonNullable<typeof joins>[number]) => {
+    const alias = join.name ?? join.table;
+    map.set(alias, join.table);
+    map.set(join.table, join.table);
+  });
+
+  return map;
+}
+
+function resolveColumnReference(
+  columnName: string,
+  schema: OperationContext["schema"],
+  dialect: OperationContext["dialect"],
+  aliasToTable: Map<string, string>,
+) {
+  const lastDot = columnName.lastIndexOf(".");
+  assert(lastDot !== -1, `Column ${columnName} must be qualified as tableOrAlias.column`);
+  const tableOrAlias = columnName.slice(0, lastDot);
+  const targetColumn = columnName.slice(lastDot + 1);
+  const targetTable = aliasToTable.get(tableOrAlias);
+  assert(targetTable, `Join alias ${tableOrAlias} not found for column ${columnName}`);
+  return getColumnFromTable({
+    columnName: targetColumn,
+    tableName: targetTable,
+    schema,
+    dialect,
+  });
 }

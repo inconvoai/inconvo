@@ -1336,6 +1336,7 @@ export type SchemaTable = {
   schema: string | null; // Database schema name (e.g., 'public', 'sales')
   access: TableAccess;
   context: string | null;
+  summary: string | null;
   columns: SchemaColumn[];
   computedColumns: SchemaComputedColumn[];
   outwardRelations: SchemaRelation[];

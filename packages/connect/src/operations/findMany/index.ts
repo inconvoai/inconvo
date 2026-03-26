@@ -126,6 +126,8 @@ export async function findMany(
   // Build selections
   const selections: any[] = [];
   const columnAliasMap = new Map<string, ColumnInfo>();
+  const aliasToTable = new Map<string, string>([[table, table]]);
+  const aliasToSqlReference = new Map<string, string>([[table, table]]);
 
   // Base table columns
   for (const col of selectMap[table] ?? []) {
@@ -142,6 +144,14 @@ export async function findMany(
 
   // Joined table columns - use SQL alias for column references
   for (const [alias, joinInfo] of joinInfoMap) {
+    aliasToTable.set(alias, joinInfo.tableName);
+    if (!aliasToTable.has(joinInfo.tableName)) {
+      aliasToTable.set(joinInfo.tableName, joinInfo.tableName);
+    }
+    aliasToSqlReference.set(alias, joinInfo.alias);
+    if (joinInfo.alias === joinInfo.tableName) {
+      aliasToSqlReference.set(joinInfo.tableName, joinInfo.alias);
+    }
     for (const col of selectMap[alias] ?? []) {
       // Get column reference using the SQL alias (not the original table name)
       const colRef = getColumnFromTable({
@@ -192,6 +202,10 @@ export async function findMany(
     schema,
     dialect,
     query.tableConditions,
+    {
+      aliasToTable,
+      aliasToSqlReference,
+    },
   );
   if (whereCondition) {
     dbQuery = dbQuery.where(whereCondition);

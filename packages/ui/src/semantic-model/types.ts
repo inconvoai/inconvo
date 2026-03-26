@@ -177,6 +177,7 @@ export interface TableSchema {
   source: TableSource;
   access: TableAccess;
   context: string | null;
+  summary: string | null;
   virtualTableConfig?: VirtualTableConfig | null;
   columns: Column[];
   computedColumns: ComputedColumn[];
@@ -200,6 +201,7 @@ export interface TableSummary {
   id: string;
   name: string;
   source: TableSource;
+  summary: string | null;
   access: TableAccess;
   columnCount: number;
   selectedColumnCount: number;

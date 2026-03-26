@@ -253,11 +253,16 @@ function buildAggregateArraySchema(description: string) {
 function buildAliasReferenceDescription(
   ctx: AggregateValidatorContext,
 ): string {
-  if (ctx.joinOptions.length === 0) {
+  const joinedAliases = Array.from(
+    new Set(
+      Object.keys(ctx.columnCatalog).filter((alias) => alias !== ctx.baseTable),
+    ),
+  );
+
+  if (joinedAliases.length === 0) {
     return `Base alias is ${ctx.baseTable}. No joined aliases are available.`;
   }
-  const joinedAliases = ctx.joinOptions.map((option) => option.name).join(", ");
-  return `Base alias is ${ctx.baseTable}. Joined aliases are: ${joinedAliases}. For joined columns, use one of those aliases exactly.`;
+  return `Base alias is ${ctx.baseTable}. Joined aliases are: ${joinedAliases.join(", ")}. For joined columns, use one of those aliases exactly.`;
 }
 
 interface ResolvedColumnReference {

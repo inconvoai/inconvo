@@ -27,6 +27,7 @@ export interface CountValidatorContext {
   baseColumns: string[];
   computedColumns: string[];
   joinOptions: CountJoinOption[];
+  joinAliasColumns: Record<string, string[]>;
 }
 
 export interface CountValidResult {
@@ -62,7 +63,7 @@ export function buildCountToolZodSchema(ctx: CountValidatorContext) {
     ...ctx.computedColumns.map((column) => `${ctx.baseTable}.${column}`),
   ];
 
-  const aliasExamples = ctx.joinOptions.map((option) => option.name);
+  const aliasExamples = Object.keys(ctx.joinAliasColumns);
   const joinedColumnGuidance =
     aliasExamples.length > 0
       ? `Joined columns must reference a join alias (alias.column). Available aliases after joining: ${aliasExamples.join(
@@ -137,9 +138,9 @@ export function buildCountValidatorZodSchema(ctx: CountValidatorContext) {
   });
 
   const joinColumnTokens = new Set<string>();
-  ctx.joinOptions.forEach((option) => {
-    option.selectableColumns.forEach((column) => {
-      joinColumnTokens.add(`${option.name}.${column}`);
+  Object.entries(ctx.joinAliasColumns).forEach(([alias, columns]) => {
+    columns.forEach((column) => {
+      joinColumnTokens.add(`${alias}.${column}`);
     });
   });
 
@@ -358,11 +359,9 @@ function resolveColumnReference(
     };
   }
 
-  const matchingOption = ctx.joinOptions.find(
-    (option) => option.name === aliasPart,
-  );
+  const selectableColumns = ctx.joinAliasColumns[aliasPart];
 
-  if (!matchingOption) {
+  if (!selectableColumns) {
     return {
       success: false,
       error: {
@@ -374,7 +373,7 @@ function resolveColumnReference(
     };
   }
 
-  if (!matchingOption.selectableColumns.includes(columnPart)) {
+  if (!selectableColumns.includes(columnPart)) {
     return {
       success: false,
       error: {
@@ -385,13 +384,13 @@ function resolveColumnReference(
   }
 
   return {
-    success: true,
-    reference: {
-      scope: "join",
-      alias: matchingOption.name,
-      column: columnPart,
-    },
-  };
+      success: true,
+      reference: {
+        scope: "join",
+        alias: aliasPart,
+        column: columnPart,
+      },
+    };
 }
 
 function splitAliasAndColumn(column: string): [string, string | null] {

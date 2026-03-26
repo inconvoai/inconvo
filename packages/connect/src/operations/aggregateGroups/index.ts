@@ -18,6 +18,7 @@ import { executeWithLogging } from "../utils/executeWithLogging";
 import type { OperationContext } from "../types";
 
 type Reducer = "sum" | "min" | "max" | "avg";
+type AggregateGroupsQueryType = Extract<Query, { operation: "aggregateGroups" }>;
 
 export async function aggregateGroups(
   db: Kysely<any>,
@@ -29,6 +30,7 @@ export async function aggregateGroups(
   const { schema, dialect } = ctx;
   const dbForQuery = getSchemaBoundDb(db, schema, dialect);
   const { groupBy: groupByList, joins, having } = operationParameters;
+  const aliasToTable = buildAliasToTable(table, joins);
 
   const aliasRenameMap = new Map<string, string>();
   const getDialectAlias = (alias: string) => {
@@ -49,18 +51,8 @@ export async function aggregateGroups(
 
   for (const key of groupByList) {
     if (key.type === "column") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias = key.alias ?? `${tableName!}.${columnName!}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? key.column;
       const dialectAlias = getDialectAlias(alias);
       groupByColumns.push(column);
       groupKeyExpressions.set(alias, {
@@ -69,18 +61,8 @@ export async function aggregateGroups(
         having: column,
       });
     } else if (key.type === "dateInterval") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by interval (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias = key.alias ?? `${tableName!}.${columnName!}|${key.interval}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? `${key.column}|${key.interval}`;
       const dialectAlias = getDialectAlias(alias);
       const intervalExpression = buildDateIntervalExpression(
         column,
@@ -99,19 +81,8 @@ export async function aggregateGroups(
         having: havingExpr,
       });
     } else if (key.type === "dateComponent") {
-      assert(
-        key.column.split(".").length === 2,
-        "Invalid column format for group by component (not table.column)",
-      );
-      const [tableName, columnName] = key.column.split(".");
-      const column = getColumnFromTable({
-        columnName: columnName!,
-        tableName: tableName!,
-        schema,
-        dialect,
-      });
-      const alias =
-        key.alias ?? `${tableName!}.${columnName!}|${key.component}`;
+      const column = resolveColumnReference(key.column, schema, dialect, aliasToTable);
+      const alias = key.alias ?? `${key.column}|${key.component}`;
       const dialectAlias = getDialectAlias(alias);
       const { select, order } = buildDateComponentExpressions(
         column,
@@ -136,36 +107,42 @@ export async function aggregateGroups(
       (column) => sql`COUNT(${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
     countDistinct: createAggregationFields(
       operationParameters.aggregates.countDistinct ?? undefined,
       (column) => sql`COUNT(DISTINCT ${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
     min: createAggregationFields(
       operationParameters.aggregates.min ?? undefined,
       (column) => sql`MIN(${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
     max: createAggregationFields(
       operationParameters.aggregates.max ?? undefined,
       (column) => sql`MAX(${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
     sum: createAggregationFields(
       operationParameters.aggregates.sum ?? undefined,
       (column) => sql`SUM(${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
     avg: createAggregationFields(
       operationParameters.aggregates.avg ?? undefined,
       (column) => sql`AVG(${column})`,
       schema,
       dialect,
+      aliasToTable,
     ),
   };
 
@@ -244,6 +221,10 @@ export async function aggregateGroups(
     schema,
     dialect,
     query.tableConditions,
+    {
+      aliasToTable,
+      aliasToSqlReference: aliasToTable,
+    },
   );
   if (whereExpr) {
     groupQuery = groupQuery.where(whereExpr);
@@ -282,6 +263,7 @@ export async function aggregateGroups(
           condition.column,
           schema,
           dialect,
+          aliasToTable,
         );
         havingExpressions.push(
           applyHavingComparison(
@@ -486,4 +468,40 @@ export async function aggregateGroups(
     query: { sql: compiled.sql, params: compiled.parameters },
     data: parsed,
   };
+}
+
+function buildAliasToTable(
+  baseTable: string,
+  joins: AggregateGroupsQueryType["operationParameters"]["joins"],
+) {
+  const map = new Map<string, string>();
+  map.set(baseTable, baseTable);
+
+  joins?.forEach((join: NonNullable<typeof joins>[number]) => {
+    const alias = join.name ?? join.table;
+    map.set(alias, join.table);
+    map.set(join.table, join.table);
+  });
+
+  return map;
+}
+
+function resolveColumnReference(
+  columnName: string,
+  schema: OperationContext["schema"],
+  dialect: OperationContext["dialect"],
+  aliasToTable: Map<string, string>,
+) {
+  const lastDot = columnName.lastIndexOf(".");
+  assert(lastDot !== -1, `Column ${columnName} must be qualified as tableOrAlias.column`);
+  const tableOrAlias = columnName.slice(0, lastDot);
+  const targetColumn = columnName.slice(lastDot + 1);
+  const targetTable = aliasToTable.get(tableOrAlias);
+  assert(targetTable, `Join alias ${tableOrAlias} not found for column ${columnName}`);
+  return getColumnFromTable({
+    columnName: targetColumn,
+    tableName: targetTable,
+    schema,
+    dialect,
+  });
 }

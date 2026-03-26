@@ -11,6 +11,10 @@ import type { SchemaResponse } from "../../types/types";
 import type { DatabaseDialect } from "../types";
 
 type _FilterObject = Record<string, unknown>;
+type WhereAliasResolution = {
+  aliasToTable?: Map<string, string>;
+  aliasToSqlReference?: Map<string, string>;
+};
 
 // Helper function to combine SQL expressions with AND/OR operators
 // Avoids the RawBuilder await issue by using a loop instead of reduce
@@ -44,6 +48,7 @@ export function buildWhereConditions(
   schema: SchemaResponse,
   dialect: DatabaseDialect,
   tableConditions?: TableConditionsMap,
+  aliasResolution?: WhereAliasResolution,
 ): Expression<SqlBool> | undefined {
   if (!whereAndArray || whereAndArray.length === 0) {
     return undefined;
@@ -62,6 +67,8 @@ export function buildWhereConditions(
       schema,
       dialect,
       tableConditions,
+      false,
+      aliasResolution,
     );
     if (condition) {
       topLevelConditions.push(condition);
@@ -93,6 +100,7 @@ function parseConditionObject(
   dialect: DatabaseDialect,
   tableConditions?: TableConditionsMap,
   insideRelationFilter: boolean = false,
+  aliasResolution?: WhereAliasResolution,
 ): Expression<SqlBool> | undefined {
   if (!condition || typeof condition !== "object") {
     return undefined;
@@ -110,6 +118,7 @@ function parseConditionObject(
         dialect,
         tableConditions,
         insideRelationFilter,
+        aliasResolution,
       );
       if (parsed !== undefined) {
         andConditions.push(parsed);
@@ -140,6 +149,7 @@ function parseConditionObject(
         dialect,
         tableConditions,
         insideRelationFilter,
+        aliasResolution,
       );
       if (parsed !== undefined) {
         orConditions.push(parsed);
@@ -170,6 +180,7 @@ function parseConditionObject(
         dialect,
         tableConditions,
         insideRelationFilter,
+        aliasResolution,
       );
       if (parsed !== undefined) {
         notConditions.push(parsed);
@@ -210,6 +221,7 @@ function parseConditionObject(
     // All column references must be qualified (table.column format)
     // Relations are the exception - they use unqualified names
     let resolvedTableName: string;
+    let resolvedTableReference: string;
     let resolvedColumnName: string;
 
     if (column.includes(".")) {
@@ -217,23 +229,34 @@ function parseConditionObject(
       const lastDot = column.lastIndexOf(".");
       const qualifiedTable = column.slice(0, lastDot);
       const qualifiedColumn = column.slice(lastDot + 1);
+      const schemaTableName =
+        aliasResolution?.aliasToTable?.get(qualifiedTable) ?? qualifiedTable;
 
       // Verify table exists in schema
-      const targetTable = schema.tables.find((t: any) => t.name === qualifiedTable);
+      const targetTable = schema.tables.find(
+        (t: any) => t.name === schemaTableName,
+      );
       if (!targetTable) {
-        throw new Error(`Table "${qualifiedTable}" not found in schema for column "${column}"`);
+        throw new Error(
+          `Table "${qualifiedTable}" not found in schema for column "${column}"`,
+        );
       }
 
-      resolvedTableName = qualifiedTable;
+      resolvedTableName = schemaTableName;
+      resolvedTableReference =
+        aliasResolution?.aliasToSqlReference?.get(qualifiedTable) ??
+        schemaTableName;
       resolvedColumnName = qualifiedColumn;
     } else if (isRelation) {
       // Relations use unqualified names - handled below
       resolvedTableName = tableName;
+      resolvedTableReference = tableName;
       resolvedColumnName = column;
     } else if (insideRelationFilter) {
       // Inside relation filters, unqualified columns are allowed
       // They resolve to the current target table
       resolvedTableName = tableName;
+      resolvedTableReference = tableName;
       resolvedColumnName = column;
     } else {
       // Unqualified non-relation column at top level
@@ -246,7 +269,15 @@ function parseConditionObject(
     if (operators === null) {
       // Column IS NULL
       columnConditions.push(
-        buildOperatorCondition(resolvedColumnName, "equals", null, resolvedTableName, schema, dialect),
+        buildOperatorCondition(
+          resolvedColumnName,
+          "equals",
+          null,
+          resolvedTableName,
+          schema,
+          dialect,
+          resolvedTableReference,
+        ),
       );
     } else if (typeof operators === "object" && !Array.isArray(operators)) {
       if (isRelation) {
@@ -273,6 +304,7 @@ function parseConditionObject(
               resolvedTableName,
               schema,
               dialect,
+              resolvedTableReference,
             ),
           );
         }
@@ -280,7 +312,15 @@ function parseConditionObject(
     } else {
       // Direct value comparison (implicit equals)
       columnConditions.push(
-        buildOperatorCondition(resolvedColumnName, "equals", operators, resolvedTableName, schema, dialect),
+        buildOperatorCondition(
+          resolvedColumnName,
+          "equals",
+          operators,
+          resolvedTableName,
+          schema,
+          dialect,
+          resolvedTableReference,
+        ),
       );
     }
   }
@@ -621,12 +661,14 @@ function buildOperatorCondition(
   tableName: string,
   schema: SchemaResponse,
   dialect: DatabaseDialect,
+  tableReferenceName?: string,
 ): Expression<SqlBool> {
   const columnRef = getColumnFromTable({
     columnName: column,
     tableName,
     schema,
     dialect,
+    tableAlias: tableReferenceName,
   });
 
   // Handle date strings - parse them properly for SQL

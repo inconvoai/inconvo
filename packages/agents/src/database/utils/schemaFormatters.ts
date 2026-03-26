@@ -103,11 +103,14 @@ export function buildTableSchemaStringFromTableSchema(
           .join("\n")
           .replace(/^/, `\n\tRelations:\n`)
       : "";
+  const summary = tableSchema.summary
+    ? `\n\tSummary: ${tableSchema.summary}`
+    : "";
   const context = tableSchema.context
     ? `\n\t<${tableSchema.name}TableContext>\n${tableSchema.context}\n\t</${tableSchema.name}TableContext>`
     : "";
 
-  return `${tableName}\n\t${access}\n${columns}${computedColumns}${relations}${context}`;
+  return `${tableName}\n\t${access}${summary}\n${columns}${computedColumns}${relations}${context}`;
 }
 
 function buildTableSchemaString(schema: Schema, table: string) {

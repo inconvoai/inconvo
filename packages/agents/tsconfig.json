@@ -14,7 +14,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
       "~/*": ["./src/*"]
     }

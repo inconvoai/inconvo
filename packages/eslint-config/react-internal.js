@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import { globalIgnores } from "eslint/config";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 import pluginReactHooks from "eslint-plugin-react-hooks";
@@ -16,6 +17,7 @@ export const reactInternalConfig = [
   js.configs.recommended,
   eslintConfigPrettier,
   ...tseslint.configs.recommended,
+  globalIgnores(["eslint.config.*"]),
   {
     ...pluginReact.configs.flat.recommended,
     languageOptions: {
@@ -29,7 +31,7 @@ export const reactInternalConfig = [
     plugins: {
       "react-hooks": pluginReactHooks,
     },
-    settings: { react: { version: "detect" } },
+    settings: { react: { version: "19.0" } },
     rules: {
       ...pluginReactHooks.configs.recommended.rules,
       "react/react-in-jsx-scope": "off",

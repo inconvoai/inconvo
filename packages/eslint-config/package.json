@@ -12,15 +12,15 @@
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
-    "@next/eslint-plugin-next": "^16.1.6",
+    "@next/eslint-plugin-next": "^16.2.1",
     "eslint": "catalog:",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-only-warn": "^1.2.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-turbo": "^2.8.12",
+    "eslint-plugin-turbo": "^2.8.21",
     "globals": "^17.4.0",
     "typescript": "catalog:",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.57.2"
   }
 }

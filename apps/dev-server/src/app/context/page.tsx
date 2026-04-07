@@ -26,6 +26,7 @@ import {
   type TableCondition,
   type TableInfo,
 } from "@repo/ui/user-context";
+import { resolveEffectiveColumnType } from "@repo/types";
 import posthog from "posthog-js";
 import { trackFeatureUsageClient } from "~/lib/telemetry";
 
@@ -116,13 +117,32 @@ export default function UserContextPage() {
           `/api/schema/tables/${encodeURIComponent(table.name)}`,
         );
         const detailData = (await detailRes.json()) as {
-          table?: { id: string; name: string; columns: TableInfo["columns"] };
+          table?: {
+            id: string;
+            name: string;
+            columns: Array<{
+              id: string;
+              name: string;
+              type: string;
+              effectiveType?: string;
+              conversion?: {
+                selected?: boolean | null;
+                type?: string | null;
+              } | null;
+            }>;
+          };
         };
         if (detailData.table) {
           tableDetails.push({
             id: detailData.table.id,
             name: detailData.table.name,
-            columns: detailData.table.columns,
+            columns: detailData.table.columns.map((column) => ({
+              id: column.id,
+              name: column.name,
+              type:
+                column.effectiveType ??
+                resolveEffectiveColumnType(column.type, column.conversion),
+            })),
           });
         }
       }

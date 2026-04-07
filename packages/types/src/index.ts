@@ -1377,6 +1377,8 @@ export const NUMERIC_LOGICAL_TYPES = new Set([
   "float",
 ]);
 
+export type UserContextValueType = "STRING" | "NUMBER" | "BOOLEAN";
+
 export function resolveEffectiveColumnType(
   columnType: string,
   conversion?: { selected?: boolean | null; type?: string | null } | null,
@@ -1393,6 +1395,39 @@ export function isEffectivelyNumeric(
 ): boolean {
   const effectiveType = resolveEffectiveColumnType(columnType, conversion);
   return NUMERIC_LOGICAL_TYPES.has(effectiveType);
+}
+
+export function resolveUserContextValueTypeForColumnType(
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): UserContextValueType | null {
+  const effectiveType = resolveEffectiveColumnType(
+    columnType,
+    conversion,
+  ).toLowerCase();
+
+  if (NUMERIC_LOGICAL_TYPES.has(effectiveType)) {
+    return "NUMBER";
+  }
+  if (effectiveType === "string") {
+    return "STRING";
+  }
+  if (effectiveType === "boolean") {
+    return "BOOLEAN";
+  }
+
+  return null;
+}
+
+export function doesUserContextValueTypeMatchColumnType(
+  userContextType: UserContextValueType,
+  columnType: string,
+  conversion?: { selected?: boolean | null; type?: string | null } | null,
+): boolean {
+  return (
+    resolveUserContextValueTypeForColumnType(columnType, conversion) ===
+    userContextType
+  );
 }
 
 export function isActiveEnumColumn(

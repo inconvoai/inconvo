@@ -1,5 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
+import {
+  doesUserContextValueTypeMatchColumnType,
+  resolveEffectiveColumnType,
+  resolveUserContextValueTypeForColumnType,
+  type UserContextValueType,
+} from "@repo/types";
 import { prisma } from "~/lib/prisma";
+
+function isUserContextValueType(value: string): value is UserContextValueType {
+  return value === "STRING" || value === "NUMBER" || value === "BOOLEAN";
+}
 
 /**
  * GET /api/schema/table-conditions
@@ -44,6 +54,115 @@ export async function POST(request: NextRequest) {
     if (!tableId || !columnId || !userContextFieldId) {
       return NextResponse.json(
         { error: "tableId, columnId, and userContextFieldId are required" },
+        { status: 400 },
+      );
+    }
+
+    const [table, column, userContextField] = await Promise.all([
+      prisma.table.findUnique({
+        where: { id: tableId },
+        select: { id: true },
+      }),
+      prisma.column.findFirst({
+        where: {
+          id: columnId,
+          tableId,
+        },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          augmentation: {
+            select: {
+              id: true,
+              kind: true,
+              selected: true,
+              conversionConfig: {
+                select: {
+                  ast: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.userContextField.findUnique({
+        where: { id: userContextFieldId },
+        select: {
+          id: true,
+          key: true,
+          type: true,
+        },
+      }),
+    ]);
+
+    if (!table) {
+      return NextResponse.json({ error: "Table not found" }, { status: 404 });
+    }
+
+    if (!column) {
+      return NextResponse.json(
+        { error: "Column not found for table" },
+        { status: 404 },
+      );
+    }
+
+    if (!userContextField) {
+      return NextResponse.json(
+        { error: "User context field not found" },
+        { status: 404 },
+      );
+    }
+
+    const columnConversion =
+      column.augmentation?.kind === "CONVERSION" &&
+      column.augmentation.conversionConfig
+        ? {
+            id: column.augmentation.id,
+            ast: column.augmentation.conversionConfig.ast,
+            type: column.augmentation.conversionConfig.type ?? null,
+            selected: column.augmentation.selected,
+          }
+        : null;
+    const effectiveColumnType = resolveEffectiveColumnType(
+      column.type,
+      columnConversion,
+    );
+    const compatibleColumnType = resolveUserContextValueTypeForColumnType(
+      column.type,
+      columnConversion,
+    );
+
+    if (!compatibleColumnType) {
+      return NextResponse.json(
+        {
+          error: `Table condition column "${column.name}" uses unsupported type "${effectiveColumnType}". Only STRING, NUMBER, and BOOLEAN columns can be matched against user context fields.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!isUserContextValueType(userContextField.type)) {
+      return NextResponse.json(
+        {
+          error: `User context field "${userContextField.key}" has unsupported type "${userContextField.type}".`,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !doesUserContextValueTypeMatchColumnType(
+        userContextField.type,
+        column.type,
+        columnConversion,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error: `Table condition type mismatch: column "${column.name}" is ${compatibleColumnType}, but user context field "${userContextField.key}" is ${userContextField.type}.`,
+        },
         { status: 400 },
       );
     }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Drawer, Stack, Select, Group, Button } from "@mantine/core";
+import { doesUserContextValueTypeMatchColumnType } from "@repo/types";
 import type { ContextField, TableInfo, ConnectionInfo } from "./types";
 
 export interface AddConditionModalProps {
@@ -56,6 +57,12 @@ export function AddConditionModal({
 
   const selectedTable = tables.find((t) => t.id === tableId);
   const columns = selectedTable?.columns ?? [];
+  const selectedColumn = columns.find((column) => column.id === columnId);
+  const compatibleFields = selectedColumn
+    ? fields.filter((field) =>
+        doesUserContextValueTypeMatchColumnType(field.type, selectedColumn.type),
+      )
+    : fields;
 
   const handleSubmit = () => {
     if (tableId && columnId && fieldId) {
@@ -85,6 +92,7 @@ export function AddConditionModal({
     setConnectionId(value);
     setTableId(null); // Reset table when connection changes
     setColumnId(null); // Reset column when connection changes
+    setFieldId(null);
     if (value && onConnectionSelect) {
       onConnectionSelect(value);
     }
@@ -93,8 +101,32 @@ export function AddConditionModal({
   const handleTableChange = (value: string | null) => {
     setTableId(value);
     setColumnId(null); // Reset column when table changes
+    setFieldId(null);
     if (value && onTableSelect) {
       onTableSelect(value);
+    }
+  };
+
+  const handleColumnChange = (value: string | null) => {
+    setColumnId(value);
+    if (!value) {
+      setFieldId(null);
+      return;
+    }
+
+    const nextColumn = columns.find((column) => column.id === value);
+    if (!nextColumn) {
+      setFieldId(null);
+      return;
+    }
+
+    const currentFieldIsCompatible = fields.some(
+      (field) =>
+        field.id === fieldId &&
+        doesUserContextValueTypeMatchColumnType(field.type, nextColumn.type),
+    );
+    if (!currentFieldIsCompatible) {
+      setFieldId(null);
     }
   };
 
@@ -135,16 +167,26 @@ export function AddConditionModal({
             label: `${c.name} (${c.type})`,
           }))}
           value={columnId}
-          onChange={setColumnId}
+          onChange={handleColumnChange}
           disabled={!tableId || columnsLoading}
         />
         <Select
           label="Context Field"
-          description="Select the context field to match against"
-          placeholder="Select a context field"
-          data={fields.map((f) => ({ value: f.id, label: f.key }))}
+          description={
+            selectedColumn
+              ? "Only context fields with the same logical type are shown"
+              : "Select a column to filter compatible context fields"
+          }
+          placeholder={
+            selectedColumn
+              ? "Select a compatible context field"
+              : "Select a column first"
+          }
+          data={compatibleFields.map((f) => ({ value: f.id, label: f.key }))}
           value={fieldId}
           onChange={setFieldId}
+          disabled={!selectedColumn}
+          nothingFoundMessage="No compatible context fields found"
         />
         <Group justify="flex-end" gap="sm">
           <Button variant="subtle" onClick={handleClose}>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Select, Button, Group, Stack, Text, Alert } from "@mantine/core";
 import { IconInfoCircle } from "@tabler/icons-react";
+import { doesUserContextValueTypeMatchColumnType } from "@repo/types";
 import type {
   TableSchema,
   UserContextField,
@@ -47,7 +48,7 @@ export function ContextFilterForm({
     if (!columnName || !fieldKey) return;
 
     const column = table.columns.find((col) => col.name === columnName);
-    const field = userContextFields.find((f) => f.key === fieldKey);
+    const field = compatibleUserContextFields.find((f) => f.key === fieldKey);
 
     if (column && field) {
       await onSave({
@@ -61,15 +62,48 @@ export function ContextFilterForm({
     await onDelete();
   };
 
+  const selectedColumn = table.columns.find((col) => col.name === columnName);
+  const selectedColumnType =
+    selectedColumn?.effectiveType ?? selectedColumn?.type ?? null;
+  const compatibleUserContextFields = selectedColumnType
+    ? userContextFields.filter((field) =>
+        doesUserContextValueTypeMatchColumnType(field.type, selectedColumnType),
+      )
+    : userContextFields;
+
+  const handleColumnChange = (value: string | null) => {
+    const nextColumnName = value ?? "";
+    setColumnName(nextColumnName);
+
+    const nextColumn = table.columns.find((col) => col.name === nextColumnName);
+    const nextColumnType = nextColumn?.effectiveType ?? nextColumn?.type ?? null;
+    if (!nextColumnType) {
+      return;
+    }
+
+    const nextCompatibleFields = userContextFields.filter((field) =>
+      doesUserContextValueTypeMatchColumnType(field.type, nextColumnType),
+    );
+    const currentFieldIsCompatible = nextCompatibleFields.some(
+      (field) => field.key === fieldKey,
+    );
+    if (!currentFieldIsCompatible) {
+      setFieldKey("");
+    }
+  };
+
   const columnOptions = table.columns.map((column) => ({
     value: column.name,
     label: column.name,
   }));
 
-  const userContextOptions = userContextFields.map((field) => ({
+  const userContextOptions = compatibleUserContextFields.map((field) => ({
     value: field.key,
     label: field.key,
   }));
+  const selectedField = compatibleUserContextFields.find(
+    (field) => field.key === fieldKey,
+  );
 
   const isLoading = saveLoading || deleteLoading;
   const isDisabled = readOnly || isLoading;
@@ -94,7 +128,7 @@ export function ContextFilterForm({
           label="Column"
           placeholder="Select a column"
           value={columnName}
-          onChange={(value) => setColumnName(value ?? "")}
+          onChange={handleColumnChange}
           data={columnOptions}
           description="The column to filter on"
           disabled={isDisabled}
@@ -102,12 +136,21 @@ export function ContextFilterForm({
 
         <Select
           label="User Context Field"
-          placeholder="Select a field"
+          placeholder={
+            selectedColumnType
+              ? "Select a compatible field"
+              : "Select a column first"
+          }
           value={fieldKey}
           onChange={(value) => setFieldKey(value ?? "")}
           data={userContextOptions}
-          description="The user context value to match against"
-          disabled={isDisabled}
+          description={
+            selectedColumnType
+              ? "Only compatible user context fields are shown for the selected column"
+              : "Select a column to filter the available user context fields"
+          }
+          disabled={isDisabled || !selectedColumnType}
+          nothingFoundMessage="No compatible user context fields found"
         />
 
         {table.condition && (
@@ -141,7 +184,9 @@ export function ContextFilterForm({
           <Button
             onClick={handleSave}
             loading={saveLoading}
-            disabled={readOnly || !columnName || !fieldKey || deleteLoading}
+            disabled={
+              readOnly || !columnName || !selectedField || deleteLoading
+            }
           >
             Save
           </Button>

@@ -4,7 +4,11 @@ import { loadTestEnv, getTestContext } from "../loadTestEnv";
 
 function parseAggregateCell(value: unknown): Record<string, number> {
   if (typeof value === "string") {
-    return JSON.parse(value);
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
   }
   return (value as Record<string, number>) ?? {};
 }

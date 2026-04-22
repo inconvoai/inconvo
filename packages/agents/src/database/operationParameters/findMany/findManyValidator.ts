@@ -93,10 +93,10 @@ export function buildFindManyZodSchema(ctx: FindManyValidatorContext) {
     orderBy: z
       .object({
         direction: z.enum(["asc", "desc"]),
-        column: stringArrayToZodEnum([
-          ...ctx.baseColumns,
-          ...ctx.baseComputedColumns,
-        ]).describe("Ordering column (must come from base table)."),
+        column: (ctx.baseColumns.length + ctx.baseComputedColumns.length > 0
+          ? stringArrayToZodEnum([...ctx.baseColumns, ...ctx.baseComputedColumns])
+          : z.never()
+        ).describe("Ordering column (must come from base table)."),
       })
       .nullable()
       .describe("Optional ordering for base table only"),

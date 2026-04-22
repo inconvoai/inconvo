@@ -311,7 +311,8 @@ function SchemaPageContent() {
 
   const searchQuery = searchFromUrl;
   const accessFilter = accessParamToFilter(accessFromUrl);
-  const currentPage = pageFromUrl ? parseInt(pageFromUrl, 10) : 1;
+  const rawPage = pageFromUrl ? parseInt(pageFromUrl, 10) : 1;
+  const currentPage = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
 
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [totalCount, setTotalCount] = useState(0);

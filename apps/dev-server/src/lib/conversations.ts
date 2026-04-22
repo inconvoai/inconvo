@@ -147,9 +147,15 @@ export async function updateConversation(
     });
 
     return toConversation(conversation);
-  } catch {
-    // Record not found
-    return undefined;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2025"
+    ) {
+      return undefined;
+    }
+    throw error;
   }
 }
 

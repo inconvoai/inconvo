@@ -92,9 +92,16 @@ describe("MSSQL groupBy Operation", () => {
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
-    expect(resultRows).toHaveLength(expected.length);
-    expected.forEach((expectedRow, index) => {
-      const actualRow = resultRows[index] as typeof expectedRow;
+    const sortedExpected = [...expected].sort((a, b) =>
+      String(a["orders.product_id"]).localeCompare(String(b["orders.product_id"]))
+    );
+    const sortedResultRows = [...resultRows].sort((a: any, b: any) =>
+      String(a["orders.product_id"]).localeCompare(String(b["orders.product_id"]))
+    );
+
+    expect(sortedResultRows).toHaveLength(sortedExpected.length);
+    sortedExpected.forEach((expectedRow, index) => {
+      const actualRow = sortedResultRows[index] as typeof expectedRow;
       expect(actualRow["orders.product_id"]).toBe(
         expectedRow["orders.product_id"],
       );

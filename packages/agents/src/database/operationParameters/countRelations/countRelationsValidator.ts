@@ -54,6 +54,9 @@ export type CountRelationsValidationResult =
 export function buildCountRelationsZodSchema(
   ctx: CountRelationsValidatorContext,
 ) {
+  if (ctx.baseColumns.length === 0) {
+    throw new Error("buildCountRelationsZodSchema requires at least one base column");
+  }
   const baseColEnum = stringArrayToZodEnum(ctx.baseColumns);
 
   // Build per relation literal object schemas so tool guidance is strict

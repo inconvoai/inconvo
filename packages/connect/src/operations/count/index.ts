@@ -206,11 +206,11 @@ export async function count(
     if (row) {
       const parsedCount =
         typeof row._count === "string"
-          ? JSON.parse(row._count)
+          ? (() => { try { return JSON.parse(row._count); } catch { return {}; } })()
           : (row._count as Record<string, number> | undefined);
       const parsedDistinct =
         typeof row._countDistinct === "string"
-          ? JSON.parse(row._countDistinct)
+          ? (() => { try { return JSON.parse(row._countDistinct); } catch { return undefined; } })()
           : (row._countDistinct as Record<string, number> | undefined);
       data = {
         _count: parsedCount ?? {},

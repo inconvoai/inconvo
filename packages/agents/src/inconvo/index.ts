@@ -637,6 +637,10 @@ export async function inconvoAgent(params: QuestionAgentParams) {
     // reasoning: { effort: "low", summary: "detailed" },
   });
 
+  if (params.databases.length === 0) {
+    throw new Error("At least one database is required");
+  }
+
   // Build database names for tool schema validation
   const databaseNames = params.databases.map((db) => db.friendlyName);
 

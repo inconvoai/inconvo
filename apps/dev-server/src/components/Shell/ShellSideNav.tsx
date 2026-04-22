@@ -48,7 +48,9 @@ export function ShellSideNav({ onNavClick }: ShellSideNavProps) {
               },
             }}
             rightSection={<Copy value={DEV_AGENT_ID} />}
-            onClick={() => navigator.clipboard.writeText(DEV_AGENT_ID)}
+            onClick={() => {
+              navigator.clipboard?.writeText(DEV_AGENT_ID).catch(() => {});
+            }}
           />
         </Stack>
       </div>

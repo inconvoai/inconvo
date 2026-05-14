@@ -68,7 +68,6 @@ export function applyJoinHop(
   }
 
   // Look up the target table's schema for cross-schema joins
-  const targetTable = schema?.tables.find((t) => t.name === targetTableName);
   const targetTableId =
     schema && dialect
       ? resolveJoinTargetSource({

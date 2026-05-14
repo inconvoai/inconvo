@@ -51,7 +51,7 @@ export async function getDb(): Promise<Kysely<unknown>> {
 
     db = new Kysely({
       dialect: new MysqlDialect({
-        pool: mysqlPool as never,
+        pool: mysqlPool,
       }),
       log: isDevelopment ? createLogger() : undefined,
     });

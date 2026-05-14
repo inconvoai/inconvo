@@ -24,7 +24,7 @@ async function withTempRepo(t: TestContext): Promise<string> {
 }
 
 function failMethod(name: string) {
-  return async (..._args: unknown[]) => {
+  return async () => {
     throw new Error(`${name} should not be called`);
   };
 }

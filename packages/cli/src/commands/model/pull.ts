@@ -77,16 +77,15 @@ export const modelPullCommand = new Command("pull")
       }
 
       const allAgents = await client.listOrgAgents();
-      let selectedAgents: AgentInfo[] = [];
-
-      if (targetMode.kind === "all_agents") {
-        selectedAgents = allAgents;
-      } else if (targetMode.kind === "explicit_agents") {
-        selectedAgents = resolveAgentsById(allAgents, targetMode.agentIds);
-      } else {
-        const selection = await promptPullSelection(allAgents);
-        selectedAgents = resolveAgentsById(allAgents, selection.selectedAgentIds);
-      }
+      const selectedAgents: AgentInfo[] =
+        targetMode.kind === "all_agents"
+          ? allAgents
+          : targetMode.kind === "explicit_agents"
+            ? resolveAgentsById(allAgents, targetMode.agentIds)
+            : resolveAgentsById(
+                allAgents,
+                (await promptPullSelection(allAgents)).selectedAgentIds,
+              );
 
       if (selectedAgents.length === 0) {
         throw new Error("No agents selected for pull.");

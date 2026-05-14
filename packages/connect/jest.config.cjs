@@ -1,3 +1,4 @@
+/* global module */
 module.exports = {
   testMatch: ["**/test/**/*.test.ts"],
   testEnvironment: "node",

@@ -490,7 +490,7 @@ export function ColumnTable({
               </Table.Tr>
               <Table.Tr style={{ display: "none" }}>
                 <Table.Td colSpan={5}>
-                  <Collapse in={activeExpanded}>
+                  <Collapse expanded={activeExpanded}>
                     <div />
                   </Collapse>
                 </Table.Td>

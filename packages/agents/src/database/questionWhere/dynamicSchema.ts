@@ -72,7 +72,7 @@ function buildEnumValueSchema(valueEnum: SchemaColumnValueEnum) {
     if (resolved === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Value \"${String(input)}\" is not in allowed values`,
+        message: `Value "${String(input)}" is not in allowed values`,
       });
       return z.NEVER;
     }

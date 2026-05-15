@@ -41,7 +41,7 @@ export async function promptPullSelection(
     throw new Error("Pull cancelled.");
   }
 
-  let selectedAgentIds: string[] = [];
+  let selectedAgentIds: string[];
   if (mode === "one") {
     const selected = await p.select({
       message: "Select agent",

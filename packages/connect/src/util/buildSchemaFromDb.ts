@@ -604,7 +604,7 @@ async function extractForeignKeys(
 
     // First pass: create forward relations (many-to-one)
     for (const fk of foreignKeys) {
-      const { sourceTable, sourceSchema, targetTable, targetSchema, sourceColumns, targetColumns } = fk;
+      const { sourceTable, targetTable, targetSchema, sourceColumns, targetColumns } = fk;
 
       if (
         !allowedTables.has(sourceTable) ||
@@ -651,7 +651,7 @@ async function extractForeignKeys(
 
     // Second pass: create reverse relations (one-to-many)
     for (const fk of foreignKeys) {
-      const { sourceTable, sourceSchema, targetTable, targetSchema, sourceColumns, targetColumns } = fk;
+      const { sourceTable, sourceSchema, targetTable, sourceColumns, targetColumns } = fk;
 
       if (
         !allowedTables.has(sourceTable) ||

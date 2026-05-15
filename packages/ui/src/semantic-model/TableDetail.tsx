@@ -250,7 +250,9 @@ export function TableDetail({
     "save" | "refresh" | "delete" | null
   >(null);
   const [isVirtualSqlExpanded, setIsVirtualSqlExpanded] = useState(false);
-  const [isMac, setIsMac] = useState(false);
+  const [isMac] = useState(
+    () => typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent),
+  );
 
   const isDisabled = readOnly || table.access === "OFF";
   const isVirtualTable = table.source === "VIRTUAL";
@@ -283,10 +285,6 @@ export function TableDetail({
   useEffect(() => {
     setIsVirtualSqlExpanded(false);
   }, [table.id]);
-
-  useEffect(() => {
-    setIsMac(/mac/i.test(navigator?.userAgent ?? ""));
-  }, []);
 
   const startEditingDescription = () => {
     setDescriptionValue(table.context ?? "");
@@ -552,7 +550,7 @@ export function TableDetail({
                   </Group>
                 </Group>
 
-                <Collapse in={isVirtualSqlExpanded}>
+                <Collapse expanded={isVirtualSqlExpanded}>
                   <Stack gap="sm">
                     {!table.virtualTableConfig ? (
                       <Alert color="red">

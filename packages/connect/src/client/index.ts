@@ -91,7 +91,9 @@ export class UserDatabaseConnector {
       return SchemaResponseSchema.parse(response.data);
     } catch (error) {
       if (error instanceof ZodError) {
-        throw new Error(`Schema validation error: ${error.message}`);
+        throw new Error(`Schema validation error: ${error.message}`, {
+          cause: error,
+        });
       }
       throw error;
     }
@@ -117,7 +119,9 @@ export class UserDatabaseConnector {
         }
       }
       if (error instanceof ZodError) {
-        throw new Error(`Validation error for Query: ${error.message}`);
+        throw new Error(`Validation error for Query: ${error.message}`, {
+          cause: error,
+        });
       }
       throw error;
     }

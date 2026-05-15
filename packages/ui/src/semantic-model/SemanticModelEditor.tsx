@@ -294,7 +294,6 @@ export function SemanticModelEditor({
   onUpdateComputedColumnUnit,
   onRequestCreateVirtualTable,
   onValidateVirtualTableSql,
-  onCreateVirtualTable,
   onUpdateVirtualTableSql,
   onRefreshVirtualTableColumns,
   onDeleteVirtualTable,

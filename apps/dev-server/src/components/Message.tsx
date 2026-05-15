@@ -33,7 +33,7 @@ export function Message({
     }
     return (
       <MessageContent
-        message={message as InconvoMessage}
+        message={message}
         isStreaming={isStreaming}
         renderVegaChart={(spec) => <VegaChart spec={spec} />}
       />

@@ -7,7 +7,6 @@ import {
   CompiledQuery,
   type DatabaseConnection,
   type DatabaseIntrospector,
-  type DatabaseMetadata,
   type DatabaseMetadataOptions,
   type Dialect,
   type Driver,
@@ -293,6 +292,7 @@ export class BigQueryIntrospector implements DatabaseIntrospector {
     return (tables as any[]).map((table) => ({
       name: table.table_name,
       isView: table.table_type === "VIEW",
+      isForeign: false,
       schema: this.config.dataset,
       columns: columnsByTable.get(table.table_name) ?? [],
     }));
@@ -300,7 +300,7 @@ export class BigQueryIntrospector implements DatabaseIntrospector {
 
   async getMetadata(
     options?: DatabaseMetadataOptions,
-  ): Promise<DatabaseMetadata> {
+  ): Promise<{ tables: TableMetadata[] }> {
     return {
       tables: await this.getTables(options),
     };

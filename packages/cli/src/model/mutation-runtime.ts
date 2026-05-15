@@ -5,7 +5,6 @@ import {
   syncAgentUserContext,
   syncSingleAgentToWorkspace,
   type SyncScope,
-  type ScopedSyncResult,
 } from "./operations.js";
 import type { ModelActionType } from "./types.js";
 import type { PlatformApiClient } from "./api-client.js";

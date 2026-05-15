@@ -70,8 +70,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
       if (
-        conversionConfig &&
-        conversionConfig.type !== undefined &&
+        conversionConfig?.type !== undefined &&
         conversionConfig.ast === undefined
       ) {
         return NextResponse.json(

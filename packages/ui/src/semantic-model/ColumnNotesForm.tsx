@@ -17,7 +17,6 @@ export interface ColumnNotesFormProps {
 
 export function ColumnNotesForm({
   column,
-  tableName: _tableName,
   onSave,
   onClose,
   loading = false,

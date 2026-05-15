@@ -32,11 +32,11 @@
     "postpublish": "git checkout package.json"
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0",
+    "@clack/prompts": "^1.4.0",
     "@faker-js/faker": "^10.4.0",
     "@google-cloud/bigquery": "catalog:",
     "commander": "^14.0.3",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.2",
     "kysely": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
@@ -47,7 +47,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.0",
     "eslint": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"

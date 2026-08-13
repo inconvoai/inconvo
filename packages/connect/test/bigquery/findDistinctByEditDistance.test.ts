@@ -46,4 +46,22 @@ describe("BigQuery findDistinctByEditDistance Operation", () => {
     expect(Array.isArray(response.data)).toBe(true);
     expect(response.data[0]).toContain("Model");
   });
+
+  test("findDistinctByEditDistance rejects non-string columns", async () => {
+    const iql = {
+      operation: "findDistinctByEditDistance" as const,
+      table: "products",
+      tableConditions: null,
+      whereAndArray: [],
+      operationParameters: {
+        column: "id",
+        compareString: "1",
+      },
+    };
+
+    const parsed = QuerySchema.parse(iql);
+    await expect(findDistinctByEditDistance(db, parsed, ctx)).rejects.toThrow(
+      /findDistinctByEditDistance requires .*string/i,
+    );
+  });
 });

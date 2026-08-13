@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   TextInput,
   SegmentedControl,
@@ -134,6 +134,12 @@ export function TableList({
   const [internalAccessFilter, setInternalAccessFilter] =
     useState<FilterValue>("active");
   const [inputValue, setInputValue] = useState(controlledSearchQuery ?? "");
+
+  useEffect(() => {
+    if (controlledSearchQuery !== undefined) {
+      setInputValue(controlledSearchQuery);
+    }
+  }, [controlledSearchQuery]);
 
   // Use controlled or internal state
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;

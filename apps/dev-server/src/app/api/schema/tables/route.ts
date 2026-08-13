@@ -23,6 +23,13 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") ?? "1", 10);
     const perPage = parseInt(searchParams.get("perPage") ?? "20", 10);
 
+    if (isNaN(page) || page < 1 || isNaN(perPage) || perPage < 1) {
+      return NextResponse.json(
+        { error: "page and perPage must be positive integers" },
+        { status: 400 },
+      );
+    }
+
     // Parse access filter
     let access: TableAccess[] | undefined;
     if (accessParam) {

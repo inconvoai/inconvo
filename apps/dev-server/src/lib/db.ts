@@ -109,7 +109,7 @@ export async function getDb(): Promise<Kysely<unknown>> {
                 },
               },
               options: {
-                port: parseInt(url.port ?? "1433"),
+                port: parseInt(url.port || "1433", 10),
                 database:
                   url.pathname.split("/")[1] ??
                   url.searchParams.get("database") ??

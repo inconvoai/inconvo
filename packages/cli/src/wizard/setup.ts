@@ -64,10 +64,10 @@ async function testSqlDatabaseConnection(
     });
   } else if (dialect === "mssql") {
     const url = new URL(connectionUrl);
-    const [username, password] =
-      url.username && url.password
-        ? [url.username, url.password]
-        : url.pathname.slice(1).split(":");
+    const [username, password] = [
+      decodeURIComponent(url.username),
+      decodeURIComponent(url.password),
+    ];
 
     /* eslint-disable @typescript-eslint/no-require-imports */
     const tedious = require("tedious");
@@ -95,8 +95,8 @@ async function testSqlDatabaseConnection(
               authentication: {
                 type: "default",
                 options: {
-                  userName: decodeURIComponent(username ?? ""),
-                  password: decodeURIComponent(password ?? ""),
+                  userName: username,
+                  password: password,
                 },
               },
               options: {

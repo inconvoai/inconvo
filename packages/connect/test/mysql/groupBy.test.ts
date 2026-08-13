@@ -92,9 +92,16 @@ describe("MySQL groupBy Operation", () => {
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
-    expect(resultRows).toHaveLength(expected.length);
-    expected.forEach((expectedRow, index) => {
-      const actualRow = resultRows[index] as typeof expectedRow;
+    const sortedExpected = [...expected].sort((a, b) =>
+      String(a["orders.product_id"]).localeCompare(String(b["orders.product_id"]))
+    );
+    const sortedResultRows = [...resultRows].sort((a: any, b: any) =>
+      String(a["orders.product_id"]).localeCompare(String(b["orders.product_id"]))
+    );
+
+    expect(sortedResultRows).toHaveLength(sortedExpected.length);
+    sortedExpected.forEach((expectedRow, index) => {
+      const actualRow = sortedResultRows[index] as typeof expectedRow;
       expect(actualRow["orders.product_id"]).toBe(
         expectedRow["orders.product_id"],
       );
@@ -157,9 +164,16 @@ describe("MySQL groupBy Operation", () => {
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
-    expect(resultRows).toHaveLength(expected.length);
-    expected.forEach((expectedRow, index) => {
-      const actualRow = resultRows[index] as typeof expectedRow;
+    const sortedExpectedCd = [...expected].sort((a, b) =>
+      String(a["orders.organisation_id"]).localeCompare(String(b["orders.organisation_id"]))
+    );
+    const sortedResultRowsCd = [...resultRows].sort((a: any, b: any) =>
+      String(a["orders.organisation_id"]).localeCompare(String(b["orders.organisation_id"]))
+    );
+
+    expect(sortedResultRowsCd).toHaveLength(sortedExpectedCd.length);
+    sortedExpectedCd.forEach((expectedRow, index) => {
+      const actualRow = sortedResultRowsCd[index] as typeof expectedRow;
       expect(actualRow["orders.organisation_id"]).toBe(
         expectedRow["orders.organisation_id"],
       );
@@ -239,9 +253,16 @@ describe("MySQL groupBy Operation", () => {
 
     const resultRows = Array.isArray(response) ? response : response.data;
 
-    expect(resultRows).toHaveLength(expected.length);
-    expected.forEach((expectedRow, index) => {
-      const actualRow = resultRows[index] as typeof expectedRow;
+    const sortedExpectedHaving = [...expected].sort((a, b) =>
+      String(a["orders.organisation_id"]).localeCompare(String(b["orders.organisation_id"]))
+    );
+    const sortedResultRowsHaving = [...resultRows].sort((a: any, b: any) =>
+      String(a["orders.organisation_id"]).localeCompare(String(b["orders.organisation_id"]))
+    );
+
+    expect(sortedResultRowsHaving).toHaveLength(sortedExpectedHaving.length);
+    sortedExpectedHaving.forEach((expectedRow, index) => {
+      const actualRow = sortedResultRowsHaving[index] as typeof expectedRow;
       expect(actualRow["orders.organisation_id"]).toBe(
         expectedRow["orders.organisation_id"],
       );

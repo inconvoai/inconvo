@@ -44,6 +44,7 @@ describe("BigQuery findDistinctByEditDistance Operation", () => {
     const response = await findDistinctByEditDistance(db, parsed, ctx);
     expect(response).toHaveProperty("data");
     expect(Array.isArray(response.data)).toBe(true);
+    expect(response.data.length).toBeGreaterThan(0);
     expect(response.data[0]).toContain("Model");
   });
 });

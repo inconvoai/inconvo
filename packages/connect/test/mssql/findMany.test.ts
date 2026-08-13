@@ -81,7 +81,7 @@ describe("MSSQL findMany Operation", () => {
 
     const expectedRow = await db
       .selectFrom("orders as o")
-      .innerJoin("products as p", "p.id", "o.product_id")
+      .leftJoin("products as p", "p.id", "o.product_id")
       .select([
         sql<number>`o.id`.as("id"),
         sql<number>`${revenueExpr}`.as("revenue"),

@@ -5,6 +5,10 @@ interface NonceRecord {
   seenAt: number;
 }
 
+// WARNING: This cache is process-local. In multi-instance deployments (PM2 cluster,
+// Kubernetes), nonces registered on one instance can be replayed on another instance,
+// defeating replay protection. Production multi-instance setups require a shared
+// external store (Redis, database) instead of this in-process Map.
 const nonceCache = new Map<string, NonceRecord>();
 
 function purgeExpired(nowSeconds: number, windowSeconds: number) {

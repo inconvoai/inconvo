@@ -356,7 +356,8 @@ export function ComputedColumnForm({
           if (editorInstance && monacoInstance) {
             const errorMessage =
               error instanceof Error ? error.message : "Invalid expression";
-            const model = editorInstance.getModel()!;
+            const model = editorInstance.getModel();
+            if (!model) return "Invalid expression";
             const markers: monaco.editor.IMarkerData[] = [
               {
                 severity: monacoInstance.MarkerSeverity.Error,

@@ -125,7 +125,13 @@ async function readSlugMap(directory: string): Promise<Record<string, string>> {
   }
 
   const raw = await fs.readFile(slugMapPath, "utf8");
-  return parseSlugMap(YAML.parse(raw));
+  try {
+    return parseSlugMap(YAML.parse(raw));
+  } catch {
+    throw new Error(
+      `Corrupted ${SLUG_MAP_FILE} at ${slugMapPath} — delete the file and re-run`,
+    );
+  }
 }
 
 function toSortedRecord(record: Record<string, string>): Record<string, string> {
@@ -665,13 +671,22 @@ export async function syncConnectionSnapshot(params: {
   await removeStaleChildren(tableDir, keepTableFiles);
 
   // Update agent-level connection ref if it exists
-  const existingRef = YAML.parse(
-    await fs.readFile(agentConnectionRefPath, "utf8"),
-  );
-  await writeYamlFile(agentConnectionRefPath, {
-    ...existingRef,
-    hash: model.hash,
-  });
+  if (await pathExists(agentConnectionRefPath)) {
+    let existingRef: Record<string, unknown> = {};
+    try {
+      const raw = await fs.readFile(agentConnectionRefPath, "utf8");
+      const parsed = YAML.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        existingRef = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Corrupted ref file — overwrite with fresh hash
+    }
+    await writeYamlFile(agentConnectionRefPath, {
+      ...existingRef,
+      hash: model.hash,
+    });
+  }
 
   return { scope: "connection", skipped: false };
 }

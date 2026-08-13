@@ -37,11 +37,8 @@ export function extractTextFromMessage(message: AIMessage): string[] {
   }
 
   const textMessages = content
-    .filter((block) => block.type === "text")
-    .map((block) => {
-      const textBlock = block.text as string;
-      return textBlock;
-    });
+    .filter((block) => block.type === "text" && block.text != null)
+    .map((block) => (block.text ?? "") as string);
 
   return textMessages;
 }

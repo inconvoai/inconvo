@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> This project is archived and is no longer actively maintained. The repository remains available only for reference.
+
+<br/>
+
 [![Inconvo](https://github.com/inconvoai/.github/raw/main/profile/inconvo-banner.png)](https://inconvo.com)
 
 <h1 align="center">Inconvo</h1>
